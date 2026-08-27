@@ -1,0 +1,120 @@
+#pragma once
+
+#include <cmath>
+#include <cstdint>
+#include <string>
+#include <vector>
+
+#include <json.hpp>
+
+namespace colony {
+
+// Welford's online algorithm for running mean/variance.
+// Port of stable-baselines3 VecNormalize RunningMeanStd.
+class RunningMeanStd {
+public:
+    RunningMeanStd() = default;
+
+    explicit RunningMeanStd(int size)
+        : mean_(size, 0.0), var_(size, 1.0), count_(1.0) {}
+
+    int size() const { return (int)mean_.size(); }
+    int64_t count() const { return (int64_t)count_; }
+    const double* mean() const { return mean_.data(); }
+    const double* var() const { return var_.data(); }
+
+    // Update running statistics with a batch of observations.
+    // Each row is [row_stride] floats; only the first `size` elements are used.
+    void update(const float* data, int n_rows, int row_stride) {
+        if (n_rows <= 0) return;
+        int sz = size();
+        double old_count = count_;
+        double new_count = old_count + (double)n_rows;
+
+        for (int j = 0; j < sz; ++j) {
+            double batch_mean = 0.0;
+            double batch_var = 0.0;
+            for (int i = 0; i < n_rows; ++i) {
+                double val = (double)data[i * row_stride + j];
+                batch_mean += val;
+                batch_var += val * val;
+            }
+            batch_mean /= (double)n_rows;
+            if (n_rows > 1) {
+                batch_var = batch_var / (double)n_rows - batch_mean * batch_mean;
+            } else {
+                batch_var = 0.0;
+            }
+
+            double delta = batch_mean - mean_[j];
+            double new_mean = mean_[j] + delta * ((double)n_rows / new_count);
+            double m2 = var_[j] * old_count + batch_var * (double)n_rows
+                        + delta * delta * old_count * (double)n_rows / new_count;
+            mean_[j] = new_mean;
+            var_[j] = m2 / new_count;
+        }
+        count_ = new_count;
+    }
+
+    // Update with a single scalar value (for reward stats).
+    void update_scalar(double val) {
+        double old_count = count_;
+        count_ += 1.0;
+        double delta = val - mean_[0];
+        double new_mean = mean_[0] + delta / count_;
+        double m2 = var_[0] * old_count + delta * (val - new_mean);
+        mean_[0] = new_mean;
+        var_[0] = m2 / count_;
+    }
+
+    // Normalize a batch of observations in-place.
+    // obs: flat buffer [n_rows * row_stride], normalize first `size` elements per row.
+    void normalize(float* obs, int n_rows, int row_stride, double clip_val = 10.0) const {
+        int sz = size();
+        double eps = 1e-8;
+        for (int i = 0; i < n_rows; ++i) {
+            for (int j = 0; j < sz; ++j) {
+                double v = (double)obs[i * row_stride + j];
+                v = (v - mean_[j]) / std::sqrt(var_[j] + eps);
+                if (v > clip_val) v = clip_val;
+                if (v < -clip_val) v = -clip_val;
+                obs[i * row_stride + j] = (float)v;
+            }
+        }
+    }
+
+    // Normalize a single reward.
+    double normalize_reward(double rew, double clip_val = 10.0) const {
+        double eps = 1e-8;
+        double v = rew / std::sqrt(var_[0] + eps);
+        if (v > clip_val) v = clip_val;
+        if (v < -clip_val) v = -clip_val;
+        return v;
+    }
+
+    void set_mean(const std::vector<double>& m) { mean_ = m; }
+    void set_var(const std::vector<double>& v) { var_ = v; }
+    void set_count(double c) { count_ = c; }
+
+    // JSON serialization (compatible with SB3 vecnormalize.pkl logic).
+    nlohmann::json to_json() const {
+        nlohmann::json j;
+        j["mean"] = mean_;
+        j["var"] = var_;
+        j["count"] = count_;
+        return j;
+    }
+
+    void from_json(const nlohmann::json& j) {
+        mean_ = j["mean"].get<std::vector<double>>();
+        var_ = j["var"].get<std::vector<double>>();
+        count_ = j["count"].get<double>();
+    }
+
+private:
+    std::vector<double> mean_;
+    std::vector<double> var_;
+    double count_ = 1.0;
+};
+
+}  // namespace colony

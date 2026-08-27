@@ -1,0 +1,203 @@
+import json
+import os
+import gymnasium as gym
+import numpy as np
+from typing import Optional, Dict, Any, Tuple, List
+from stable_baselines3.common.vec_env import VecEnv
+import colony_cpp
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+class CppVecEnv(VecEnv):
+    """
+    Batched vectorized environment using C++ ColonyVecEnvCpp.
+    N environments run in one process with a thread pool.
+    VecNormalize is handled in C++ (no Python VecNormalize needed).
+
+    Inherits from stable_baselines3.common.vec_env.VecEnv for SB3 compatibility.
+    """
+
+    metadata = {"render_modes": ["human", "rgb_array"]}
+
+    def __init__(
+        self,
+        n_envs: int,
+        map_size: int = 280,
+        curriculum_stage: int = 0,
+        unlock_ids: Optional[str] = None,
+        disable_net_worth: bool = False,
+        disable_daily_income: bool = False,
+        reward_config: Optional[Dict[str, float]] = None,
+        norm_obs: bool = True,
+        norm_reward: bool = True,
+        clip_obs: float = 10.0,
+        clip_reward: float = 10.0,
+        seed: int = 0,
+        n_threads: int = 0,
+        render_mode: Optional[str] = None,
+    ):
+        self._seed = seed
+        self.render_mode = render_mode
+
+        # Load static data
+        base_data = colony_cpp.load_base_data(
+            str(PROJECT_ROOT / "configs" / "bases.json")
+        )
+        events_data = colony_cpp.load_events(
+            str(PROJECT_ROOT / "configs" / "events.json")
+        )
+
+        # Reward configuration
+        rc = colony_cpp.RewardConfig()
+        _REWARD_KEYS = ("build_bonus", "chain_bonus", "chain_daily",
+                        "novelty", "daily_income", "sale_bonus", "tax_bonus",
+                        "survival_bonus", "game_over_penalty")
+        if reward_config:
+            for k in _REWARD_KEYS:
+                if k in reward_config:
+                    setattr(rc, k, reward_config[k])
+        rc.disable_net_worth = disable_net_worth
+        rc.disable_daily_income = disable_daily_income
+
+        if os.environ.get("COLONY_DEBUG", ""):
+            print("=" * 60, flush=True)
+            print("[DEBUG CppVecEnv] C++ RewardConfig after setup:", flush=True)
+            for k in _REWARD_KEYS:
+                print(f"  rc.{k:25s} = {getattr(rc, k)}", flush=True)
+            print(f"  rc.disable_net_worth      = {rc.disable_net_worth}", flush=True)
+            print(f"  rc.disable_daily_income   = {rc.disable_daily_income}", flush=True)
+            print(f"  reward_config dict keys   = {list(reward_config.keys()) if reward_config else 'None'}", flush=True)
+            print("=" * 60, flush=True)
+
+        # Parse unlock_ids
+        unlock_list = []
+        if unlock_ids:
+            unlock_list = [s.strip() for s in unlock_ids.split(",") if s.strip()]
+
+        # Create C++ batched environment
+        self.cpp_vec = colony_cpp.ColonyVecEnvCpp(
+            base_data, events_data,
+            n_envs=n_envs,
+            base_seed=seed,
+            map_size=map_size,
+            curriculum_stage=curriculum_stage,
+            unlock_ids=unlock_list,
+            reward=rc,
+            n_threads=n_threads,
+        )
+
+        obs_size = self.cpp_vec.obs_size()
+        n_actions = self.cpp_vec.n_actions()
+
+        observation_space = gym.spaces.Box(
+            low=-clip_obs, high=clip_obs,
+            shape=(obs_size,),
+            dtype=np.float32,
+        )
+        action_space = gym.spaces.Discrete(n_actions)
+
+        # Init SB3 VecEnv (sets self.num_envs, self.observation_space, self.action_space)
+        super().__init__(n_envs, observation_space, action_space)
+
+    def reset(self):
+        seeds = [self._seed + i * 10000 for i in range(self.num_envs)]
+        self.cpp_vec.reset_batch(seeds)
+        self.reset_infos = [{} for _ in range(self.num_envs)]
+        self._reset_seeds()
+        self._reset_options()
+        return self._get_obs()
+
+    def step_async(self, actions: np.ndarray) -> None:
+        self.cpp_vec.step_async_batch(actions.tolist())
+
+    def step_wait(self):
+        result = self.cpp_vec.step_wait_batch()
+        obs = self._reshape_obs(result.obs)
+        rewards = np.array(result.rewards, dtype=np.float64)
+        terminateds = np.array(result.terminateds, dtype=bool)
+        trunceds = np.array(result.trunceds, dtype=bool)
+        dones = terminateds | trunceds
+
+        infos = []
+        for i in range(self.num_envs):
+            info_str = result.infos[i]
+            if info_str and info_str != "{}":
+                info = json.loads(info_str)
+            else:
+                info = {}
+            if dones[i]:
+                info["terminal_observation"] = obs[i].copy()
+                info["TimeLimit.truncated"] = bool(trunceds[i] and not terminateds[i])
+            infos.append(info)
+
+        return obs, rewards, dones, infos
+
+    def close(self) -> None:
+        pass
+
+    def get_attr(self, attr_name: str, indices=None):
+        target_envs = [self] * self.num_envs if indices is None else [self]
+        return [getattr(env, attr_name) for env in target_envs]
+
+    def set_attr(self, attr_name: str, value, indices=None):
+        if indices is None:
+            indices = range(self.num_envs)
+        for i in indices:
+            setattr(self, attr_name, value)
+
+    def env_method(self, method_name: str, *method_args, indices=None, **method_kwargs):
+        if indices is None:
+            indices = range(self.num_envs)
+        return [getattr(self, method_name)(*method_args, **method_kwargs) for _ in indices]
+
+    def env_is_wrapped(self, wrapper_class, indices=None):
+        return [False] * self.num_envs
+
+    @property
+    def venv(self):
+        return self.cpp_vec
+
+    def _get_obs(self) -> np.ndarray:
+        raw = self.cpp_vec.obs_buffer()
+        return self._reshape_obs(raw)
+
+    def _reshape_obs(self, raw) -> np.ndarray:
+        arr = np.asarray(raw, dtype=np.float32)
+        return arr.reshape(self.num_envs, -1)
+
+    def get_images(self):
+        return [None] * self.num_envs
+
+    def render(self):
+        if self.render_mode == "rgb_array":
+            return np.zeros((self.num_envs, 400, 400, 3), dtype=np.uint8)
+        return None
+
+
+def make_cpp_vec_env(
+    n_envs: int = 8,
+    map_size: int = 280,
+    curriculum_stage: int = 0,
+    unlock_ids: Optional[str] = None,
+    disable_net_worth: bool = False,
+    disable_daily_income: bool = False,
+    reward_config: Optional[Dict[str, float]] = None,
+    seed: int = 0,
+    n_threads: int = 0,
+    render_mode: Optional[str] = None,
+) -> CppVecEnv:
+    """Factory for creating CppVecEnv."""
+    return CppVecEnv(
+        n_envs=n_envs,
+        map_size=map_size,
+        curriculum_stage=curriculum_stage,
+        unlock_ids=unlock_ids,
+        disable_net_worth=disable_net_worth,
+        disable_daily_income=disable_daily_income,
+        reward_config=reward_config,
+        seed=seed,
+        n_threads=n_threads,
+        render_mode=render_mode,
+    )
