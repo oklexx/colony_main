@@ -208,14 +208,18 @@ def _run_train_inner(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_
     em = EnvManager(cfg, device)
     log("info", f"[Worker] env ready: obs={em.obs_size} actions={em.n_actions}")
 
-    if resume_model:
+    if resume_model and resume_model.strip():
         ckpt = torch.load(resume_model, map_location=device, weights_only=False)
         if "model_state" in ckpt:
-            em.model.load_state_dict(ckpt["model_state"])
-            log("info", f"[Worker] loaded weights from {resume_model}")
+            state = ckpt["model_state"]
         else:
-            em.model.load_state_dict(ckpt)
-            log("info", f"[Worker] loaded raw state_dict from {resume_model}")
+            state = ckpt
+        clean = {}
+        for k, v in state.items():
+            ck = k.replace("_orig_mod.", "") if k.startswith("_orig_mod.") else k
+            clean[ck] = v
+        em.model.load_state_dict(clean)
+        log("info", f"[Worker] loaded weights from {resume_model}")
 
     trainer = AsyncTrainer(
         cfg=cfg,
