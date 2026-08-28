@@ -1,0 +1,129 @@
+import sys
+from pathlib import Path
+
+import torch
+import torch.nn as nn
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
+
+try:
+    from cpp_env import CppColonyEnv  # noqa: F401
+    ENV_OK = True
+except Exception:
+    ENV_OK = False
+
+
+def _make_actor_critic_checkpoint(tmp_path: Path) -> Path:
+    from rl.actor_critic import ActorCritic
+
+    obs_size, n_actions, hidden = 203, 45, [64]
+    m = ActorCritic(obs_size=obs_size, n_actions=n_actions,
+                    hidden_sizes=hidden, device=torch.device("cpu"))
+    ckpt_path = tmp_path / "fake_model.pt"
+    torch.save({
+        "model_state": m.state_dict(),
+        "obs_size": obs_size,
+        "n_actions": n_actions,
+        "hidden_sizes": hidden,
+    }, str(ckpt_path))
+    return ckpt_path
+
+
+def _make_legacy_checkpoint(tmp_path: Path) -> Path:
+    import torch.nn as nn
+
+    m = nn.Sequential(nn.Linear(4, 2))
+    ckpt_path = tmp_path / "legacy.pt"
+    torch.save({"model_state": m.state_dict()}, str(ckpt_path))
+    return ckpt_path
+
+
+def _fake_env_class():
+    import numpy as np
+
+    class FakeEnv:
+        def __init__(self, **kw):
+            self._step = 0
+
+        def reset(self, seed=None):
+            self._step = 0
+            return np.zeros(203, dtype=np.float32), {"days": 0}
+
+        def step(self, action):
+            self._step += 1
+            obs = np.zeros(203, dtype=np.float32)
+            info = {"days": self._step, "people": 10 + self._step, "bases": 3 + self._step}
+            terminated = self._step >= 5
+            return obs, 1.0, terminated, False, info
+
+        def close(self):
+            pass
+
+    return FakeEnv
+
+
+def test_load_policy_with_meta(tmp_path):
+    if not ENV_OK:
+        pytest.skip("env not available")
+    from train_ui.evaluator import _load_policy
+
+    ckpt = _make_actor_critic_checkpoint(tmp_path)
+    policy = _load_policy(ckpt, torch.device("cpu"))
+    assert policy.obs_size == 203
+    assert policy.n_actions == 45
+
+
+def test_load_policy_probes_env_when_meta_missing(tmp_path):
+    if not ENV_OK:
+        pytest.skip("env not available")
+    from train_ui.evaluator import _load_policy
+
+    from rl.actor_critic import ActorCritic
+    m = ActorCritic(obs_size=203, n_actions=45, hidden_sizes=[256, 256],
+                    device=torch.device("cpu"))
+    ckpt_path = tmp_path / "nometa.pt"
+    torch.save({"model_state": m.state_dict()}, str(ckpt_path))
+
+    policy = _load_policy(ckpt_path, torch.device("cpu"))
+    assert policy.obs_size == 203
+    assert policy.n_actions == 45
+
+
+def test_load_policy_rejects_incompatible(tmp_path):
+    from train_ui.evaluator import _load_policy
+
+    ckpt = _make_legacy_checkpoint(tmp_path)
+    with pytest.raises(ValueError):
+        _load_policy(ckpt, torch.device("cpu"))
+
+
+def test_run_eval_returns_stats(tmp_path, monkeypatch):
+    if not ENV_OK:
+        pytest.skip("env not available")
+    import train_ui.evaluator as ev
+
+    ckpt = _make_actor_critic_checkpoint(tmp_path)
+    fake_env = _fake_env_class()
+    monkeypatch.setattr(ev, "CppColonyEnv", fake_env, raising=False)
+
+    class FakePolicy:
+        def __call__(self, obs):
+            import torch
+            return torch.zeros(1, 45), torch.zeros(1, 1)
+
+    monkeypatch.setattr(ev, "_load_policy", lambda *a, **kw: FakePolicy())
+    result = ev.run_eval(ckpt, episodes=2, max_days=20, seed=1, device="cpu")
+
+    assert result["episodes"] == 2.0
+    assert result["days"] >= 0
+    assert result["people"] >= 0
+    assert result["bases"] >= 0
+    assert result["avg_return"] >= 0
+
+
+def test_run_eval_missing_model(tmp_path):
+    from train_ui.evaluator import run_eval
+    with pytest.raises(FileNotFoundError):
+        run_eval(tmp_path / "nope.pt", episodes=1, max_days=1)
