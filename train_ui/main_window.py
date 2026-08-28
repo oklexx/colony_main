@@ -124,6 +124,12 @@ class MainWindow(QMainWindow):
         self._msg_file: Optional[str] = None
         self._msg_offset: int = 0
         self._msg_timer: Optional[QTimer] = None
+        self._eval_pid: Optional[int] = None
+        self._eval_msg: Optional[str] = None
+        self._eval_offset: int = 0
+        self._eval_timer: Optional[QTimer] = None
+        self._eval_model: Optional[ModelInfo] = None
+        self._eval_done: bool = False
         self._auto_scroll = True
         self._pending_stop_timer: Optional[QTimer] = None
 
@@ -208,6 +214,13 @@ class MainWindow(QMainWindow):
         self.model_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.model_table.cellClicked.connect(self._on_model_clicked)
 
+        sel_row = QHBoxLayout()
+        self.chk_select_all = QCheckBox("Выбрать все")
+        self.chk_select_all.setObjectName("chk_select_all")
+        self.chk_select_all.toggled.connect(self._toggle_select_all)
+        sel_row.addWidget(self.chk_select_all)
+        sel_row.addStretch(1)
+
         btns = QHBoxLayout()
         self.btn_delete = QPushButton("Удалить выбранные")
         self.btn_delete.setObjectName("btn_delete")
@@ -218,14 +231,20 @@ class MainWindow(QMainWindow):
         self.btn_eval = QPushButton("Оценить")
         self.btn_eval.setObjectName("btn_eval")
         self.btn_eval.clicked.connect(self._eval_selected)
+        self.btn_resume = QPushButton("Дообучить")
+        self.btn_resume.setObjectName("btn_resume")
+        self.btn_resume.setToolTip("Запустить обучение с весами выбранной модели (fine-tuning)")
+        self.btn_resume.clicked.connect(self._resume_training)
         btns.addWidget(self.btn_delete)
         btns.addWidget(self.btn_refresh)
         btns.addWidget(self.btn_eval)
+        btns.addWidget(self.btn_resume)
 
         self.models_hint = QLabel("Запустите обучение, чтобы получить модели")
         self.models_hint.setObjectName("models_hint")
 
         layout.addWidget(self.model_table, 1)
+        layout.addLayout(sel_row)
         layout.addLayout(btns)
         layout.addWidget(self.models_hint)
         splitter.addWidget(box)
@@ -389,6 +408,13 @@ class MainWindow(QMainWindow):
     def _on_model_clicked(self, row: int, _col: int):
         self._update_stats_panel()
 
+    def _toggle_select_all(self, checked: bool):
+        state = Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked
+        for r in range(self.model_table.rowCount()):
+            item = self.model_table.item(r, 0)
+            if item:
+                item.setCheckState(state)
+
     def _update_stats_panel(self):
         m = self._selected_model()
         if m is None:
@@ -439,23 +465,50 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Оценка", "Сначала выберите модель из списка")
             return
         import sys as _sys
-        self.btn_eval.setEnabled(False)
-        self.log("info", f"Запуск eval: {m.name}")
-        proc = QProcess(self)
-        proc.setProgram(_sys.executable)
-        proc.setArguments([
+        import tempfile
+        eval_msg = os.path.join(tempfile.gettempdir(), f"colony_eval_{int(time.time()*1000)}.jsonl")
+        if os.path.exists(eval_msg):
+            os.unlink(eval_msg)
+        args = [
+            "-u",
             str(Path(__file__).resolve().parent / "worker.py"),
             "--eval-model", str(m.model_file),
             "--episodes", "5",
             "--max-days", "1000",
             "--device", "cpu",
-        ])
-        proc.readyReadStandardOutput.connect(lambda: self._read_eval_output(proc, m))
-        proc.finished.connect(lambda code, _s: self._eval_finished(code, m))
-        proc.start()
+            "--output", eval_msg,
+        ]
+        ok, pid = QProcess.startDetached(_sys.executable, args, str(Path(__file__).resolve().parent.parent))
+        if not ok:
+            self.log("error", "Не удалось запустить eval")
+            self.btn_eval.setEnabled(True)
+            return
+        self.btn_eval.setEnabled(False)
+        self._eval_pid = pid
+        self._eval_msg = eval_msg
+        self._eval_offset = 0
+        self._eval_model = m
+        self._eval_timer = QTimer(self)
+        self._eval_timer.timeout.connect(self._poll_eval)
+        self._eval_timer.start(250)
+        self.log("info", f"Запуск eval: {m.name} (pid={pid})")
 
-    def _read_eval_output(self, proc: QProcess, m: ModelInfo):
-        data = proc.readAllStandardOutput().data().decode("utf-8", errors="replace")
+    def _read_eval_file(self):
+        if self._eval_msg is None:
+            return
+        try:
+            size = os.path.getsize(self._eval_msg)
+        except OSError:
+            return
+        if size <= self._eval_offset:
+            return
+        try:
+            with open(self._eval_msg, "r", encoding="utf-8") as f:
+                f.seek(self._eval_offset)
+                data = f.read()
+                self._eval_offset = f.tell()
+        except (OSError, UnicodeDecodeError):
+            return
         for line in data.splitlines():
             line = line.strip()
             if not line:
@@ -465,6 +518,7 @@ class MainWindow(QMainWindow):
             except json.JSONDecodeError:
                 continue
             if d.get("type") == "eval_result":
+                m = self._eval_model
                 self.registry.save_eval(m.name, {
                     "days": d.get("days", 0),
                     "people": d.get("people", 0),
@@ -472,17 +526,55 @@ class MainWindow(QMainWindow):
                     "avg_return": d.get("avg_return", 0),
                 })
                 self.log("info", f"Eval {m.name}: days={d.get('days', 0):.1f} "
-                                 f"people={d.get('people', 0):.1f} bases={d.get('bases', 0):.1f}")
+                                  f"people={d.get('people', 0):.1f} bases={d.get('bases', 0):.1f}")
                 self._update_stats_panel()
+                self._eval_done = True
             elif d.get("type") == "log":
                 self.log(d.get("level", "info"), d.get("message", ""))
             elif d.get("type") == "error":
                 self.log("error", d.get("message", ""))
 
-    def _eval_finished(self, code: int, m: ModelInfo):
-        self.btn_eval.setEnabled(True)
-        if code != 0:
-            self.log("error", f"Eval завершился с кодом {code}")
+    def _poll_eval(self):
+        self._read_eval_file()
+        if self._eval_pid is None:
+            return
+        if not hasattr(self, '_eval_start_time'):
+            self._eval_start_time = time.time()
+        if time.time() - self._eval_start_time < 2.0:
+            return
+        if not self._poll_process_alive():
+            self._read_eval_file()
+            self._cleanup_eval()
+            if not self._eval_done:
+                self.log("error", "Eval завершился с ошибкой")
+            self.btn_eval.setEnabled(True)
+
+    def _resume_training(self):
+        m = self._selected_model()
+        if m is None:
+            QMessageBox.information(self, "Дообучение", "Сначала выберите модель из списка")
+            return
+        if not m.model_file.exists():
+            self.log("error", f"Файл модели не найден: {m.model_file}")
+            return
+        self.log("info", f"Дообучение модели: {m.name}")
+        self._start_training(resume_model=m.model_file)
+
+    def _cleanup_eval(self):
+        if self._eval_timer is not None:
+            self._eval_timer.stop()
+            self._eval_timer = None
+        if self._eval_msg is not None:
+            try:
+                os.unlink(self._eval_msg)
+            except OSError:
+                pass
+            self._eval_msg = None
+            self._eval_offset = 0
+        self._eval_pid = None
+        self._eval_model = None
+        self._eval_done = False
+        self._eval_start_time = 0
 
     # ---------- training ----------
 
@@ -501,11 +593,13 @@ class MainWindow(QMainWindow):
         cfg["net_arch"] = [net, net]
         return cfg
 
-    def _start_training(self):
+    def _start_training(self, resume_model: Optional[Path] = None):
         if self._train_pid is not None:
             self.log("warn", "Обучение уже запущено")
             return
         cfg = self._collect_config()
+        if resume_model is not None:
+            cfg["name"] = cfg["name"] + "_ft"
         import tempfile
         tmp = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8")
         json.dump(cfg, tmp, ensure_ascii=False)
@@ -520,6 +614,8 @@ class MainWindow(QMainWindow):
             "--name", cfg["name"],
             "--output", msg_file,
         ]
+        if resume_model is not None:
+            args.extend(["--resume-model", str(resume_model)])
         workdir = str(Path(__file__).resolve().parent.parent)
         ok, pid = QProcess.startDetached(_sys.executable, args, workdir)
         if not ok:

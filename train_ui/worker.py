@@ -34,6 +34,7 @@ def _build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--eval-model", type=str, dest="eval_model", help="model path (eval mode)")
     p.add_argument("--name", type=str, default="", help="run name (train mode)")
     p.add_argument("--output", type=str, default="", help="path to JSONL message file")
+    p.add_argument("--resume-model", type=str, default="", help="path to model .pt to load weights from (fine-tuning)")
     p.add_argument("--episodes", type=int, default=5)
     p.add_argument("--max-days", type=int, default=1000)
     p.add_argument("--seed", type=int, default=7)
@@ -100,7 +101,8 @@ def _watch_stdin(stop_event: threading.Event) -> None:
         pass
 
 
-def run_train(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_event: threading.Event) -> int:
+def run_train(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_event: threading.Event,
+              resume_model: str = "") -> int:
     import builtins
     _orig_print = builtins.print
 
@@ -119,12 +121,13 @@ def run_train(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_event: 
     builtins.print = _print  # type: ignore[assignment]
 
     try:
-        return _run_train_inner(cfg_dict, run_name, mf, stop_event)
+        return _run_train_inner(cfg_dict, run_name, mf, stop_event, resume_model)
     finally:
         builtins.print = _orig_print  # type: ignore[assignment]
 
 
-def _run_train_inner(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_event: threading.Event) -> int:
+def _run_train_inner(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_event: threading.Event,
+                     resume_model: str = "") -> int:
     import torch
     from rl.config import Config, RewardConfig
     from rl.env_manager import EnvManager
@@ -205,6 +208,15 @@ def _run_train_inner(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_
     em = EnvManager(cfg, device)
     log("info", f"[Worker] env ready: obs={em.obs_size} actions={em.n_actions}")
 
+    if resume_model:
+        ckpt = torch.load(resume_model, map_location=device, weights_only=False)
+        if "model_state" in ckpt:
+            em.model.load_state_dict(ckpt["model_state"])
+            log("info", f"[Worker] loaded weights from {resume_model}")
+        else:
+            em.model.load_state_dict(ckpt)
+            log("info", f"[Worker] loaded raw state_dict from {resume_model}")
+
     trainer = AsyncTrainer(
         cfg=cfg,
         env_manager=em,
@@ -278,7 +290,7 @@ def main() -> int:
         if args.config:
             cfg_dict = _read_config(Path(args.config))
             run_name = args.name or cfg_dict.get("name", "") or f"run_{int(time.time())}"
-            rc = run_train(cfg_dict, run_name, mf, stop_event)
+            rc = run_train(cfg_dict, run_name, mf, stop_event, resume_model=args.resume_model)
         else:
             rc = run_eval(args.eval_model, args.episodes, args.max_days,
                           args.seed, args.device, mf)

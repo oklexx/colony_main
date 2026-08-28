@@ -45,7 +45,7 @@ class PPO:
         self.device = device or model.device
 
         self.amp_dtype = torch.bfloat16 if amp_dtype == "bfloat16" else torch.float16
-        self.scaler = torch.amp.GradScaler("cuda", enabled=(amp_dtype == "float16"))
+        self.scaler = torch.amp.GradScaler(self.device.type, enabled=(amp_dtype == "float16"))
 
         self.optimizer = torch.optim.Adam(
             model.params, lr=lr, eps=1e-5, weight_decay=0.0
@@ -98,7 +98,7 @@ class PPO:
                 self.optimizer.zero_grad()
 
                 if self.use_amp:
-                    with torch.autocast(device_type="cuda", dtype=self.amp_dtype):
+                    with torch.autocast(device_type=self.device.type, dtype=self.amp_dtype):
                         policy_loss, value_loss, entropy, approx_kl = self._compute_loss_components(
                             obs, actions, old_log_probs, advantages, returns, old_values
                         )
@@ -167,10 +167,21 @@ class PPO:
         return policy_loss, value_loss, entropy, approx_kl
 
     def save(self, path: str):
+        model = self.model
+        if hasattr(model, "_orig_mod"):
+            model = model._orig_mod
+        clean_state = {}
+        for k, v in model.state_dict().items():
+            ck = k.replace("_orig_mod.", "") if k.startswith("_orig_mod.") else k
+            clean_state[ck] = v
+        hidden_sizes = [m.out_features for m in model.trunk if isinstance(m, nn.Linear)]
         torch.save({
-            "model_state": self.model.state_dict(),
+            "model_state": clean_state,
             "optimizer_state": self.optimizer.state_dict(),
             "buffer_pos": self.buffer.pos,
+            "obs_size": model.obs_size,
+            "n_actions": model.n_actions,
+            "hidden_sizes": hidden_sizes,
         }, path)
 
     def load(self, path: str):

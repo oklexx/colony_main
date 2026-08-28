@@ -28,8 +28,7 @@ def _load_policy(model_path: Path, device):
     """Load a trained ActorCritic from a checkpoint.
 
     Requires checkpoint key: model_state. Optional keys: obs_size, n_actions,
-    hidden_sizes. If absent, dimensions are probed from the colony env and the
-    standard [256, 256] hidden architecture is assumed.
+    hidden_sizes. If absent, dimensions are inferred from the state_dict shapes.
     """
     import torch
     from rl.actor_critic import ActorCritic
@@ -44,9 +43,26 @@ def _load_policy(model_path: Path, device):
     obs_size = int(ckpt.get("obs_size", 0))
     n_actions = int(ckpt.get("n_actions", 0))
     hidden = ckpt.get("hidden_sizes") or None
+
     if obs_size <= 0 or n_actions <= 0 or hidden is None:
-        obs_size, n_actions = _probe_env_dims()
-        hidden = [256, 256]
+        clean = {}
+        for k, v in model_state.items():
+            ck = k.replace("_orig_mod.", "") if k.startswith("_orig_mod.") else k
+            clean[ck] = v
+        model_state = clean
+        try:
+            obs_size = model_state["trunk.0.weight"].shape[1]
+            n_actions = model_state["actor_head.weight"].shape[0]
+            hidden_keys = sorted(
+                (k for k in model_state if k.startswith("trunk.") and k.endswith(".weight")),
+                key=lambda k: int(k.split(".")[1]),
+            )
+            hidden = [model_state[k].shape[0] for k in hidden_keys]
+        except (KeyError, IndexError):
+            raise ValueError(
+                "checkpoint is not a valid ActorCritic state_dict; "
+                "retrain with train_ui/worker.py to save a compatible checkpoint"
+            )
 
     model = ActorCritic(
         obs_size=obs_size,
@@ -58,9 +74,7 @@ def _load_policy(model_path: Path, device):
         model.load_state_dict(model_state)
     except RuntimeError:
         raise ValueError(
-            "checkpoint state_dict does not match the standard ActorCritic "
-            "[256,256] architecture; retrain with train_ui/worker.py to save "
-            "a compatible checkpoint"
+            "checkpoint state_dict does not match the inferred ActorCritic architecture"
         )
     model.eval()
     return model
