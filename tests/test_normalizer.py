@@ -1,0 +1,96 @@
+import sys
+from pathlib import Path
+import numpy as np
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
+
+try:
+    import colony_cpp
+    ENV_OK = True
+except Exception:
+    ENV_OK = False
+
+
+@pytest.mark.skipif(not ENV_OK, reason="colony_cpp not available")
+def test_normalizer_normalize():
+    from cpp_env import Normalizer
+
+    norm = Normalizer(obs_size=5)
+    # Set known stats
+    norm._rms.set_mean([0.0, 0.0, 0.0, 0.0, 0.0])
+    norm._rms.set_var([1.0, 1.0, 1.0, 1.0, 1.0])
+
+    obs = np.array([1.0, -1.0, 2.0, 0.0, 0.5], dtype=np.float32)
+    result = norm.normalize(obs)
+
+    # With mean=0, var=1: normalize = (v - 0) / sqrt(1 + eps) ≈ v
+    np.testing.assert_allclose(result, [1.0, -1.0, 2.0, 0.0, 0.5], atol=0.01)
+
+
+@pytest.mark.skipif(not ENV_OK, reason="colony_cpp not available")
+def test_normalizer_save_load(tmp_path):
+    from cpp_env import Normalizer
+
+    norm = Normalizer(obs_size=3)
+    norm._rms.set_mean([1.0, 2.0, 3.0])
+    norm._rms.set_var([0.5, 0.5, 0.5])
+    norm._rms.set_count(100)
+
+    path = tmp_path / "norm.json"
+    norm.save(str(path))
+
+    norm2 = Normalizer(obs_size=3)
+    norm2.load(str(path))
+
+    np.testing.assert_allclose(norm2._rms.mean(), [1.0, 2.0, 3.0])
+    np.testing.assert_allclose(norm2._rms.var(), [0.5, 0.5, 0.5])
+    assert norm2._rms.count() == 100
+
+
+@pytest.mark.skipif(not ENV_OK, reason="colony_cpp not available")
+def test_normalizer_to_from_dict():
+    from cpp_env import Normalizer
+
+    norm = Normalizer(obs_size=4)
+    norm._rms.set_mean([1.0, 2.0, 3.0, 4.0])
+    norm._rms.set_var([1.0, 1.0, 1.0, 1.0])
+    norm._rms.set_count(50)
+
+    d = norm.to_dict()
+    assert d["mean"] == [1.0, 2.0, 3.0, 4.0]
+    assert d["var"] == [1.0, 1.0, 1.0, 1.0]
+    assert d["count"] == 50
+
+    norm2 = Normalizer.from_dict(d)
+    np.testing.assert_allclose(norm2._rms.mean(), [1.0, 2.0, 3.0, 4.0])
+    np.testing.assert_allclose(norm2._rms.var(), [1.0, 1.0, 1.0, 1.0])
+    assert norm2._rms.count() == 50
+
+
+@pytest.mark.skipif(not ENV_OK, reason="colony_cpp not available")
+def test_normalizer_set_update():
+    """Verify set_update(False) prevents statistics updates."""
+    from cpp_env import Normalizer
+
+    norm = Normalizer(obs_size=3)
+    norm._rms.set_mean([0.0, 0.0, 0.0])
+    norm._rms.set_var([1.0, 1.0, 1.0])
+
+    # Enable updates, update stats
+    norm.set_update(True)
+    norm.update(np.array([1.0, 2.0, 3.0], dtype=np.float32))
+    mean_after_update = list(norm._rms.mean())
+
+    # Disable updates, try to update again
+    norm.set_update(False)
+    norm.update(np.array([100.0, 200.0, 300.0], dtype=np.float32))
+    mean_after_disabled = list(norm._rms.mean())
+
+    # Mean should not have changed after disabling updates
+    np.testing.assert_allclose(mean_after_update, mean_after_disabled)
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

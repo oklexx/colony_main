@@ -8,6 +8,77 @@ from pathlib import Path
 # Project root is parent of this file's directory
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+
+class Normalizer:
+    """Single-env observation normalizer using C++ RunningMeanStd.
+
+    Wraps colony_cpp.RunningMeanStd for use with CppColonyEnv (single env),
+    matching the normalization applied by CppVecEnv during training.
+    """
+
+    def __init__(self, obs_size: int):
+        self._rms = colony_cpp.RunningMeanStd(obs_size)
+        self._obs_size = obs_size
+        self._clip = 10.0
+        self._update_enabled = True
+
+    def set_update(self, enable: bool):
+        """Enable/disable running statistics updates.
+
+        Set to False during eval to prevent statistics drift.
+        """
+        self._update_enabled = enable
+
+    def update(self, obs: np.ndarray):
+        """Update running statistics with a single observation (if enabled)."""
+        if not self._update_enabled:
+            return
+        obs_flat = np.asarray(obs, dtype=np.float32).flatten().copy()
+        self._rms.update(obs_flat, 1, self._obs_size)
+
+    def normalize(self, obs: np.ndarray) -> np.ndarray:
+        """Normalize a single observation using current statistics."""
+        obs_flat = np.asarray(obs, dtype=np.float32).flatten().copy()
+        self._rms.normalize(obs_flat, 1, self._obs_size, self._clip)
+        return obs_flat
+
+    def save(self, path: str):
+        """Save normalization stats to JSON file."""
+        import json
+        d = self.to_dict()
+        with open(path, "w") as f:
+            json.dump(d, f)
+
+    def load(self, path: str):
+        """Load normalization stats from JSON file."""
+        import json
+        with open(path) as f:
+            d = json.load(f)
+        self._rms.set_mean(d["mean"])
+        self._rms.set_var(d["var"])
+        self._rms.set_count(d["count"])
+        self._obs_size = d.get("obs_size", self._obs_size)
+        self._clip = d.get("clip", 10.0)
+
+    def to_dict(self) -> dict:
+        return {
+            "mean": list(self._rms.mean()),
+            "var": list(self._rms.var()),
+            "count": int(self._rms.count()),
+            "obs_size": self._obs_size,
+            "clip": self._clip,
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Normalizer":
+        n = cls(obs_size=int(d.get("obs_size", 0)))
+        n._rms.set_mean(d["mean"])
+        n._rms.set_var(d["var"])
+        n._rms.set_count(d["count"])
+        n._clip = d.get("clip", 10.0)
+        return n
+
+
 class CppColonyEnv(gym.Env):
     """
     Gymnasium wrapper for C++ ColonyEnvCpp.
@@ -80,6 +151,7 @@ class CppColonyEnv(gym.Env):
         # Set clip_obs=10.0 which matches the VecNormalize clip_obs parameter in train.py
         self.clip_obs = 10.0
         self.action_space = gym.spaces.Discrete(self.cpp_env.n_actions())
+        self.normalizer = Normalizer(obs_size=self.cpp_env.obs_size())
         
         # Action name mapping (for debugging)
         self._action_names = ["DAY", "WEEK"] + self.cpp_env.build_ids() + [
@@ -96,14 +168,16 @@ class CppColonyEnv(gym.Env):
         super().reset(seed=seed)
         s = seed if seed is not None else np.random.randint(1 << 31)
         self.cpp_env.reset(s)
-        obs = np.array(self.cpp_env.obs(), dtype=np.float32)
+        raw_obs = np.array(self.cpp_env.obs(), dtype=np.float32)
+        self.normalizer.update(raw_obs)
+        obs = self.normalizer.normalize(raw_obs)
         return obs, {"seed": s, "days": 0}
     
     def step(self, action: int) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
         result = self.cpp_env.step(int(action))
-        obs = np.array(result["obs"], dtype=np.float32)
-        # Clip observations as VecNormalize expects; prevents TypeError when clip_obs=None
-        obs = np.clip(obs, -self.clip_obs, self.clip_obs).astype(np.float32)
+        raw_obs = np.array(result["obs"], dtype=np.float32)
+        self.normalizer.update(raw_obs)
+        obs = self.normalizer.normalize(raw_obs)
         reward = float(result["reward"])
         terminated = bool(result["terminated"])
         truncated = bool(result["truncated"])

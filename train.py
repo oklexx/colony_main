@@ -134,6 +134,10 @@ def main():
     t_env = time.time() - t0
     print(f"[Env] Created in {t_env:.1f}s (obs={em.obs_size}, actions={em.n_actions})")
 
+    norm_path = Path(cfg.model_dir) / "normalization.json"
+    em.env.venv.save_normalization(str(norm_path))
+    print(f"[Save] Normalization: {norm_path}")
+
     log_dir = Path(cfg.log_dir) / args.name
     log_dir.mkdir(parents=True, exist_ok=True)
 

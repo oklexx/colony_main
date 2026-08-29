@@ -86,6 +86,7 @@ def run_eval(
     max_days: int = 1000,
     seed: int = 7,
     device: str = "cpu",
+    normalization_path: str | Path | None = None,
 ) -> Dict[str, float]:
     """Run the trained policy in the colony env and return mean stats.
 
@@ -102,6 +103,11 @@ def run_eval(
     policy = _load_policy(model_path, dev)
 
     env = CppColonyEnv(map_size=200)
+    if normalization_path is not None:
+        norm_path = Path(normalization_path)
+        if norm_path.exists():
+            env.normalizer.load(str(norm_path))
+            env.normalizer.set_update(False)
     days_list: list[int] = []
     people_list: list[int] = []
     bases_list: list[int] = []

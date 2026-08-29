@@ -39,6 +39,8 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--max-days", type=int, default=1000)
     p.add_argument("--seed", type=int, default=7)
     p.add_argument("--device", type=str, default="cpu")
+    p.add_argument("--normalization", type=str, default="", dest="normalization",
+                   help="path to normalization.json (eval mode)")
     return p
 
 
@@ -260,15 +262,16 @@ def _run_train_inner(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_
 
 
 def run_eval(model_path: str, episodes: int, max_days: int, seed: int,
-             device: str, mf: MsgFile) -> int:
+             device: str, mf: MsgFile, normalization_path: str = "") -> int:
     from train_ui.evaluator import run_eval as _run_eval
 
     def log(level: str, message: str) -> None:
         mf.write(P.LogMsg(level=level, message=message))
 
+    norm = Path(normalization_path) if normalization_path else None
     log("info", f"[Eval] model={model_path} episodes={episodes} max_days={max_days}")
     result = _run_eval(model_path, episodes=episodes, max_days=max_days,
-                       seed=seed, device=device)
+                       seed=seed, device=device, normalization_path=norm)
     log("info", f"[Eval] days={result['days']:.1f} people={result['people']:.1f} "
                 f"bases={result['bases']:.1f} avg_return={result['avg_return']:.2f}")
     mf.write_raw(json.dumps({"type": "eval_result", **result}, ensure_ascii=False) + "\n")
@@ -297,7 +300,8 @@ def main() -> int:
             rc = run_train(cfg_dict, run_name, mf, stop_event, resume_model=args.resume_model)
         else:
             rc = run_eval(args.eval_model, args.episodes, args.max_days,
-                          args.seed, args.device, mf)
+                          args.seed, args.device, mf,
+                          normalization_path=args.normalization)
     except Exception as e:
         import traceback
         tb = traceback.format_exc()

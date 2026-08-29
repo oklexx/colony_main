@@ -43,9 +43,21 @@ def _make_legacy_checkpoint(tmp_path: Path) -> Path:
 def _fake_env_class():
     import numpy as np
 
+    class _FakeNormalizer:
+        def __init__(self):
+            self.loaded = False
+            self.update_enabled = True
+
+        def load(self, path):
+            self.loaded = True
+
+        def set_update(self, enable):
+            self.update_enabled = enable
+
     class FakeEnv:
         def __init__(self, **kw):
             self._step = 0
+            self.normalizer = _FakeNormalizer()
 
         def reset(self, seed=None):
             self._step = 0
@@ -121,6 +133,40 @@ def test_run_eval_returns_stats(tmp_path, monkeypatch):
     assert result["people"] >= 0
     assert result["bases"] >= 0
     assert result["avg_return"] >= 0
+
+
+@pytest.mark.skipif(not ENV_OK, reason="env not available")
+def test_run_eval_with_normalization(tmp_path, monkeypatch):
+    """Test that run_eval loads normalization when provided."""
+    import train_ui.evaluator as ev
+    import numpy as np
+
+    ckpt = _make_actor_critic_checkpoint(tmp_path)
+
+    import json
+    norm_data = {
+        "mean": [0.0] * 203,
+        "var": [1.0] * 203,
+        "count": 100,
+        "obs_size": 203,
+        "clip": 10.0,
+    }
+    norm_path = tmp_path / "norm.json"
+    with open(norm_path, "w") as f:
+        json.dump(norm_data, f)
+
+    fake_env = _fake_env_class()
+    monkeypatch.setattr(ev, "CppColonyEnv", fake_env, raising=False)
+
+    class FakePolicy:
+        def __call__(self, obs):
+            return torch.zeros(1, 45), torch.zeros(1, 1)
+
+    monkeypatch.setattr(ev, "_load_policy", lambda *a, **kw: FakePolicy())
+    result = ev.run_eval(ckpt, episodes=1, max_days=10, seed=1, device="cpu",
+                         normalization_path=str(norm_path))
+
+    assert result["episodes"] == 1.0
 
 
 def test_run_eval_missing_model(tmp_path):

@@ -207,7 +207,10 @@ class AsyncTrainer:
             if save_every > 0 and rollout_idx % save_every == 0:
                 ckpt_path = save_dir / f"checkpoint_{total_done}_steps.pt"
                 self.em.ppo.save(str(ckpt_path))
+                norm_path = str(ckpt_path).replace(".pt", ".norm.json")
+                self.em.env.venv.save_normalization(norm_path)
                 self._log(f"[Save] {ckpt_path}")
+                self._log(f"[Save] {norm_path}")
 
         elapsed = time.perf_counter() - t_start
         final_fps = total_done / max(elapsed, 1e-10)
@@ -216,7 +219,10 @@ class AsyncTrainer:
         save_dir.mkdir(parents=True, exist_ok=True)
         final_path = save_dir / "final_model.pt"
         self.em.ppo.save(str(final_path))
+        norm_path = str(final_path).replace(".pt", ".norm.json")
+        self.em.env.venv.save_normalization(norm_path)
         self._log(f"[Save] Final model: {final_path}")
+        self._log(f"[Save] Normalization: {norm_path}")
 
         self.metrics.total_timesteps = total_done
         self.metrics.fps = final_fps
