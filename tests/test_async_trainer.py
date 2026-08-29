@@ -66,7 +66,7 @@ class FakeEnvManager:
         pass
 
 
-def test_per_env_episode_tracking():
+def test_per_env_episode_tracking(tmp_path):
     """Verify that episodes from different envs are tracked separately."""
     cfg = Config(
         n_envs=2,
@@ -75,6 +75,7 @@ def test_per_env_episode_tracking():
         save_freq=0,
         eval_freq=0,
         use_amp=False,
+        model_dir=str(tmp_path),
     )
     em = FakeEnvManager(n_envs=2, n_steps=3)
     trainer = AsyncTrainer(cfg=cfg, env_manager=em)
