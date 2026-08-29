@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 from PySide6.QtCore import Qt, QProcess, QTimer, Signal
 from PySide6.QtGui import QPalette, QColor
 from PySide6.QtWidgets import (
-    QAbstractItemView, QApplication, QCheckBox, QDoubleSpinBox, QFileDialog,
+    QAbstractItemView, QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog,
     QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
     QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
     QSpinBox, QSplitter, QTableWidget, QTableWidgetItem, QVBoxLayout,
@@ -308,6 +308,65 @@ class MainWindow(QMainWindow):
         layout.addLayout(grid)
         layout.addLayout(checks)
 
+        # --- Curriculum ---
+        curr_box = QGroupBox("Автокурикулум (расписание этапов)")
+        curr_box.setObjectName("curriculum_box")
+        curr_layout = QVBoxLayout(curr_box)
+
+        self.curriculum_table = QTableWidget(0, 2)
+        self.curriculum_table.setObjectName("curriculum_table")
+        self.curriculum_table.setHorizontalHeaderLabels(["Порог шагов", "Этап (1-3)"])
+        self.curriculum_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.curriculum_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.curriculum_table.setMinimumHeight(120)
+        self.curriculum_table.setMaximumHeight(200)
+        curr_layout.addWidget(self.curriculum_table)
+
+        curr_btns = QHBoxLayout()
+        self.btn_cur_add = QPushButton("Добавить")
+        self.btn_cur_add.setObjectName("btn_cur_add")
+        self.btn_cur_add.clicked.connect(self._cur_add_row)
+        self.btn_cur_del = QPushButton("Удалить")
+        self.btn_cur_del.setObjectName("btn_cur_del")
+        self.btn_cur_del.clicked.connect(self._cur_del_row)
+        self.btn_cur_clear = QPushButton("Очистить")
+        self.btn_cur_clear.setObjectName("btn_cur_clear")
+        self.btn_cur_clear.clicked.connect(self._cur_clear)
+        curr_btns.addWidget(self.btn_cur_add)
+        curr_btns.addWidget(self.btn_cur_del)
+        curr_btns.addWidget(self.btn_cur_clear)
+        curr_btns.addStretch(1)
+        curr_layout.addLayout(curr_btns)
+
+        curr_profile_row = QHBoxLayout()
+        profile_lbl = QLabel("Профиль:")
+        profile_lbl.setObjectName("curriculum_profile_label")
+        self.curriculum_profile_combo = QComboBox()
+        self.curriculum_profile_combo.setObjectName("curriculum_profile_combo")
+        self.curriculum_profile_combo.addItems(["Отключён", "Стандартный", "Быстрый", "Медленный"])
+        self.curriculum_profile_combo.setCurrentIndex(1)
+        self.curriculum_profile_combo.currentIndexChanged.connect(self._cur_profile_changed)
+        curr_profile_row.addWidget(profile_lbl)
+        curr_profile_row.addWidget(self.curriculum_profile_combo)
+        curr_profile_row.addStretch(1)
+        curr_layout.addLayout(curr_profile_row)
+
+        curr_save_row = QHBoxLayout()
+        self.btn_cur_save = QPushButton("Сохранить")
+        self.btn_cur_save.setObjectName("btn_cur_save")
+        self.btn_cur_save.setToolTip("Сохранить расписание в JSON-файл")
+        self.btn_cur_save.clicked.connect(self._cur_save)
+        self.btn_cur_load = QPushButton("Загрузить")
+        self.btn_cur_load.setObjectName("btn_cur_load")
+        self.btn_cur_load.setToolTip("Загрузить расписание из JSON-файла")
+        self.btn_cur_load.clicked.connect(self._cur_load)
+        curr_save_row.addWidget(self.btn_cur_save)
+        curr_save_row.addWidget(self.btn_cur_load)
+        curr_save_row.addStretch(1)
+        curr_layout.addLayout(curr_save_row)
+
+        layout.addWidget(curr_box)
+
         actions = QHBoxLayout()
         self.btn_start = QPushButton("Запустить обучение")
         self.btn_start.setObjectName("btn_start")
@@ -390,6 +449,89 @@ class MainWindow(QMainWindow):
 
         layout.addStretch(1)
         splitter.addWidget(box)
+
+    # ---------- curriculum ----------
+
+    CURRICULUM_PROFILES: Dict[str, List[List[int]]] = {
+        "Отключён": [],
+        "Стандартный": [[0, 1], [5_000_000, 2], [15_000_000, 3]],
+        "Быстрый": [[0, 2], [3_000_000, 3]],
+        "Медленный": [[0, 1], [10_000_000, 2], [30_000_000, 3]],
+    }
+
+    def _cur_add_row(self, threshold: int = 0, stage: int = 1):
+        row = self.curriculum_table.rowCount()
+        self.curriculum_table.insertRow(row)
+        self.curriculum_table.setItem(row, 0, QTableWidgetItem(str(threshold)))
+        self.curriculum_table.setItem(row, 1, QTableWidgetItem(str(stage)))
+
+    def _cur_del_row(self):
+        row = self.curriculum_table.currentRow()
+        if row >= 0:
+            self.curriculum_table.removeRow(row)
+
+    def _cur_clear(self):
+        self.curriculum_table.setRowCount(0)
+
+    def _cur_profile_changed(self, _idx: int):
+        name = self.curriculum_profile_combo.currentText()
+        profile = self.CURRICULUM_PROFILES.get(name, [])
+        self._cur_clear()
+        for th, st in profile:
+            self._cur_add_row(th, st)
+
+    def _cur_save(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Сохранить расписание", "curriculum.json", "JSON (*.json)"
+        )
+        if not path:
+            return
+        data = self._get_curriculum_data()
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        self.log("info", f"Расписание сохранено: {path}")
+
+    def _cur_load(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Загрузить расписание", "", "JSON (*.json)"
+        )
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, list):
+                self.log("error", "Файл должен содержать список пар [порог, этап]")
+                return
+            self._cur_clear()
+            for item in data:
+                if isinstance(item, (list, tuple)) and len(item) == 2:
+                    self._cur_add_row(int(item[0]), int(item[1]))
+            self.log("info", f"Расписание загружено: {path}")
+        except (json.JSONDecodeError, OSError, ValueError) as e:
+            self.log("error", f"Не удалось загрузить: {e}")
+
+    def _get_curriculum_data(self) -> List[List[int]]:
+        data: List[List[int]] = []
+        for row in range(self.curriculum_table.rowCount()):
+            th_item = self.curriculum_table.item(row, 0)
+            st_item = self.curriculum_table.item(row, 1)
+            if th_item and st_item:
+                try:
+                    th = int(th_item.text())
+                    st = int(st_item.text())
+                    if 1 <= st <= 3:
+                        data.append([th, st])
+                except ValueError:
+                    continue
+        data.sort(key=lambda x: x[0])
+        return data
+
+    def _validate_curriculum(self, data: List[List[int]]) -> tuple[bool, str]:
+        for i in range(1, len(data)):
+            if data[i][0] <= data[i - 1][0]:
+                return False, f"Порог {data[i][0]:,} должен быть больше предыдущего {data[i-1][0]:,}"
+        return True, "OK"
 
     # ---------- helpers ----------
 
@@ -782,6 +924,13 @@ class MainWindow(QMainWindow):
             cfg[key] = row.value()
         net = int(cfg.pop("net_arch", 256))
         cfg["net_arch"] = [net, net]
+        curriculum = self._get_curriculum_data()
+        if curriculum:
+            ok, msg = self._validate_curriculum(curriculum)
+            if not ok:
+                QMessageBox.warning(self, "Курикулум", msg)
+                curriculum = []
+        cfg["curriculum_schedule"] = curriculum
         return cfg
 
     def _start_training(self, resume_model: Optional[Path] = None):
@@ -966,6 +1115,10 @@ class MainWindow(QMainWindow):
             self.chk_random_seed.blockSignals(True)
             self.chk_random_seed.setChecked(False)
             self.chk_random_seed.blockSignals(False)
+        self.curriculum_profile_combo.blockSignals(True)
+        self.curriculum_profile_combo.setCurrentIndex(1)
+        self.curriculum_profile_combo.blockSignals(False)
+        self._cur_profile_changed(1)
         self.log("info", "Параметры сброшены к значениям по умолчанию")
 
     def _restore_state(self):
@@ -988,6 +1141,14 @@ class MainWindow(QMainWindow):
                 self.resize(geom["w"], geom["h"])
             except Exception:
                 pass
+        curriculum = cfg.get("curriculum_schedule")
+        if curriculum is not None:
+            self._cur_clear()
+            for item in curriculum:
+                if isinstance(item, (list, tuple)) and len(item) == 2:
+                    self._cur_add_row(int(item[0]), int(item[1]))
+        else:
+            self._cur_profile_changed(1)
 
     def save_state(self) -> Dict[str, Any]:
         state = self.config.copy()
@@ -1000,6 +1161,7 @@ class MainWindow(QMainWindow):
         )
         for key, row in self.param_rows.items():
             state[key] = row.value()
+        state["curriculum_schedule"] = self._get_curriculum_data()
         state["geometry"] = {"w": self.width(), "h": self.height()}
         m = self._selected_model()
         if m is not None:
