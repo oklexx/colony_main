@@ -447,6 +447,49 @@ class MainWindow(QMainWindow):
             w_layout.addWidget(val)
         layout.addWidget(watch_box)
 
+        # --- Watch stage override ---
+        watch_stage_box = QGroupBox("Этап курикулума при наблюдении")
+        watch_stage_box.setObjectName("watch_stage_box")
+        watch_stage_layout = QVBoxLayout(watch_stage_box)
+
+        self.watch_use_model_stage_chk = QCheckBox("Использовать stage модели (из meta.json)")
+        self.watch_use_model_stage_chk.setObjectName("watch_use_model_stage_chk")
+        self.watch_use_model_stage_chk.setChecked(True)
+        self.watch_use_model_stage_chk.toggled.connect(self._watch_stage_mode_changed)
+        watch_stage_layout.addWidget(self.watch_use_model_stage_chk)
+
+        self.watch_override_stage_chk = QCheckBox("Переопределить stage")
+        self.watch_override_stage_chk.setObjectName("watch_override_stage_chk")
+        self.watch_override_stage_chk.setChecked(False)
+        self.watch_override_stage_chk.setEnabled(False)
+        self.watch_override_stage_chk.toggled.connect(self._watch_stage_mode_changed)
+        watch_stage_layout.addWidget(self.watch_override_stage_chk)
+
+        stage_row = QHBoxLayout()
+        stage_lbl = QLabel("Stage:")
+        self.watch_stage_combo = QComboBox()
+        self.watch_stage_combo.setObjectName("watch_stage_combo")
+        self.watch_stage_combo.addItems([
+            "0 — все здания",
+            "1 — базовые",
+            "2 — +средние",
+            "3 — полные",
+        ])
+        self.watch_stage_combo.setCurrentIndex(2)
+        stage_row.addWidget(stage_lbl)
+        stage_row.addWidget(self.watch_stage_combo)
+        stage_row.addStretch(1)
+        watch_stage_layout.addLayout(stage_row)
+
+        self.watch_stage_info_label = QLabel("")
+        self.watch_stage_info_label.setObjectName("watch_stage_info_label")
+        self.watch_stage_info_label.setWordWrap(True)
+        self.watch_stage_info_label.setStyleSheet("color: #888; font-size: 11px;")
+        watch_stage_layout.addWidget(self.watch_stage_info_label)
+
+        watch_stage_layout.addStretch(1)
+        layout.addWidget(watch_stage_box)
+
         layout.addStretch(1)
         splitter.addWidget(box)
 
@@ -589,6 +632,7 @@ class MainWindow(QMainWindow):
 
     def _on_model_clicked(self, row: int, _col: int):
         self._update_stats_panel()
+        self._update_watch_stage_label()
 
     def _toggle_select_all(self, checked: bool):
         state = Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked
@@ -783,6 +827,9 @@ class MainWindow(QMainWindow):
             "--device", "cpu",
             "--log-file", watch_msg,
         ]
+        stage = self._get_watch_stage()
+        if stage is not None:
+            args.extend(["--curriculum-stage", str(stage)])
         workdir = str(Path(__file__).resolve().parent.parent)
         ok, pid = QProcess.startDetached(_sys.executable, args, workdir)
         if not ok:
@@ -863,6 +910,66 @@ class MainWindow(QMainWindow):
                 lbl.setText(f"{d.get('total_reward', 0.0):+.1f}")
             else:
                 lbl.setText(str(d.get(key, "—")))
+
+    # ---------- watch stage ----------
+
+    WATCH_STAGE_INFO: Dict[int, str] = {
+        0: "Все здания доступны (куррикулум отключён).",
+        1: "Базовые здания: Дом, Ферма, Огород, Переработка, Рыбалка, Пастбище, Пчельник, Ловушка, Свалка, Промзона, Шахта, Порт, Аэропорт, Военный лагерь.",
+        2: "+ Средние: Пила, Угольная шахта, Железная шахта, Электростанция, Каменная шахта, Деревообработка, Текстиль, Сталь, Химия, Электроника, Склад.",
+        3: "+ Полные: Большая пила, Атомная станция, Супердом.",
+    }
+
+    def _watch_stage_mode_changed(self, _checked: bool = False):
+        use_model = self.watch_use_model_stage_chk.isChecked()
+        override = self.watch_override_stage_chk.isChecked()
+
+        if use_model:
+            self.watch_override_stage_chk.setEnabled(False)
+            self.watch_stage_combo.setEnabled(False)
+            self.watch_stage_info_label.setText("Stage будет прочитан из best_model.meta.json модели.")
+        elif override:
+            self.watch_stage_combo.setEnabled(True)
+            stage = self._watch_stage_from_combo()
+            self.watch_stage_info_label.setText(self.WATCH_STAGE_INFO.get(stage, ""))
+        else:
+            self.watch_stage_combo.setEnabled(False)
+            self.watch_stage_info_label.setText("Выберите режим: stage модели или переопределение.")
+
+    def _watch_stage_from_combo(self) -> int:
+        idx = self.watch_stage_combo.currentIndex()
+        return idx  # 0=0, 1=1, 2=2, 3=3
+
+    def _get_watch_stage(self):
+        """Return stage int or None. None = let watch_champion.py read from meta."""
+        if self.watch_use_model_stage_chk.isChecked():
+            return None
+        if self.watch_override_stage_chk.isChecked():
+            return self._watch_stage_from_combo()
+        return None
+
+    def _update_watch_stage_label(self):
+        """Show which stage the selected model was trained at (from meta.json)."""
+        m = self._selected_model()
+        if m is None:
+            return
+        meta_path = m.path / "best_model.meta.json"
+        if not meta_path.exists():
+            self.watch_stage_info_label.setText("Meta-файл не найден — stage не определён.")
+            return
+        try:
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+            stage = meta.get("curriculum_stage_at_best")
+            if stage is not None:
+                self.watch_stage_info_label.setText(
+                    f"Модель обучена на stage {stage}. "
+                    + self.WATCH_STAGE_INFO.get(stage, "")
+                )
+            else:
+                self.watch_stage_info_label.setText("Модель обучена без курикулума (все здания).")
+        except (json.JSONDecodeError, OSError):
+            self.watch_stage_info_label.setText("Не удалось прочитать meta.json.")
 
     def _reset_watch_stats(self):
         for lbl in self._watch_labels.values():
