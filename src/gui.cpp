@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <fstream>
 
 #include "raylib.h"
 
@@ -426,10 +427,73 @@ static int dlg_season = 0;
 static char mess_title[64] = "Сообщение";
 static char mess_text[256] = "";
 static bool want_close = false;
+
+// ═══ Headless AI mode (policy-driven) ═══
+static bool headless_ai = false;
+static std::string ai_actions_path;
+static std::string ai_state_path;
+static int ai_last_action = -1;   // last action written by Python
+static bool ai_terminated = false;
+static float ai_reset_timer = 0.0f;
+
+static int ai_read_action() {
+    // Read action from file. Returns -1 if no new action available.
+    std::ifstream f(ai_actions_path);
+    if (!f.is_open()) return -1;
+    int action = -1;
+    f >> action;
+    f.close();
+    // Clear the file so next read gets the new action
+    std::ofstream out(ai_actions_path, std::ios::trunc);
+    out.close();
+    return action;
+}
+
+static void ai_write_state(const Game& g, const std::vector<float>& obs, int action, bool terminated) {
+    // Write state JSON to file (includes obs for Python policy)
+    std::ofstream f(ai_state_path);
+    if (!f.is_open()) return;
+    f << "{"
+      << "\"day\":" << g.day << ","
+      << "\"month\":" << g.month << ","
+      << "\"year\":" << g.year << ","
+      << "\"people\":" << g.people << ","
+      << "\"bases\":" << g.bases.size() << ","
+      << "\"money\":" << g.money << ","
+      << "\"action\":" << action << ","
+      << "\"terminated\":" << (terminated ? "true" : "false") << ","
+      << "\"obs\":[";
+    for (size_t i = 0; i < obs.size(); i++) {
+        f << obs[i];
+        if (i + 1 < obs.size()) f << ",";
+    }
+    f << "]";
+    f << "}";
+    f.close();
+}
+
 static bool sound_on = true;
 static bool fullscreen = false;
 static Camera2D cam = {0};
 static Season prev_season = SEASON_SPRING;
+
+static void ai_reset_env(ColonyEnvCpp& env) {
+    int64_t new_seed = (int64_t)GetRandomValue(1, 999999999);
+    env.reset(new_seed);
+    game_over = false;
+    ai_terminated = false;
+    ai_reset_timer = 0.0f;
+    sel_bx = sel_by = -1;
+    cur_dlg = DLG_NONE;
+    stat_built.clear(); stat_earned = 0; stat_spent = 0;
+    stat_started = false; stat_tax_over = false;
+    cam.target = {(float)env.game().earth.init_sel_x * TILE,
+                  (float)env.game().earth.init_sel_y * TILE};
+    cam.zoom = 1.0f;
+    // Clear action file so Python knows to send a new one
+    std::ofstream out(ai_actions_path, std::ios::trunc);
+    out.close();
+}
 
 static bool btn(int x, int y, int w, int h, const char* label, bool enabled = true) {
     Rectangle r = {(float)x, (float)y, (float)w, (float)h};
@@ -719,6 +783,9 @@ int main(int argc, char* argv[]) {
         if (a == "--seed" && i+1 < argc) seed = std::stoll(argv[++i]);
         else if (a == "--map-size" && i+1 < argc) map_size = std::stoi(argv[++i]);
         else if (a == "--stage" && i+1 < argc) curriculum_stage = std::stoi(argv[++i]);
+        else if (a == "--headless-ai") headless_ai = true;
+        else if (a == "--actions-file" && i+1 < argc) ai_actions_path = argv[++i];
+        else if (a == "--state-file" && i+1 < argc) ai_state_path = argv[++i];
     }
 
     auto bd = load_base_data("configs/bases.json");
@@ -731,6 +798,10 @@ int main(int argc, char* argv[]) {
     cam.target = {(float)g.earth.init_sel_x * TILE, (float)g.earth.init_sel_y * TILE};
     cam.offset = {(float)MAP_X + MAP_W/2.0f, (float)MAP_Y + MAP_H/2.0f};
     cam.zoom = 1.0f;
+    if (headless_ai) {
+        cam.target = {(float)g.map_size() * TILE / 2.0f, (float)g.map_size() * TILE / 2.0f};
+        cam.zoom = 0.8f;
+    }
 
     static int sel_action = A_BUILD0;
     static bool selecting = false;
@@ -762,6 +833,35 @@ int main(int argc, char* argv[]) {
         bool pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
         bool over_map = (mpos.x >= MAP_X && mpos.x < MAP_X + MAP_W &&
                          mpos.y >= MAP_Y && mpos.y < MAP_Y + MAP_H);
+
+        // ─── Headless AI mode: read action from file, step env ───
+        if (headless_ai) {
+            if (IsKeyPressed(KEY_ESCAPE)) { want_close = true; }
+
+            if (game_over) {
+                // Auto-reset after 5 seconds
+                ai_reset_timer += GetFrameTime();
+                if (ai_reset_timer > 5.0f) {
+                    ai_reset_env(env);
+                }
+                // Draw game-over screen (reuse existing code below)
+                // ... fall through to draw ...
+            } else {
+                int action = ai_read_action();
+                if (action >= 0) {
+                    ai_last_action = action;
+                    sel_action = action;  // highlight in palette
+                    auto out = env.step(action);
+                    if (out.terminated) {
+                        game_over = true;
+                        ai_terminated = true;
+                    }
+                    // Write state including obs for Python policy
+                    ai_write_state(env.game(), out.obs, action, out.terminated);
+                }
+            }
+        }
+
 
         // ─── Экран завершения: статистика + новая игра / выход ───
         if (game_over) {
@@ -816,6 +916,13 @@ int main(int argc, char* argv[]) {
             continue;
         }
 
+        // cursor cell
+        Vector2 wp = GetScreenToWorld2D(mpos, cam);
+        int cx = (int)floor(wp.x / TILE), cy = (int)floor(wp.y / TILE);
+        int nb = (int)env.build_data().size();
+        Game& gm = env.game();
+
+        if (!headless_ai) {
         // ── Esc closes any open dialog ──
         if (cur_dlg != DLG_NONE && IsKeyPressed(KEY_ESCAPE)) {
             cur_dlg = DLG_NONE;
@@ -865,10 +972,6 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        // cursor cell
-        Vector2 wp = GetScreenToWorld2D(mpos, cam);
-        int cx = (int)floor(wp.x / TILE), cy = (int)floor(wp.y / TILE);
-
         // ─── Bank text input ───
         if (cur_dlg == DLG_BANK) {
             int k = GetCharPressed();
@@ -882,8 +985,6 @@ int main(int argc, char* argv[]) {
                 bank_buf[strlen(bank_buf) - 1] = 0;
         }
 
-        int nb = (int)env.build_data().size();
-        Game& gm = env.game();
         if (cur_dlg == DLG_NONE) {
             // build palette click
             for (int i = 0; i < nb && i < PAL_ROWS * PAL_COLS; i++) {
@@ -1049,6 +1150,7 @@ int main(int argc, char* argv[]) {
             }
             if (IsKeyPressed(KEY_F7)) sound_on = !sound_on;
             if (IsKeyPressed(KEY_F9)) { fullscreen = !fullscreen; ToggleFullscreen(); }
+        }
         }
 
         // ─── Auto-pay tax if player has enough money (no dialog needed) ───
