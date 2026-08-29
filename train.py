@@ -158,6 +158,11 @@ def main():
             writer.add_scalar("train/learning_rate", metrics.learning_rate, metrics.total_timesteps)
             writer.add_scalar("train/gpu_mem_mb", metrics.gpu_mem_mb, metrics.total_timesteps)
             writer.add_scalar("train/best_reward", metrics.best_reward, metrics.total_timesteps)
+            # Eval metrics
+            if metrics.eval_days > 0:
+                writer.add_scalar("eval/days", metrics.eval_days, metrics.total_timesteps)
+                writer.add_scalar("eval/people", metrics.eval_people, metrics.total_timesteps)
+                writer.add_scalar("eval/bases", metrics.eval_bases, metrics.total_timesteps)
 
     trainer = AsyncTrainer(
         cfg=cfg,

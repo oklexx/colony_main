@@ -54,5 +54,49 @@ def main():
     else:
         print("PASS: Training completed without errors")
 
+
+def test_training_with_eval_integration(tmp_path):
+    """End-to-end: train for a few steps with eval, verify best_model and normalization exist."""
+    import torch
+
+    from rl.config import Config
+    from rl.env_manager import EnvManager
+    from rl.async_trainer import AsyncTrainer
+
+    cfg = Config(
+        n_envs=2,
+        n_steps=32,
+        total_timesteps=256,
+        save_freq=128,
+        eval_freq=128,
+        eval_episodes=2,
+        map_size=100,
+        model_dir=str(tmp_path),
+        log_dir=str(tmp_path / "logs"),
+    )
+
+    device = torch.device("cpu")
+    em = EnvManager(cfg, device)
+
+    # Save initial normalization
+    norm_path = Path(cfg.model_dir) / "normalization.json"
+    em.env.venv.save_normalization(str(norm_path))
+    assert norm_path.exists(), "normalization.json should exist after initial save"
+
+    trainer = AsyncTrainer(cfg=cfg, env_manager=em)
+    trainer.train(total_timesteps=256)
+
+    # Verify best model was saved (eval should have run at step 128 and 256)
+    best_model = Path(cfg.model_dir) / "best_model.pt"
+    best_meta = Path(cfg.model_dir) / "best_model.meta.json"
+    assert best_model.exists(), "best_model.pt should exist after training with eval"
+    assert best_meta.exists(), "best_model.meta.json should exist"
+
+    # Verify normalization exists
+    assert norm_path.exists(), "normalization.json should still exist"
+
+    em.close()
+
+
 if __name__ == "__main__":
     main()

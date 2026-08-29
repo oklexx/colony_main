@@ -28,6 +28,10 @@ class TrainMetrics:
     wall_time_s: float = 0.0
     n_episodes: int = 0
     best_reward: float = float("-inf")
+    eval_days: float = 0.0
+    eval_people: float = 0.0
+    eval_bases: float = 0.0
+    best_eval_days: float = 0.0
 
 
 class AsyncTrainer:
@@ -53,6 +57,7 @@ class AsyncTrainer:
 
         self.metrics = TrainMetrics()
         self.best_reward = float("-inf")
+        self.best_eval_days: Optional[float] = None
         self._ep_returns: list[float] = []
         self._ep_lengths: list[int] = []
 
@@ -131,6 +136,73 @@ class AsyncTrainer:
             stats["gpu_mem_reserved_mb"] = torch.cuda.memory_reserved(self.device) / (1024 * 1024)
 
         return stats
+
+    def _eval(self, total_done: int) -> Dict[str, float]:
+        """Run evaluation episodes with the current policy.
+
+        Returns dict with days, people, bases, avg_return.
+        Saves best_model.pt if eval/days improves.
+        """
+        import json
+        from train_ui.evaluator import run_eval
+
+        save_dir = Path(self.cfg.model_dir)
+        save_dir.mkdir(parents=True, exist_ok=True)
+
+        # Save current model to a temp path for eval
+        eval_model_path = save_dir / "_eval_temp.pt"
+        self.em.ppo.save(str(eval_model_path))
+
+        # Load normalization if available
+        norm_path = save_dir / "normalization.json"
+        norm_str = str(norm_path) if norm_path.exists() else None
+
+        try:
+            result = run_eval(
+                model_path=str(eval_model_path),
+                episodes=self.cfg.eval_episodes,
+                max_days=1000,
+                seed=42,
+                device=str(self.device),
+                normalization_path=norm_str,
+            )
+        finally:
+            # Clean up temp model
+            if eval_model_path.exists():
+                eval_model_path.unlink()
+
+        self._log(
+            f"[Eval @ {total_done:,}] days={result['days']:.1f} "
+            f"people={result['people']:.1f} bases={result['bases']:.1f} "
+            f"return={result['avg_return']:.1f}"
+        )
+
+        # Save best model if eval/days improved
+        if self.best_eval_days is None or result["days"] > self.best_eval_days:
+            self.best_eval_days = result["days"]
+            best_path = save_dir / "best_model.pt"
+            self.em.ppo.save(str(best_path))
+
+            norm_path = save_dir / "normalization.json"
+            if norm_path.exists():
+                import shutil
+                shutil.copy2(norm_path, str(best_path).replace(".pt", ".norm.json"))
+
+            meta = {
+                "best_eval_days": result["days"],
+                "eval_people": result["people"],
+                "eval_bases": result["bases"],
+                "eval_return": result["avg_return"],
+                "total_timesteps": total_done,
+                "episodes": self.cfg.eval_episodes,
+            }
+            meta_path = save_dir / "best_model.meta.json"
+            with open(meta_path, "w") as f:
+                json.dump(meta, f, indent=2)
+
+            self._log(f"[Best] Saved best_model.pt (days={result['days']:.1f})")
+
+        return result
 
     def train(self, total_timesteps: Optional[int] = None) -> TrainMetrics:
         total = total_timesteps or self.cfg.total_timesteps
@@ -211,6 +283,20 @@ class AsyncTrainer:
                 self.em.env.venv.save_normalization(norm_path)
                 self._log(f"[Save] {ckpt_path}")
                 self._log(f"[Save] {norm_path}")
+
+            # Run eval every eval_freq steps
+            if self.cfg.eval_freq > 0 and total_done % self.cfg.eval_freq < steps_per_rollout:
+                eval_result = self._eval(total_done)
+                # Log to progress callback (TensorBoard)
+                if self.progress_callback:
+                    try:
+                        self.metrics.eval_days = eval_result["days"]
+                        self.metrics.eval_people = eval_result["people"]
+                        self.metrics.eval_bases = eval_result["bases"]
+                        self.metrics.best_eval_days = self.best_eval_days or 0.0
+                        self.progress_callback(self.metrics)
+                    except Exception:
+                        pass
 
         elapsed = time.perf_counter() - t_start
         final_fps = total_done / max(elapsed, 1e-10)

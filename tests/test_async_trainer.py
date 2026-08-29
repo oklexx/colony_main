@@ -38,6 +38,13 @@ class FakeEnvManager:
             device=self.device,
         )
 
+        # Minimal stand-in for CppVecEnv.venv (ColonyVecEnvCpp) used by
+        # AsyncTrainer.train() to persist normalization stats.
+        self.env = type("FakeEnv", (), {})()
+        self.env.venv = type("FakeVenv", (), {
+            "save_normalization": staticmethod(lambda path: None),
+        })()
+
     def reset(self):
         return torch.randn(self.n_envs, self.obs_size)
 
@@ -88,6 +95,59 @@ def test_per_env_episode_tracking(tmp_path):
     assert trainer.best_reward == 200.0, f"Expected best_reward=200.0, got {trainer.best_reward}"
     assert 100.0 in trainer._ep_returns
     assert 200.0 in trainer._ep_returns
+
+
+def test_eval_and_best_model_saving(tmp_path):
+    """Verify that eval runs and best model is saved when eval improves."""
+    import json
+    from pathlib import Path
+
+    # Two rollouts (6 steps each) so the eval gate fires twice and the
+    # improving eval result (days=20.0) overwrites the first best model.
+    cfg = Config(
+        n_envs=2,
+        n_steps=3,
+        total_timesteps=12,
+        save_freq=0,
+        eval_freq=3,
+        eval_episodes=2,
+        model_dir=str(tmp_path),
+    )
+    em = FakeEnvManager(n_envs=2)
+    trainer = AsyncTrainer(cfg=cfg, env_manager=em)
+
+    # Mock run_eval to return improving results
+    eval_results = [
+        {"days": 10.0, "people": 5.0, "bases": 2.0, "episodes": 2.0, "avg_return": 100.0},
+        {"days": 20.0, "people": 10.0, "bases": 4.0, "episodes": 2.0, "avg_return": 200.0},
+    ]
+    eval_call_count = [0]
+
+    def mock_run_eval(*args, **kwargs):
+        idx = min(eval_call_count[0], len(eval_results) - 1)
+        eval_call_count[0] += 1
+        return eval_results[idx]
+
+    import train_ui.evaluator as ev
+    original_run_eval = ev.run_eval
+    ev.run_eval = mock_run_eval
+
+    try:
+        trainer.train(total_timesteps=12)
+    finally:
+        ev.run_eval = original_run_eval
+
+    # Verify best model was saved
+    best_model = tmp_path / "best_model.pt"
+    best_meta = tmp_path / "best_model.meta.json"
+    assert best_model.exists(), "best_model.pt should exist"
+    assert best_meta.exists(), "best_model.meta.json should exist"
+
+    with open(best_meta) as f:
+        meta = json.load(f)
+    assert meta["best_eval_days"] == 20.0
+    assert meta["eval_people"] == 10.0
+    assert meta["eval_bases"] == 4.0
 
 
 if __name__ == "__main__":
