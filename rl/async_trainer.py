@@ -55,8 +55,6 @@ class AsyncTrainer:
         self.best_reward = float("-inf")
         self._ep_returns: list[float] = []
         self._ep_lengths: list[int] = []
-        self._current_ep_return = 0.0
-        self._current_ep_len = 0
 
     def _request_stop(self):
         self._stop = True
@@ -78,38 +76,39 @@ class AsyncTrainer:
     def _collect_rollout(self, obs: torch.Tensor) -> Dict[str, Any]:
         """Collect n_steps of transitions."""
         n_envs = self.em.n_envs
-        done_mask = np.zeros(n_envs, dtype=bool)
 
         for _ in range(self.cfg.n_steps):
             if self._check_stop():
                 break
 
-            new_obs = self.em.collect_step(obs)
+            new_obs, infos = self.em.collect_step(obs)
 
-            rewards = self.em.buffer.rewards[
-                (self.em.buffer.pos - 1) * n_envs : self.em.buffer.pos * n_envs
-            ].cpu().numpy()
-            dones = self.em.buffer.dones[
+            # True termination flag (excludes truncation) for the bootstrap mask.
+            terminated = self.em.buffer.terminated[
                 (self.em.buffer.pos - 1) * n_envs : self.em.buffer.pos * n_envs
             ].cpu().numpy()
 
-            for i, (r, d) in enumerate(zip(rewards, dones)):
-                self._current_ep_return += r
-                self._current_ep_len += 1
-                if d:
-                    self._ep_returns.append(self._current_ep_return)
-                    self._ep_lengths.append(self._current_ep_len)
-                    if self._current_ep_return > self.best_reward:
-                        self.best_reward = self._current_ep_return
-                    self._current_ep_return = 0.0
-                    self._current_ep_len = 0
-                    done_mask[i] = True
+            # Track per-episode returns from C++ info (per-env, no cross-env
+            # summing artifacts).
+            for info in infos:
+                ep = info.get("episode")
+                if ep is not None:
+                    r = ep["r"]
+                    l = ep["l"]
+                    self._ep_returns.append(r)
+                    self._ep_lengths.append(l)
+                    if r > self.best_reward:
+                        self.best_reward = r
 
             obs = new_obs
 
         with torch.no_grad():
             last_value = self.em.ppo.model.get_value(obs)
-            last_done = done_mask
+            # last_done must be the TRUE termination flag of the LAST collected
+            # step (== buffer.terminated[T-1] == terminal(s_T)), NOT an OR over
+            # the whole rollout and NOT including time-limit truncation. This is
+            # what the GAE bootstrap mask needs.
+            last_done = torch.tensor(terminated, dtype=torch.bool, device=self.device)
 
         return {
             "last_value": last_value.cpu().numpy(),
@@ -127,7 +126,7 @@ class AsyncTrainer:
         update_time = time.perf_counter() - t0
 
         stats["update_time_s"] = update_time
-        if torch.cuda.is_available():
+        if torch.cuda.is_available() and self.device.type == "cuda":
             stats["gpu_mem_mb"] = torch.cuda.memory_allocated(self.device) / (1024 * 1024)
             stats["gpu_mem_reserved_mb"] = torch.cuda.memory_reserved(self.device) / (1024 * 1024)
 
@@ -147,6 +146,15 @@ class AsyncTrainer:
         obs = self.em.reset()
         t_start = time.perf_counter()
         total_done = 0
+        rollout_idx = 0
+        # Save every `save_every` rollouts (robust to any save_freq/steps_per_rollout
+        # combination; the old `total_done % save_freq < steps_per_rollout` condition
+        # almost never fired for the default hyperparameters).
+        save_every = (
+            max(1, int(round(self.cfg.save_freq / steps_per_rollout)))
+            if self.cfg.save_freq > 0
+            else 0
+        )
 
         while total_done < total and not self._stop:
             t_rollout_start = time.perf_counter()
@@ -159,6 +167,7 @@ class AsyncTrainer:
             stats = self._update_ppo(rollout)
 
             total_done += steps_per_rollout
+            rollout_idx += 1
             elapsed = time.perf_counter() - t_start
             fps = total_done / max(elapsed, 1e-10)
 
@@ -195,7 +204,7 @@ class AsyncTrainer:
             save_dir = Path(self.cfg.model_dir)
             save_dir.mkdir(parents=True, exist_ok=True)
 
-            if total_done % self.cfg.save_freq < steps_per_rollout:
+            if save_every > 0 and rollout_idx % save_every == 0:
                 ckpt_path = save_dir / f"checkpoint_{total_done}_steps.pt"
                 self.em.ppo.save(str(ckpt_path))
                 self._log(f"[Save] {ckpt_path}")

@@ -18,6 +18,9 @@ class EnvManager:
         self.cfg = cfg
         self.device = device
 
+        # Ensure model weight initialization is reproducible for a given seed.
+        torch.manual_seed(cfg.seed)
+
         import sys
         project_root = Path(__file__).resolve().parent.parent
         python_dir = project_root / "python"
@@ -95,16 +98,24 @@ class EnvManager:
         obs = torch.from_numpy(np.asarray(obs_np, dtype=np.float32)).to(self.device, non_blocking=True)
         rewards = torch.from_numpy(np.asarray(rewards_np, dtype=np.float32)).to(self.device)
         dones = torch.from_numpy(np.asarray(dones_np, dtype=bool)).to(self.device)
+        # `terminated` is the true terminal flag (without truncation). The RL
+        # layer uses it to bootstrap GAE so that time-limit truncation does not
+        # cut the value bootstrap.
+        terminated_np = np.asarray(
+            getattr(self.env, "_last_terminateds", dones_np), dtype=bool
+        )
+        terminated = torch.from_numpy(terminated_np).to(self.device)
 
         return {
             "obs": obs,
             "rewards": rewards,
             "dones": dones,
+            "terminated": terminated,
             "infos": infos,
         }
 
-    def collect_step(self, obs: torch.Tensor) -> torch.Tensor:
-        """One full step: policy → env step → buffer add. Returns new obs."""
+    def collect_step(self, obs: torch.Tensor) -> tuple[torch.Tensor, list[dict]]:
+        """One full step: policy → env step → buffer add. Returns (new_obs, infos)."""
         policy_out = self.ppo.collect_step(obs)
         action_gpu = policy_out["action"]
         action_np = action_gpu.cpu().numpy().astype(np.int32)
@@ -113,6 +124,8 @@ class EnvManager:
         new_obs = env_out["obs"]
         rewards = env_out["rewards"]
         dones = env_out["dones"]
+        terminated = env_out["terminated"]
+        infos = env_out["infos"]
 
         self.buffer.add(
             obs=obs,
@@ -121,9 +134,10 @@ class EnvManager:
             log_prob=policy_out["log_prob"],
             value=policy_out["value"],
             done=dones,
+            terminated=terminated,
         )
 
-        return new_obs
+        return new_obs, infos
 
     def finish_episode(self, last_obs: torch.Tensor, last_dones: torch.Tensor):
         """Compute last values and GAE."""
