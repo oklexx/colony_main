@@ -768,7 +768,7 @@ class MainWindow(QMainWindow):
             self._eval_start_time = time.time()
         if time.time() - self._eval_start_time < 2.0:
             return
-        if not self._poll_process_alive():
+        if not self._poll_pid_alive(self._eval_pid):
             self._read_eval_file()
             eval_succeeded = self._eval_done
             self._cleanup_eval()
@@ -1155,23 +1155,26 @@ class MainWindow(QMainWindow):
             self.log("error", f"Не удалось остановить процесс: {e}")
         self._cleanup_training()
 
-    def _poll_process_alive(self) -> bool:
-        if self._train_pid is None:
+    def _poll_pid_alive(self, pid: int) -> bool:
+        if pid is None:
             return False
         try:
-            subprocess.run(["tasklist", "/FI", f"PID eq {self._train_pid}"],
+            subprocess.run(["tasklist", "/FI", f"PID eq {pid}"],
                            capture_output=True, timeout=5)
         except Exception:
             return False
         import ctypes
         kernel32 = ctypes.windll.kernel32
         SYNCHRONIZE = 0x00100000
-        h = kernel32.OpenProcess(SYNCHRONIZE, 0, self._train_pid)
+        h = kernel32.OpenProcess(SYNCHRONIZE, 0, pid)
         if not h:
             return False
         result = kernel32.WaitForSingleObject(h, 0)
         kernel32.CloseHandle(h)
         return result != 0x0
+
+    def _poll_process_alive(self) -> bool:
+        return self._poll_pid_alive(self._train_pid)
 
     def _on_train_finished(self, code: int = 0):
         if self._pending_stop_timer is not None and self._pending_stop_timer.isActive():
