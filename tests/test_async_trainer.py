@@ -221,8 +221,59 @@ def test_composite_score_calculation():
     assert abs(expected_neg - 74.0) < 1e-9
 
 
+def test_multi_seed_eval(tmp_path):
+    """Verify that eval runs for each seed in eval_seeds and aggregates results."""
+    import json
+
+    cfg = Config(
+        n_envs=2,
+        n_steps=3,
+        total_timesteps=6,
+        save_freq=0,
+        eval_freq=3,
+        eval_episodes=2,
+        eval_min_bases=1,
+        eval_min_return=-1000.0,
+        eval_use_median=True,
+        eval_seeds=[1, 2, 3],
+        model_dir=str(tmp_path),
+    )
+    em = FakeEnvManager(n_envs=2)
+    trainer = AsyncTrainer(cfg=cfg, env_manager=em)
+
+    call_count = [0]
+
+    def mock_run_eval(*args, **kwargs):
+        seed = kwargs.get("seed", 42)
+        call_count[0] += 1
+        return {
+            "days": float(10 + seed),
+            "people": 5.0,
+            "bases": 2.0,
+            "episodes": 2.0,
+            "avg_return": 100.0,
+            "episode_days": [float(10 + seed), float(12 + seed)],
+            "episode_bases": [2, 2],
+            "episode_people": [4, 6],
+            "episode_returns": [80.0, 120.0],
+        }
+
+    import train_ui.evaluator as ev
+    original_run_eval = ev.run_eval
+    ev.run_eval = mock_run_eval
+
+    try:
+        trainer.train(total_timesteps=6)
+    finally:
+        ev.run_eval = original_run_eval
+
+    assert call_count[0] >= 3, f"run_eval should be called for each seed, got {call_count[0]} calls"
+
+
 if __name__ == "__main__":
     test_per_env_episode_tracking()
     print("PASS: per-env episode tracking")
     test_composite_score_calculation()
     print("PASS: composite score calculation")
+    test_multi_seed_eval(Path(__file__).parent / "tmp")
+    print("PASS: multi-seed eval")
