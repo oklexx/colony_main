@@ -1,32 +1,13 @@
 {
   "build_bonus": 5.0,
-  "chain_bonus": 1.0,
+  "chain_bonus": 0.5,
   "chain_daily": 2.0,
   "novelty": 20.0,
-  "daily_income": 1.0,
-  "sale_bonus": 0.5,
-  "tax_bonus": 250.0,
-  "survival_bonus": 0.1,
-  "game_over_penalty": 50.0,
+  "daily_income": 0.1,
+  "sale_bonus": 0.1,
+  "tax_daily_bonus": 0.77,
+  "survival_bonus": 0.0,
+  "game_over_penalty": 20.0,
   "disable_net_worth": false,
-  "disable_daily_income": false,
-  "curriculum_rewards": {
-    "1": {
-      "novelty": 30.0,
-      "chain_bonus": 2.0
-    },
-    "2": {
-      "novelty": 40.0,
-      "build_bonus": 8.0,
-      "chain_bonus": 3.0,
-      "chain_daily": 3.0
-    },
-    "3": {
-      "novelty": 50.0,
-      "build_bonus": 10.0,
-      "chain_bonus": 5.0,
-      "chain_daily": 5.0,
-      "tax_bonus": 800.0
-    }
-  }
+  "disable_daily_income": false
 }

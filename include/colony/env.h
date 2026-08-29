@@ -24,7 +24,7 @@ struct RewardConfig {
     double novelty = 20.0;          // бонус за первый запуск нового типа здания
     double daily_income = 0.1;      // коэффициент ежедневного дохода
     double sale_bonus = 0.1;        // бонус за продажу ресурсов
-    double tax_bonus = 250.0;       // бонус за уплату главного налога
+    double tax_daily_bonus = 0.77;  // ежедневный бонус при отсутствии налогового срока
     double survival_bonus = 0.0;      // + per surviving step
     double game_over_penalty = 20.0;  // - on game over (was hardcoded 20)
     bool disable_net_worth = false;     // отключить компонент чистой стоимости
@@ -60,10 +60,14 @@ public:
         bool terminated = false, truncated = false;
         int64_t days = 0, people = 0, money = 0, n_bases = 0;
         int64_t seed = 0, tax_due_days = 0;
+        bool tax_grace_expired = false;
         double ep_return = 0.0;
         int64_t steps = 0;
     };
     StepOut step(int action);
+
+    bool tax_grace_expired() const;
+    int tax_grace_days() const;
 
     int n_build() const { return n_build_; }
     int n_bases() const { return (int)game_.bases.size(); }
@@ -136,6 +140,7 @@ private:
     double last_daily_value_ = 0.0;
     double last_chain_daily_ = 0.0;
     int64_t tax_due_days_ = 0;
+    int tax_grace_days_ = 0;
 
     std::unordered_set<int64_t> produced_;      // uid построек, получивших бонус (аналог _produced по id() в референсе)
     std::unordered_set<int64_t> building_before_;

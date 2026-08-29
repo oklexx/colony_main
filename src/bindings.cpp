@@ -3,6 +3,7 @@
 #include <pybind11/numpy.h>
 
 #include <algorithm>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -79,6 +80,7 @@ py::dict env_step_to_dict(const ColonyEnvCpp::StepOut& s) {
     d["bases"] = s.n_bases;
     d["seed"] = s.seed;
     d["tax_due_days"] = s.tax_due_days;
+    d["tax_grace_expired"] = s.tax_grace_expired;
     d["ep_return"] = s.ep_return;
     d["steps"] = s.steps;
     return d;
@@ -206,6 +208,9 @@ PYBIND11_MODULE(colony_cpp, m) {
         .def("main_tax_amount", &Game::main_tax_amount)
         .def("pay_annual_tax", &Game::pay_annual_tax)
         .def("pay_main_tax", &Game::pay_main_tax)
+        .def_property("tax_postponed",
+                      [](const Game& g) { return g.tax_postponed(); },
+                      [](Game& g, bool v) { g.set_tax_postponed(v); })
         .def("new_day", [](Game& g) { return day_result_to_dict(g.new_day()); })
         .def("advance_day", [](Game& g) -> py::object {
             auto r = g.advance_day();
@@ -307,7 +312,7 @@ PYBIND11_MODULE(colony_cpp, m) {
         .def_readwrite("novelty", &RewardConfig::novelty)
         .def_readwrite("daily_income", &RewardConfig::daily_income)
         .def_readwrite("sale_bonus", &RewardConfig::sale_bonus)
-        .def_readwrite("tax_bonus", &RewardConfig::tax_bonus)
+        .def_readwrite("tax_daily_bonus", &RewardConfig::tax_daily_bonus)
         .def_readwrite("survival_bonus", &RewardConfig::survival_bonus)
         .def_readwrite("game_over_penalty", &RewardConfig::game_over_penalty)
         .def_readwrite("disable_net_worth", &RewardConfig::disable_net_worth)
@@ -335,6 +340,8 @@ PYBIND11_MODULE(colony_cpp, m) {
         .def("last_chain_daily", &ColonyEnvCpp::last_chain_daily)
         .def("steps", &ColonyEnvCpp::steps)
         .def("ep_return", &ColonyEnvCpp::ep_return)
+        .def("tax_grace_expired", &ColonyEnvCpp::tax_grace_expired)
+        .def("tax_grace_days", &ColonyEnvCpp::tax_grace_days)
         .def("game", [](ColonyEnvCpp& env) -> Game& { return env.game(); }, py::return_value_policy::reference)
         .def("debug_find_lot", [](ColonyEnvCpp& env, int need_earth, bool no_near_base) -> py::object {
             auto cell = env.find_lot(need_earth, no_near_base);
@@ -430,9 +437,14 @@ PYBIND11_MODULE(colony_cpp, m) {
         .def("set_curriculum_stage", &ColonyVecEnvCpp::set_curriculum_stage, py::arg("stage"))
         .def("set_rewards", &ColonyVecEnvCpp::set_rewards, py::arg("cfg"))
         .def("obs_buffer", [](const ColonyVecEnvCpp& v) {
-            return py::array_t<float>(
-                {(int)v.n_envs(), v.obs_size()},
-                v.obs_buffer());
+            const size_t n = (size_t)v.n_envs() * (size_t)v.obs_size();
+            const float* src = v.obs_buffer();
+            // Return a COPY: the underlying buffer is overwritten on the next
+            // step_wait_batch, and sharing memory would silently corrupt
+            // previously returned observations in Python.
+            py::array_t<float> arr({(int)v.n_envs(), v.obs_size()});
+            std::memcpy(arr.mutable_data(), src, n * sizeof(float));
+            return arr;
         });
 
     // ---------------- отладка (временные хелперы) ----------------

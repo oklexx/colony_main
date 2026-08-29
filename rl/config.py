@@ -14,7 +14,7 @@ class RewardConfig:
     novelty: float = 20.0
     daily_income: float = 0.1
     sale_bonus: float = 0.1
-    tax_bonus: float = 250.0
+    tax_daily_bonus: float = 0.77
     survival_bonus: float = 0.0
     game_over_penalty: float = 20.0
     disable_net_worth: bool = False
@@ -28,7 +28,7 @@ class RewardConfig:
             "novelty": self.novelty,
             "daily_income": self.daily_income,
             "sale_bonus": self.sale_bonus,
-            "tax_bonus": self.tax_bonus,
+            "tax_daily_bonus": self.tax_daily_bonus,
             "survival_bonus": self.survival_bonus,
             "game_over_penalty": self.game_over_penalty,
             "disable_net_worth": self.disable_net_worth,
@@ -44,7 +44,7 @@ class RewardConfig:
             novelty=d.get("novelty", 20.0),
             daily_income=d.get("daily_income", 0.1),
             sale_bonus=d.get("sale_bonus", 0.1),
-            tax_bonus=d.get("tax_bonus", 250.0),
+            tax_daily_bonus=d.get("tax_daily_bonus", 0.77),
             survival_bonus=d.get("survival_bonus", 0.0),
             game_over_penalty=d.get("game_over_penalty", 20.0),
             disable_net_worth=d.get("disable_net_worth", False),

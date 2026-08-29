@@ -139,6 +139,8 @@ void ColonyEnvCpp::set_curriculum_stage(int stage) {
 
 void ColonyEnvCpp::reset(int64_t seed) {
     game_ = Game(*base_data_, *events_data_, seed, map_size_);
+    net_worth_valid_ = false;
+    cached_net_worth_ = 0.0;
     steps_ = 0;
     ep_return_ = 0.0;
     last_reward_ = 0.0;
@@ -460,22 +462,33 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
     for (const Base& b : g.bases) uids_before.insert(b.uid);
 
     // налог платится автоматически
-    if (g.annual_tax_due()) {
+    if (!g.tax_postponed_ && g.annual_tax_due()) {
         if (g.money >= g.annual_tax_amount()) {
             g.pay_annual_tax();
             rew += 15.0;
         } else {
             rew -= 5.0;
         }
-    } else if (g.main_tax_due()) {
+    } else if (!g.tax_postponed_ && g.main_tax_due()) {
         if (g.money >= g.main_tax_amount()) {
             g.pay_main_tax();
             rew += 30.0;
-            rew += cfg_.tax_bonus;
         } else {
             rew -= 5.0;
         }
     }
+    if (!g.annual_tax_due() && !g.main_tax_due() && !g.tax_postponed_) {
+        rew += cfg_.tax_daily_bonus;
+    }
+    // Money changed (taxes paid/auto-paid) -> net-worth cache is now stale.
+    invalidate_net_worth();
+
+    // Grace period: count days since the player postponed the tax.
+    if (g.tax_postponed_ && (g.annual_tax_due() || g.main_tax_due()))
+        tax_grace_days_ += 1;
+    else
+        tax_grace_days_ = 0;
+
     double net0 = cfg_.disable_net_worth ? 0.0 : net_worth();
     int y0 = g.year, m0 = g.month, d0 = g.day;
 
@@ -669,6 +682,8 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
             }
         }
     }
+    // Auto-maintenance mutated money/live_time -> invalidate cached net worth.
+    invalidate_net_worth();
 
     // терминалы
     steps_ += 1;
@@ -706,9 +721,18 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
     out.n_bases = (int64_t)g.bases.size();
     out.seed = (int64_t)g.earth.seed();
     out.tax_due_days = tax_due_days_;
+    out.tax_grace_expired = tax_grace_expired();
     out.ep_return = ep_return_;
     out.steps = steps_;
     return out;
+}
+
+bool ColonyEnvCpp::tax_grace_expired() const {
+    return tax_grace_days_ >= 7;
+}
+
+int ColonyEnvCpp::tax_grace_days() const {
+    return tax_grace_days_;
 }
 
 // ===========================================================================

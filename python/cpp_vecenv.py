@@ -52,7 +52,7 @@ class CppVecEnv(VecEnv):
         # Reward configuration
         rc = colony_cpp.RewardConfig()
         _REWARD_KEYS = ("build_bonus", "chain_bonus", "chain_daily",
-                        "novelty", "daily_income", "sale_bonus", "tax_bonus",
+                        "novelty", "daily_income", "sale_bonus", "tax_daily_bonus",
                         "survival_bonus", "game_over_penalty")
         if reward_config:
             for k in _REWARD_KEYS:
@@ -132,6 +132,9 @@ class CppVecEnv(VecEnv):
                 info["TimeLimit.truncated"] = bool(trunceds[i] and not terminateds[i])
             infos.append(info)
 
+        # Expose the raw termination flag separately from the (terminated|truncated)
+        # `dones` so the RL layer can bootstrap GAE correctly on truncation.
+        self._last_terminateds = terminateds
         return obs, rewards, dones, infos
 
     def close(self) -> None:

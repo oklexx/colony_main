@@ -113,7 +113,7 @@ class CppColonyEnv(gym.Env):
         # Reward configuration
         rc = colony_cpp.RewardConfig()
         _REWARD_KEYS = ("build_bonus", "chain_bonus", "chain_daily",
-                        "novelty", "daily_income", "sale_bonus", "tax_bonus",
+                        "novelty", "daily_income", "sale_bonus", "tax_daily_bonus",
                         "survival_bonus", "game_over_penalty")
         if reward_config:
             for k in _REWARD_KEYS:
