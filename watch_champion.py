@@ -61,6 +61,17 @@ def main():
     if args.log_file:
         log_f = open(args.log_file, "w", encoding="utf-8")
         sys.stdout = TeeWriter(sys.__stdout__, log_f)
+        import json as _json
+        def emit_step(**kw):
+            print(_json.dumps({"type": "step", **kw}, ensure_ascii=False))
+        def emit_log(msg, level="info"):
+            print(_json.dumps({"type": "log", "level": level, "message": msg}, ensure_ascii=False))
+        def emit_done(msg):
+            print(_json.dumps({"type": "done", "message": msg}, ensure_ascii=False))
+    else:
+        emit_step = None
+        emit_log = None
+        emit_done = None
 
     model_dir = Path(args.model_dir).expanduser()
     model_path = model_dir / args.model_file
@@ -112,29 +123,47 @@ def main():
             bases = info.get("bases", 0)
             money = info.get("money", 0)
 
-            print(
-                f"Step {step:5d} | Day {days:5d} | "
-                f"{action_name:<16s} | "
-                f"R={reward:+8.2f} | "
-                f"TotR={total_reward:+10.1f} | "
-                f"Pop={people:3d} | Bases={bases:2d} | "
-                f"Money={money:10d}"
-            )
+            if emit_step:
+                emit_step(
+                    step=step, day=days, action=action_name,
+                    reward=round(reward, 4), total_reward=round(total_reward, 2),
+                    people=people, bases=bases, money=money,
+                )
+            else:
+                print(
+                    f"Step {step:5d} | Day {days:5d} | "
+                    f"{action_name:<16s} | "
+                    f"R={reward:+8.2f} | "
+                    f"TotR={total_reward:+10.1f} | "
+                    f"Pop={people:3d} | Bases={bases:2d} | "
+                    f"Money={money:10d}"
+                )
 
             if terminated or truncated:
                 reason = "TERMINATED" if terminated else "TRUNCATED"
-                print(f"\n>>> Episode {reason} at step {step}, day {days}")
-                print(f">>> Final: reward={total_reward:.1f}, people={people}, bases={bases}")
+                msg = f"Episode {reason} at step {step}, day {days}, reward={total_reward:.1f}"
+                if emit_log:
+                    emit_log(msg)
+                else:
+                    print(f"\n>>> {msg}")
                 break
 
             if args.speed > 0:
                 time.sleep(1.0 / args.speed)
 
         else:
-            print(f"\n>>> Max steps ({args.max_steps}) reached")
+            msg = f"Max steps ({args.max_steps}) reached"
+            if emit_log:
+                emit_log(msg)
+            else:
+                print(f"\n>>> {msg}")
 
     env.close()
-    print(f"\nDone. {args.episodes} episode(s) completed.")
+    final_msg = f"Done. {args.episodes} episode(s) completed."
+    if emit_done:
+        emit_done(final_msg)
+    else:
+        print(f"\n{final_msg}")
 
 
 if __name__ == "__main__":

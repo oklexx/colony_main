@@ -366,6 +366,28 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.stats_placeholder)
         layout.addLayout(self.stats_grid)
         layout.addWidget(self.btn_recalc)
+
+        watch_box = QGroupBox("Наблюдение (live)")
+        watch_box.setObjectName("watch_box")
+        w_layout = QVBoxLayout(watch_box)
+        self._watch_labels: Dict[str, QLabel] = {}
+        for key, label in [
+            ("day", "День"),
+            ("action", "Действие"),
+            ("reward", "Награда"),
+            ("total_reward", "Суммарная награда"),
+            ("people", "Люди"),
+            ("bases", "Постройки"),
+            ("money", "Деньги"),
+        ]:
+            lbl = QLabel(label + ":")
+            val = QLabel("—")
+            val.setObjectName(f"watch_{key}")
+            self._watch_labels[key] = val
+            w_layout.addWidget(lbl)
+            w_layout.addWidget(val)
+        layout.addWidget(watch_box)
+
         layout.addStretch(1)
         splitter.addWidget(box)
 
@@ -628,6 +650,7 @@ class MainWindow(QMainWindow):
         self._watch_start_time = time.time()
         self._watch_log = watch_msg
         self._watch_log_offset = 0
+        self._reset_watch_stats()
         self.btn_watch.setEnabled(False)
         self._watch_timer = QTimer(self)
         self._watch_timer.timeout.connect(self._poll_watch)
@@ -664,8 +687,44 @@ class MainWindow(QMainWindow):
             return
         for line in data.splitlines():
             line = line.strip()
-            if line:
-                self.log("info", line)
+            if not line:
+                continue
+            if line.startswith("{"):
+                try:
+                    d = json.loads(line)
+                    if d.get("type") == "step":
+                        self._update_watch_stats(d)
+                        continue
+                    elif d.get("type") == "log":
+                        self.log("info", d.get("message", ""))
+                        continue
+                    elif d.get("type") == "error":
+                        self.log("error", d.get("message", ""))
+                        continue
+                    elif d.get("type") == "done":
+                        self.log("info", d.get("message", "Наблюдение завершено"))
+                        continue
+                except json.JSONDecodeError:
+                    pass
+            self.log("info", line)
+
+    def _update_watch_stats(self, d: Dict[str, Any]):
+        for key in ("day", "action", "reward", "total_reward", "people", "bases", "money"):
+            lbl = self._watch_labels.get(key)
+            if lbl is None:
+                continue
+            if key == "action":
+                lbl.setText(str(d.get("action", "—")))
+            elif key == "reward":
+                lbl.setText(f"{d.get('reward', 0.0):+.2f}")
+            elif key == "total_reward":
+                lbl.setText(f"{d.get('total_reward', 0.0):+.1f}")
+            else:
+                lbl.setText(str(d.get(key, "—")))
+
+    def _reset_watch_stats(self):
+        for lbl in self._watch_labels.values():
+            lbl.setText("—")
 
     def _watch_process_alive(self) -> bool:
         if self._watch_pid is None:
