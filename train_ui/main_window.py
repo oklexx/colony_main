@@ -25,7 +25,7 @@ from train_ui.parameter_widget import PARAM_SPECS, ParamSpec, scale_value, spec_
 
 CONFIG_PATH = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "sakhalin_colony_ui" / "config.json"
 
-LEVEL_COLORS = {"info": "#000000", "warn": "#B8860B", "error": "#C00000"}
+LEVEL_COLORS = {"info": "#D4D4D4", "warn": "#CE9178", "error": "#F44747"}
 
 DEFAULT_PARAMS: Dict[str, Any] = {
     "name": "run_001",
@@ -484,7 +484,7 @@ class MainWindow(QMainWindow):
         self.watch_stage_info_label = QLabel("")
         self.watch_stage_info_label.setObjectName("watch_stage_info_label")
         self.watch_stage_info_label.setWordWrap(True)
-        self.watch_stage_info_label.setStyleSheet("color: #888; font-size: 11px;")
+        self.watch_stage_info_label.setStyleSheet("color: #808080; font-size: 11px;")
         watch_stage_layout.addWidget(self.watch_stage_info_label)
 
         watch_stage_layout.addStretch(1)
@@ -579,7 +579,7 @@ class MainWindow(QMainWindow):
     # ---------- helpers ----------
 
     def log(self, level: str, message: str):
-        color = LEVEL_COLORS.get(level, "#000000")
+        color = LEVEL_COLORS.get(level, "#D4D4D4")
         self.console.appendHtml(f'<span style="color:{color};">{message}</span>')
         if self._auto_scroll:
             sb = self.console.verticalScrollBar()
