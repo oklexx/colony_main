@@ -154,5 +154,10 @@ class EnvManager:
                 pass
         return stats
 
+    def set_curriculum_stage(self, stage: int):
+        """Switch curriculum stage on the C++ env (1-3, 0=all buildings)."""
+        self.env.venv.set_curriculum_stage(stage)
+        self.cfg.curriculum_stage = stage
+
     def close(self):
         self.env.close()

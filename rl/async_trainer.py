@@ -63,6 +63,7 @@ class AsyncTrainer:
         self.best_score: Optional[float] = None
         self._ep_returns: list[float] = []
         self._ep_lengths: list[int] = []
+        self._curriculum_stage = getattr(cfg, "curriculum_stage", 0)
 
     def _request_stop(self):
         self._stop = True
@@ -326,6 +327,16 @@ class AsyncTrainer:
                 self.em.env.venv.save_normalization(norm_path)
                 self._log(f"[Save] {ckpt_path}")
                 self._log(f"[Save] {norm_path}")
+
+            # Curriculum stage switching
+            schedule = getattr(self.cfg, "curriculum_schedule", None)
+            if schedule:
+                for step_threshold, stage in schedule:
+                    if total_done >= step_threshold and self._curriculum_stage < stage:
+                        self.em.set_curriculum_stage(stage)
+                        self._curriculum_stage = stage
+                        self._log(f"[Curriculum] Stage -> {stage} at step {total_done:,}")
+                        break
 
             # Run eval every eval_freq steps
             if self.cfg.eval_freq > 0 and total_done % self.cfg.eval_freq < steps_per_rollout:

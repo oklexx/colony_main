@@ -90,6 +90,9 @@ class Config:
     eval_use_median: bool = True
     eval_seeds: list = field(default_factory=lambda: [42])
 
+    # Curriculum schedule: list of (step_threshold, stage) pairs
+    curriculum_schedule: list = field(default_factory=list)
+
     # GPU / performance
     device: str = "cuda"
     use_amp: bool = True
@@ -124,7 +127,7 @@ class Config:
             "gamma", "gae_lambda", "clip_range", "ent_coef", "vf_coef", "max_grad_norm",
             "net_arch", "total_timesteps", "save_freq", "eval_freq", "eval_episodes",
             "eval_score_weights", "eval_min_bases", "eval_min_return",
-            "eval_use_median", "eval_seeds",
+            "eval_use_median", "eval_seeds", "curriculum_schedule",
             "device", "use_amp", "amp_dtype", "torch_compile",
             "cpp_threads", "torch_threads", "async_train", "queue_size",
             "log_dir", "model_dir",
@@ -162,6 +165,7 @@ class Config:
             eval_min_return=d.get("eval_min_return", 0.0),
             eval_use_median=d.get("eval_use_median", True),
             eval_seeds=d.get("eval_seeds", [42]),
+            curriculum_schedule=d.get("curriculum_schedule", []),
             device=d.get("device", "cuda"),
             use_amp=d.get("use_amp", True),
             amp_dtype=d.get("amp_dtype", "bfloat16"),
