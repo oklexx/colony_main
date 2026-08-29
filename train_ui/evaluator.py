@@ -13,11 +13,11 @@ if str(PROJECT_ROOT / "python") not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT / "python"))
 
 
-def _probe_env_dims():
+def _probe_env_dims(map_size: int = 280):
     """Get (obs_size, n_actions) from a fresh colony env."""
     from cpp_env import CppColonyEnv
 
-    env = CppColonyEnv(map_size=200)
+    env = CppColonyEnv(map_size=map_size)
     try:
         return int(env.observation_space.shape[0]), int(env.action_space.n)
     finally:
@@ -87,6 +87,7 @@ def run_eval(
     seed: int = 7,
     device: str = "cpu",
     normalization_path: str | Path | None = None,
+    map_size: int = 280,
 ) -> Dict[str, float]:
     """Run the trained policy in the colony env and return mean stats.
 
@@ -102,7 +103,7 @@ def run_eval(
     dev = torch.device(device if torch.cuda.is_available() and device == "cuda" else "cpu")
     policy = _load_policy(model_path, dev)
 
-    env = CppColonyEnv(map_size=200)
+    env = CppColonyEnv(map_size=map_size)
     if normalization_path is not None:
         norm_path = Path(normalization_path)
         if not norm_path.exists():

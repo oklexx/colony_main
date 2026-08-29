@@ -23,6 +23,9 @@ class FakeEnvManager:
         self._step_count = 0
         self._episode_returns = {0: 100.0, 1: 200.0}
 
+        # Stand-in for EnvManager.cfg (real EnvManager stores cfg with map_size).
+        self.cfg = type("FakeCfg", (), {"map_size": 280})()
+
         torch.manual_seed(0)
         self.model = ActorCritic(obs_size, n_actions, [16], self.device)
         self.buffer = RolloutBuffer(

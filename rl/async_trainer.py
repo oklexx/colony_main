@@ -165,6 +165,7 @@ class AsyncTrainer:
                 seed=42,
                 device=str(self.device),
                 normalization_path=norm_str,
+                map_size=self.em.cfg.map_size,
             )
         finally:
             # Clean up temp model
