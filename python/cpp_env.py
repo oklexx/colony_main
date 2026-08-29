@@ -50,15 +50,21 @@ class Normalizer:
             json.dump(d, f)
 
     def load(self, path: str):
-        """Load normalization stats from JSON file."""
+        """Load normalization stats from JSON file.
+
+        Accepts both the flat shape produced by Normalizer.save (mean/var/count
+        at top level) and the C++ ColonyVecEnvCpp::save_normalization nested
+        shape where stats live under an "obs_rms" key.
+        """
         import json
         with open(path) as f:
             d = json.load(f)
-        self._rms.set_mean(d["mean"])
-        self._rms.set_var(d["var"])
-        self._rms.set_count(d["count"])
+        rms = d.get("obs_rms", d)
+        self._rms.set_mean(rms["mean"])
+        self._rms.set_var(rms["var"])
+        self._rms.set_count(rms["count"])
         self._obs_size = d.get("obs_size", self._obs_size)
-        self._clip = d.get("clip", 10.0)
+        self._clip = d.get("clip", d.get("clip_obs", 10.0))
 
     def to_dict(self) -> dict:
         return {
@@ -71,11 +77,12 @@ class Normalizer:
 
     @classmethod
     def from_dict(cls, d: dict) -> "Normalizer":
+        rms = d.get("obs_rms", d)
         n = cls(obs_size=int(d.get("obs_size", 0)))
-        n._rms.set_mean(d["mean"])
-        n._rms.set_var(d["var"])
-        n._rms.set_count(d["count"])
-        n._clip = d.get("clip", 10.0)
+        n._rms.set_mean(rms["mean"])
+        n._rms.set_var(rms["var"])
+        n._rms.set_count(rms["count"])
+        n._clip = d.get("clip", d.get("clip_obs", 10.0))
         return n
 
 

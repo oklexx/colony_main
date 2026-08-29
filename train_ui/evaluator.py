@@ -105,9 +105,13 @@ def run_eval(
     env = CppColonyEnv(map_size=200)
     if normalization_path is not None:
         norm_path = Path(normalization_path)
-        if norm_path.exists():
-            env.normalizer.load(str(norm_path))
-            env.normalizer.set_update(False)
+        if not norm_path.exists():
+            raise FileNotFoundError(
+                f"normalization file not found: {norm_path}. "
+                "Refusing to run eval on un-normalized observations."
+            )
+        env.normalizer.load(str(norm_path))
+        env.normalizer.set_update(False)
     days_list: list[int] = []
     people_list: list[int] = []
     bases_list: list[int] = []

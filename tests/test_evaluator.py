@@ -155,18 +155,33 @@ def test_run_eval_with_normalization(tmp_path, monkeypatch):
     with open(norm_path, "w") as f:
         json.dump(norm_data, f)
 
-    fake_env = _fake_env_class()
-    monkeypatch.setattr(ev, "CppColonyEnv", fake_env, raising=False)
+    # Patch the real CppColonyEnv from cpp_env module (run_eval imports from there)
+    from cpp_env import CppColonyEnv as RealCppColonyEnv
+    import cpp_env
+
+    instances = []
+    original_init = RealCppColonyEnv.__init__
+    def _capture_init(self, **kw):
+        original_init(self, **kw)
+        instances.append(self)
+    monkeypatch.setattr(cpp_env, "CppColonyEnv", type(
+        "PatchedCppColonyEnv", (RealCppColonyEnv,), {"__init__": _capture_init}
+    ))
 
     class FakePolicy:
         def __call__(self, obs):
             return torch.zeros(1, 45), torch.zeros(1, 1)
 
     monkeypatch.setattr(ev, "_load_policy", lambda *a, **kw: FakePolicy())
+
     result = ev.run_eval(ckpt, episodes=1, max_days=10, seed=1, device="cpu",
                          normalization_path=str(norm_path))
 
     assert result["episodes"] == 1.0
+    assert len(instances) == 1, "expected exactly one env instance to be created"
+    env = instances[0]
+    # The real Normalizer should have loaded the stats and disabled updates
+    assert env.normalizer._update_enabled is False
 
 
 def test_run_eval_missing_model(tmp_path):

@@ -92,5 +92,41 @@ def test_normalizer_set_update():
     np.testing.assert_allclose(mean_after_update, mean_after_disabled)
 
 
+@pytest.mark.skipif(not ENV_OK, reason="colony_cpp not available")
+def test_normalizer_load_cpp_nested_shape(tmp_path):
+    """Verify Normalizer.load reads the C++ save_normalization nested shape.
+
+    C++ ColonyVecEnvCpp::save_normalization writes:
+        {"obs_rms": {"mean": [...], "var": [...], "count": N},
+         "norm_obs": true, "norm_reward": true,
+         "clip_obs": 10.0, "clip_reward": 10.0}
+    Python Normalizer.load must accept this shape (stats under "obs_rms").
+    """
+    import json
+    from cpp_env import Normalizer
+
+    mean = [0.1, 0.2, 0.3]
+    var = [1.1, 2.2, 3.3]
+    count = 42
+
+    cpp_shape = {
+        "obs_rms": {"mean": mean, "var": var, "count": count},
+        "norm_obs": True,
+        "norm_reward": True,
+        "clip_obs": 10.0,
+        "clip_reward": 10.0,
+    }
+    path = tmp_path / "cpp_norm.json"
+    with open(path, "w") as f:
+        json.dump(cpp_shape, f)
+
+    norm = Normalizer(obs_size=3)
+    norm.load(str(path))
+
+    np.testing.assert_allclose(norm._rms.mean(), mean, rtol=1e-5)
+    np.testing.assert_allclose(norm._rms.var(), var, rtol=1e-5)
+    assert norm._rms.count() == count
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
