@@ -142,8 +142,13 @@ def run_eval(
     n = max(len(days_list), 1)
     return {
         "days": float(sum(days_list) / n),
+        "days_std": float(np.std(days_list)),
         "people": float(sum(people_list) / n),
         "bases": float(sum(bases_list) / n),
         "episodes": float(len(days_list)),
         "avg_return": float(sum(returns) / n),
+        "episode_days": days_list,
+        "episode_bases": bases_list,
+        "episode_people": people_list,
+        "episode_returns": returns,
     }

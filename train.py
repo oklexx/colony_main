@@ -163,6 +163,8 @@ def main():
                 writer.add_scalar("eval/days", metrics.eval_days, metrics.total_timesteps)
                 writer.add_scalar("eval/people", metrics.eval_people, metrics.total_timesteps)
                 writer.add_scalar("eval/bases", metrics.eval_bases, metrics.total_timesteps)
+                writer.add_scalar("eval/score", metrics.eval_score, metrics.total_timesteps)
+                writer.add_scalar("eval/best_score", metrics.best_score, metrics.total_timesteps)
 
     trainer = AsyncTrainer(
         cfg=cfg,

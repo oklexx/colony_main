@@ -32,6 +32,8 @@ class TrainMetrics:
     eval_people: float = 0.0
     eval_bases: float = 0.0
     best_eval_days: float = 0.0
+    eval_score: float = 0.0
+    best_score: float = 0.0
 
 
 class AsyncTrainer:
@@ -58,6 +60,7 @@ class AsyncTrainer:
         self.metrics = TrainMetrics()
         self.best_reward = float("-inf")
         self.best_eval_days: Optional[float] = None
+        self.best_score: Optional[float] = None
         self._ep_returns: list[float] = []
         self._ep_lengths: list[int] = []
 
@@ -140,8 +143,8 @@ class AsyncTrainer:
     def _eval(self, total_done: int) -> Dict[str, float]:
         """Run evaluation episodes with the current policy.
 
-        Returns dict with days, people, bases, avg_return.
-        Saves best_model.pt if eval/days improves.
+        Returns dict with days, people, bases, avg_return, score.
+        Saves best_model.pt if composite score improves AND thresholds are met.
         """
         import json
         from train_ui.evaluator import run_eval
@@ -149,38 +152,66 @@ class AsyncTrainer:
         save_dir = Path(self.cfg.model_dir)
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        # Save current model to a temp path for eval
         eval_model_path = save_dir / "_eval_temp.pt"
         self.em.ppo.save(str(eval_model_path))
 
-        # Load normalization if available
         norm_path = save_dir / "normalization.json"
         norm_str = str(norm_path) if norm_path.exists() else None
 
+        seeds = getattr(self.cfg, "eval_seeds", [42]) or [42]
+        all_days: list[float] = []
+        all_bases: list[float] = []
+        all_people: list[float] = []
+        all_returns: list[float] = []
+
         try:
-            result = run_eval(
-                model_path=str(eval_model_path),
-                episodes=self.cfg.eval_episodes,
-                max_days=1000,
-                seed=42,
-                device=str(self.device),
-                normalization_path=norm_str,
-                map_size=self.em.cfg.map_size,
-            )
+            for seed in seeds:
+                result = run_eval(
+                    model_path=str(eval_model_path),
+                    episodes=self.cfg.eval_episodes,
+                    max_days=1000,
+                    seed=seed,
+                    device=str(self.device),
+                    normalization_path=norm_str,
+                    map_size=self.em.cfg.map_size,
+                )
+                all_days.extend(result.get("episode_days", [result["days"]]))
+                all_bases.extend(result.get("episode_bases", [result["bases"]]))
+                all_people.extend(result.get("episode_people", [result["people"]]))
+                all_returns.extend(result.get("episode_returns", [result["avg_return"]]))
         finally:
-            # Clean up temp model
             if eval_model_path.exists():
                 eval_model_path.unlink()
 
+        use_median = getattr(self.cfg, "eval_use_median", True)
+        if use_median:
+            days_agg = float(np.median(all_days))
+            bases_agg = float(np.median(all_bases))
+            people_agg = float(np.median(all_people))
+            return_agg = float(np.median(all_returns))
+        else:
+            days_agg = float(np.mean(all_days))
+            bases_agg = float(np.mean(all_bases))
+            people_agg = float(np.mean(all_people))
+            return_agg = float(np.mean(all_returns))
+
+        w1, w2, w3, w4 = getattr(self.cfg, "eval_score_weights", (0.4, 3.0, 0.2, 0.0001))
+        score = days_agg * w1 + bases_agg * w2 + people_agg * w3 + max(0.0, return_agg) * w4
+
+        min_bases = getattr(self.cfg, "eval_min_bases", 5)
+        min_return = getattr(self.cfg, "eval_min_return", 0.0)
+        thresholds_met = (bases_agg >= min_bases) and (return_agg >= min_return)
+
         self._log(
-            f"[Eval @ {total_done:,}] days={result['days']:.1f} "
-            f"people={result['people']:.1f} bases={result['bases']:.1f} "
-            f"return={result['avg_return']:.1f}"
+            f"[Eval @ {total_done:,}] days={days_agg:.1f} "
+            f"people={people_agg:.1f} bases={bases_agg:.1f} "
+            f"return={return_agg:.1f} score={score:.2f} "
+            f"thresholds={'PASS' if thresholds_met else 'FAIL'}"
         )
 
-        # Save best model if eval/days improved
-        if self.best_eval_days is None or result["days"] > self.best_eval_days:
-            self.best_eval_days = result["days"]
+        if thresholds_met and (self.best_score is None or score > self.best_score):
+            self.best_score = score
+            self.best_eval_days = days_agg
             best_path = save_dir / "best_model.pt"
             self.em.ppo.save(str(best_path))
 
@@ -190,20 +221,31 @@ class AsyncTrainer:
                 shutil.copy2(norm_path, str(best_path).replace(".pt", ".norm.json"))
 
             meta = {
-                "best_eval_days": result["days"],
-                "eval_people": result["people"],
-                "eval_bases": result["bases"],
-                "eval_return": result["avg_return"],
+                "best_score": score,
+                "best_days": days_agg,
+                "best_bases": bases_agg,
+                "best_people": people_agg,
+                "best_return": return_agg,
+                "score_weights": list(getattr(self.cfg, "eval_score_weights", (0.4, 3.0, 0.2, 0.0001))),
+                "min_bases": min_bases,
+                "min_return": min_return,
                 "total_timesteps": total_done,
-                "episodes": self.cfg.eval_episodes,
+                "episodes": len(all_days),
             }
             meta_path = save_dir / "best_model.meta.json"
             with open(meta_path, "w") as f:
                 json.dump(meta, f, indent=2)
 
-            self._log(f"[Best] Saved best_model.pt (days={result['days']:.1f})")
+            self._log(f"[Best] Saved best_model.pt (score={score:.2f}, days={days_agg:.1f}, bases={bases_agg:.1f})")
 
-        return result
+        return {
+            "days": days_agg,
+            "bases": bases_agg,
+            "people": people_agg,
+            "avg_return": return_agg,
+            "score": score,
+            "saved": thresholds_met and (self.best_score == score),
+        }
 
     def train(self, total_timesteps: Optional[int] = None) -> TrainMetrics:
         total = total_timesteps or self.cfg.total_timesteps
@@ -288,13 +330,14 @@ class AsyncTrainer:
             # Run eval every eval_freq steps
             if self.cfg.eval_freq > 0 and total_done % self.cfg.eval_freq < steps_per_rollout:
                 eval_result = self._eval(total_done)
-                # Log to progress callback (TensorBoard)
                 if self.progress_callback:
                     try:
                         self.metrics.eval_days = eval_result["days"]
                         self.metrics.eval_people = eval_result["people"]
                         self.metrics.eval_bases = eval_result["bases"]
+                        self.metrics.eval_score = eval_result.get("score", 0.0)
                         self.metrics.best_eval_days = self.best_eval_days or 0.0
+                        self.metrics.best_score = self.best_score or 0.0
                         self.progress_callback(self.metrics)
                     except Exception:
                         pass

@@ -101,12 +101,10 @@ def test_per_env_episode_tracking(tmp_path):
 
 
 def test_eval_and_best_model_saving(tmp_path):
-    """Verify that eval runs and best model is saved when eval improves."""
+    """Verify that eval runs and best model is saved when composite score improves."""
     import json
     from pathlib import Path
 
-    # Two rollouts (6 steps each) so the eval gate fires twice and the
-    # improving eval result (days=20.0) overwrites the first best model.
     cfg = Config(
         n_envs=2,
         n_steps=3,
@@ -114,15 +112,29 @@ def test_eval_and_best_model_saving(tmp_path):
         save_freq=0,
         eval_freq=3,
         eval_episodes=2,
+        eval_min_bases=2,
+        eval_min_return=0.0,
+        eval_use_median=True,
         model_dir=str(tmp_path),
     )
     em = FakeEnvManager(n_envs=2)
     trainer = AsyncTrainer(cfg=cfg, env_manager=em)
 
-    # Mock run_eval to return improving results
     eval_results = [
-        {"days": 10.0, "people": 5.0, "bases": 2.0, "episodes": 2.0, "avg_return": 100.0},
-        {"days": 20.0, "people": 10.0, "bases": 4.0, "episodes": 2.0, "avg_return": 200.0},
+        {
+            "days": 10.0, "people": 5.0, "bases": 2.0, "episodes": 2.0, "avg_return": 100.0,
+            "episode_days": [8.0, 12.0],
+            "episode_bases": [2, 2],
+            "episode_people": [4, 6],
+            "episode_returns": [80.0, 120.0],
+        },
+        {
+            "days": 20.0, "people": 10.0, "bases": 4.0, "episodes": 2.0, "avg_return": 200.0,
+            "episode_days": [15.0, 25.0],
+            "episode_bases": [3, 5],
+            "episode_people": [8, 12],
+            "episode_returns": [150.0, 250.0],
+        },
     ]
     eval_call_count = [0]
 
@@ -140,7 +152,6 @@ def test_eval_and_best_model_saving(tmp_path):
     finally:
         ev.run_eval = original_run_eval
 
-    # Verify best model was saved
     best_model = tmp_path / "best_model.pt"
     best_meta = tmp_path / "best_model.meta.json"
     assert best_model.exists(), "best_model.pt should exist"
@@ -148,11 +159,70 @@ def test_eval_and_best_model_saving(tmp_path):
 
     with open(best_meta) as f:
         meta = json.load(f)
-    assert meta["best_eval_days"] == 20.0
-    assert meta["eval_people"] == 10.0
-    assert meta["eval_bases"] == 4.0
+    assert "best_score" in meta
+    assert meta["best_bases"] == 4.0
+    assert meta["best_people"] == 10.0
+    assert meta["best_days"] == 20.0
+
+
+def test_min_bases_threshold(tmp_path):
+    """Verify that model is NOT saved when bases < min_bases."""
+    import json
+    from pathlib import Path
+
+    cfg = Config(
+        n_envs=2,
+        n_steps=3,
+        total_timesteps=6,
+        save_freq=0,
+        eval_freq=3,
+        eval_episodes=1,
+        eval_min_bases=5,
+        eval_min_return=0.0,
+        eval_use_median=True,
+        model_dir=str(tmp_path),
+    )
+    em = FakeEnvManager(n_envs=2)
+    trainer = AsyncTrainer(cfg=cfg, env_manager=em)
+
+    def mock_run_eval(*args, **kwargs):
+        return {
+            "days": 2000.0, "people": 50.0, "bases": 1.0, "episodes": 1.0, "avg_return": -100.0,
+            "episode_days": [2000.0],
+            "episode_bases": [1],
+            "episode_people": [50],
+            "episode_returns": [-100.0],
+        }
+
+    import train_ui.evaluator as ev
+    original_run_eval = ev.run_eval
+    ev.run_eval = mock_run_eval
+
+    try:
+        trainer.train(total_timesteps=6)
+    finally:
+        ev.run_eval = original_run_eval
+
+    best_model = tmp_path / "best_model.pt"
+    assert not best_model.exists(), "best_model.pt should NOT exist (bases=1 < min_bases=5)"
+
+
+def test_composite_score_calculation():
+    """Verify composite score formula: score = days*w1 + bases*w2 + people*w3 + max(0,return)*w4."""
+    import numpy as np
+
+    w1, w2, w3, w4 = 0.4, 3.0, 0.2, 0.0001
+    days, bases, people, ret = 100.0, 10.0, 20.0, 5000.0
+    expected = days * w1 + bases * w2 + people * w3 + max(0.0, ret) * w4
+    assert abs(expected - (40.0 + 30.0 + 4.0 + 0.5)) < 1e-9
+
+    ret_neg = -100.0
+    expected_neg = days * w1 + bases * w2 + people * w3 + 0.0
+    assert abs(expected_neg - 74.0) < 1e-9
 
 
 if __name__ == "__main__":
     test_per_env_episode_tracking()
     print("PASS: per-env episode tracking")
+    test_composite_score_calculation()
+    print("PASS: composite score calculation")

@@ -81,7 +81,14 @@ class Config:
     total_timesteps: int = 1_000_000
     save_freq: int = 500_000
     eval_freq: int = 100_000
-    eval_episodes: int = 10
+    eval_episodes: int = 20
+
+    # Eval scoring (composite champion selection)
+    eval_score_weights: tuple = (0.4, 3.0, 0.2, 0.0001)
+    eval_min_bases: int = 5
+    eval_min_return: float = 0.0
+    eval_use_median: bool = True
+    eval_seeds: list = field(default_factory=lambda: [42])
 
     # GPU / performance
     device: str = "cuda"
@@ -116,6 +123,8 @@ class Config:
             "learning_rate", "n_steps", "batch_size", "n_epochs",
             "gamma", "gae_lambda", "clip_range", "ent_coef", "vf_coef", "max_grad_norm",
             "net_arch", "total_timesteps", "save_freq", "eval_freq", "eval_episodes",
+            "eval_score_weights", "eval_min_bases", "eval_min_return",
+            "eval_use_median", "eval_seeds",
             "device", "use_amp", "amp_dtype", "torch_compile",
             "cpp_threads", "torch_threads", "async_train", "queue_size",
             "log_dir", "model_dir",
@@ -147,7 +156,12 @@ class Config:
             total_timesteps=d.get("total_timesteps", 1_000_000),
             save_freq=d.get("save_freq", 500_000),
             eval_freq=d.get("eval_freq", 100_000),
-            eval_episodes=d.get("eval_episodes", 10),
+            eval_episodes=d.get("eval_episodes", 20),
+            eval_score_weights=tuple(d.get("eval_score_weights", (0.4, 3.0, 0.2, 0.0001))),
+            eval_min_bases=d.get("eval_min_bases", 5),
+            eval_min_return=d.get("eval_min_return", 0.0),
+            eval_use_median=d.get("eval_use_median", True),
+            eval_seeds=d.get("eval_seeds", [42]),
             device=d.get("device", "cuda"),
             use_amp=d.get("use_amp", True),
             amp_dtype=d.get("amp_dtype", "bfloat16"),
