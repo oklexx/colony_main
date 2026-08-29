@@ -131,6 +131,9 @@ class MainWindow(QMainWindow):
         self._eval_timer: Optional[QTimer] = None
         self._eval_model: Optional[ModelInfo] = None
         self._eval_done: bool = False
+        self._watch_pid: Optional[int] = None
+        self._watch_timer: Optional[QTimer] = None
+        self._watch_start_time: float = 0
         self._auto_scroll = True
         self._pending_stop_timer: Optional[QTimer] = None
 
@@ -232,6 +235,10 @@ class MainWindow(QMainWindow):
         self.btn_eval = QPushButton("Оценить")
         self.btn_eval.setObjectName("btn_eval")
         self.btn_eval.clicked.connect(self._eval_selected)
+        self.btn_watch = QPushButton("Наблюдать")
+        self.btn_watch.setObjectName("btn_watch")
+        self.btn_watch.setToolTip("Запустить игру с выбранной моделью и показывать ход в консоли")
+        self.btn_watch.clicked.connect(self._watch_selected)
         self.btn_resume = QPushButton("Дообучить")
         self.btn_resume.setObjectName("btn_resume")
         self.btn_resume.setToolTip("Запустить обучение с весами выбранной модели (fine-tuning)")
@@ -239,6 +246,7 @@ class MainWindow(QMainWindow):
         btns.addWidget(self.btn_delete)
         btns.addWidget(self.btn_refresh)
         btns.addWidget(self.btn_eval)
+        btns.addWidget(self.btn_watch)
         btns.addWidget(self.btn_resume)
 
         self.models_hint = QLabel("Запустите обучение, чтобы получить модели")
@@ -586,6 +594,110 @@ class MainWindow(QMainWindow):
         self._eval_model = None
         self._eval_done = False
         self._eval_start_time = 0
+
+    # ---------- watch champion ----------
+
+    def _watch_selected(self):
+        m = self._selected_model()
+        if m is None:
+            QMessageBox.information(self, "Наблюдение", "Сначала выберите модель из списка")
+            return
+        if self._watch_pid is not None:
+            self.log("warn", "Наблюдение уже запущено")
+            return
+        import sys as _sys
+        import tempfile
+        watch_msg = os.path.join(tempfile.gettempdir(), f"colony_watch_{int(time.time()*1000)}.log")
+        model_dir = m.model_file.parent
+        args = [
+            "-u",
+            str(Path(__file__).resolve().parent.parent / "watch_champion.py"),
+            "--model-dir", str(model_dir),
+            "--episodes", "1",
+            "--max-steps", "500",
+            "--speed", "5",
+            "--device", "cpu",
+            "--log-file", watch_msg,
+        ]
+        workdir = str(Path(__file__).resolve().parent.parent)
+        ok, pid = QProcess.startDetached(_sys.executable, args, workdir)
+        if not ok:
+            self.log("error", "Не удалось запустить наблюдение")
+            return
+        self._watch_pid = pid
+        self._watch_start_time = time.time()
+        self._watch_log = watch_msg
+        self._watch_log_offset = 0
+        self.btn_watch.setEnabled(False)
+        self._watch_timer = QTimer(self)
+        self._watch_timer.timeout.connect(self._poll_watch)
+        self._watch_timer.start(500)
+        self.log("info", f"Наблюдение за {m.name} запущено (pid={pid}), 500 шагов @ 5 ш/с")
+
+    def _poll_watch(self):
+        self._read_watch_log()
+        if self._watch_pid is None:
+            return
+        if time.time() - self._watch_start_time < 2.0:
+            return
+        if not self._watch_process_alive():
+            self._read_watch_log()
+            self._cleanup_watch()
+            self.log("info", "Наблюдение завершено")
+            self.btn_watch.setEnabled(True)
+
+    def _read_watch_log(self):
+        if getattr(self, "_watch_log", None) is None:
+            return
+        try:
+            size = os.path.getsize(self._watch_log)
+        except OSError:
+            return
+        if size <= self._watch_log_offset:
+            return
+        try:
+            with open(self._watch_log, "r", encoding="utf-8") as f:
+                f.seek(self._watch_log_offset)
+                data = f.read()
+                self._watch_log_offset = f.tell()
+        except (OSError, UnicodeDecodeError):
+            return
+        for line in data.splitlines():
+            line = line.strip()
+            if line:
+                self.log("info", line)
+
+    def _watch_process_alive(self) -> bool:
+        if self._watch_pid is None:
+            return False
+        try:
+            subprocess.run(["tasklist", "/FI", f"PID eq {self._watch_pid}"],
+                           capture_output=True, timeout=5)
+        except Exception:
+            return False
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        SYNCHRONIZE = 0x00100000
+        h = kernel32.OpenProcess(SYNCHRONIZE, 0, self._watch_pid)
+        if not h:
+            return False
+        result = kernel32.WaitForSingleObject(h, 0)
+        kernel32.CloseHandle(h)
+        return result != 0x0
+
+    def _cleanup_watch(self):
+        if self._watch_timer is not None:
+            self._watch_timer.stop()
+            self._watch_timer = None
+        if getattr(self, "_watch_log", None) is not None:
+            try:
+                os.unlink(self._watch_log)
+            except OSError:
+                pass
+            self._watch_log = None
+            self._watch_log_offset = 0
+        self._watch_pid = None
+        self._watch_start_time = 0
 
     # ---------- training ----------
 

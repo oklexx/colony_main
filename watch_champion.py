@@ -22,6 +22,23 @@ from cpp_env import CppColonyEnv
 from train_ui.evaluator import _load_policy
 
 
+class TeeWriter:
+    """Write to both stdout and a file (for UI log capture)."""
+
+    def __init__(self, stdout, file):
+        self.stdout = stdout
+        self.file = file
+
+    def write(self, data):
+        self.stdout.write(data)
+        self.file.write(data)
+        self.file.flush()
+
+    def flush(self):
+        self.stdout.flush()
+        self.file.flush()
+
+
 def main():
     parser = argparse.ArgumentParser(description="Watch champion model play")
     parser.add_argument("--model-dir", type=str, required=True,
@@ -37,7 +54,13 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--map-size", type=int, default=200)
     parser.add_argument("--device", type=str, default="cpu")
+    parser.add_argument("--log-file", type=str, default=None,
+                        help="Also write output to this file (for UI capture)")
     args = parser.parse_args()
+
+    if args.log_file:
+        log_f = open(args.log_file, "w", encoding="utf-8")
+        sys.stdout = TeeWriter(sys.__stdout__, log_f)
 
     model_dir = Path(args.model_dir).expanduser()
     model_path = model_dir / args.model_file
