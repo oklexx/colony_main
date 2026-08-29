@@ -174,65 +174,66 @@ def main():
 
     action_names = env._action_names
 
-    for ep in range(args.episodes):
-        print(f"\n{'=' * 70}")
-        print(f"EPISODE {ep + 1}/{args.episodes}")
-        print(f"{'=' * 70}")
+    if not args.visual:
+        for ep in range(args.episodes):
+            print(f"\n{'=' * 70}")
+            print(f"EPISODE {ep + 1}/{args.episodes}")
+            print(f"{'=' * 70}")
 
-        obs, _info = env.reset(seed=args.seed + ep)
-        total_reward = 0.0
-        step = 0
+            obs, _info = env.reset(seed=args.seed + ep)
+            total_reward = 0.0
+            step = 0
 
-        for step in range(1, args.max_steps + 1):
-            with torch.no_grad():
-                obs_t = torch.from_numpy(np.asarray(obs, dtype=np.float32)).to(dev)
-                obs_t = obs_t.reshape(1, -1)
-                logits, _ = policy(obs_t)
-                action = int(logits.argmax(dim=-1).item())
+            for step in range(1, args.max_steps + 1):
+                with torch.no_grad():
+                    obs_t = torch.from_numpy(np.asarray(obs, dtype=np.float32)).to(dev)
+                    obs_t = obs_t.reshape(1, -1)
+                    logits, _ = policy(obs_t)
+                    action = int(logits.argmax(dim=-1).item())
 
-            obs, reward, terminated, truncated, info = env.step(action)
-            total_reward += reward
+                obs, reward, terminated, truncated, info = env.step(action)
+                total_reward += reward
 
-            action_name = info.get("action_name", str(action))
-            days = info.get("days", 0)
-            people = info.get("people", 0)
-            bases = info.get("bases", 0)
-            money = info.get("money", 0)
+                action_name = info.get("action_name", str(action))
+                days = info.get("days", 0)
+                people = info.get("people", 0)
+                bases = info.get("bases", 0)
+                money = info.get("money", 0)
 
-            if emit_step:
-                emit_step(
-                    step=step, day=days, action=action_name,
-                    reward=round(reward, 4), total_reward=round(total_reward, 2),
-                    people=people, bases=bases, money=money,
-                )
+                if emit_step:
+                    emit_step(
+                        step=step, day=days, action=action_name,
+                        reward=round(reward, 4), total_reward=round(total_reward, 2),
+                        people=people, bases=bases, money=money,
+                    )
+                else:
+                    print(
+                        f"Step {step:5d} | Day {days:5d} | "
+                        f"{action_name:<16s} | "
+                        f"R={reward:+8.2f} | "
+                        f"TotR={total_reward:+10.1f} | "
+                        f"Pop={people:3d} | Bases={bases:2d} | "
+                        f"Money={money:10d}"
+                    )
+
+                if terminated or truncated:
+                    reason = "TERMINATED" if terminated else "TRUNCATED"
+                    msg = f"Episode {reason} at step {step}, day {days}, reward={total_reward:.1f}"
+                    if emit_log:
+                        emit_log(msg)
+                    else:
+                        print(f"\n>>> {msg}")
+                    break
+
+                if args.speed > 0:
+                    time.sleep(1.0 / args.speed)
+
             else:
-                print(
-                    f"Step {step:5d} | Day {days:5d} | "
-                    f"{action_name:<16s} | "
-                    f"R={reward:+8.2f} | "
-                    f"TotR={total_reward:+10.1f} | "
-                    f"Pop={people:3d} | Bases={bases:2d} | "
-                    f"Money={money:10d}"
-                )
-
-            if terminated or truncated:
-                reason = "TERMINATED" if terminated else "TRUNCATED"
-                msg = f"Episode {reason} at step {step}, day {days}, reward={total_reward:.1f}"
+                msg = f"Max steps ({args.max_steps}) reached"
                 if emit_log:
                     emit_log(msg)
                 else:
                     print(f"\n>>> {msg}")
-                break
-
-            if args.speed > 0:
-                time.sleep(1.0 / args.speed)
-
-        else:
-            msg = f"Max steps ({args.max_steps}) reached"
-            if emit_log:
-                emit_log(msg)
-            else:
-                print(f"\n>>> {msg}")
 
     if args.visual:
         exe_path = str(PROJECT_ROOT / "sakhalin_colony_gui.exe")
