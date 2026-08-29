@@ -39,6 +39,26 @@ class TeeWriter:
         self.file.flush()
 
 
+def apply_curriculum_stage(env, stage):
+    """Apply curriculum stage to the env. None = skip, 0 = all buildings, 1-3 = stages."""
+    if stage is not None:
+        env.cpp_env.set_curriculum_stage(stage)
+
+
+def read_stage_from_meta(model_dir):
+    """Read curriculum_stage_at_best from best_model.meta.json. Returns None if not found."""
+    import json
+    meta_path = model_dir / "best_model.meta.json"
+    if not meta_path.exists():
+        return None
+    try:
+        with open(meta_path, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+        return meta.get("curriculum_stage_at_best")
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
 def main():
     parser = argparse.ArgumentParser(description="Watch champion model play")
     parser.add_argument("--model-dir", type=str, required=True,
@@ -56,6 +76,9 @@ def main():
     parser.add_argument("--device", type=str, default="cpu")
     parser.add_argument("--log-file", type=str, default=None,
                         help="Also write output to this file (for UI capture)")
+    parser.add_argument("--curriculum-stage", type=int, default=None,
+                        help="Override curriculum stage (0=all buildings, 1-3). "
+                             "If not set, reads from best_model.meta.json")
     args = parser.parse_args()
 
     if args.log_file:
@@ -95,6 +118,15 @@ def main():
         print(f"Loaded normalization from {norm_path}")
     else:
         print("WARNING: no normalization found, using raw observations")
+
+    stage = args.curriculum_stage
+    if stage is None:
+        stage = read_stage_from_meta(model_dir)
+    if stage is not None:
+        apply_curriculum_stage(env, stage)
+        print(f"Curriculum stage: {stage}")
+    else:
+        print("Curriculum stage: not set (all buildings)")
 
     action_names = env._action_names
 
