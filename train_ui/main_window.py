@@ -490,6 +490,12 @@ class MainWindow(QMainWindow):
         watch_stage_layout.addStretch(1)
         layout.addWidget(watch_stage_box)
 
+        self.watch_visual_chk = QCheckBox("Визуальный режим (GUI окно)")
+        self.watch_visual_chk.setObjectName("watch_visual_chk")
+        self.watch_visual_chk.setChecked(False)
+        self.watch_visual_chk.setToolTip("Открыть raylib-окно с визуализацией игры")
+        layout.addWidget(self.watch_visual_chk)
+
         layout.addStretch(1)
         splitter.addWidget(box)
 
@@ -830,6 +836,8 @@ class MainWindow(QMainWindow):
         stage = self._get_watch_stage()
         if stage is not None:
             args.extend(["--curriculum-stage", str(stage)])
+        if self.watch_visual_chk.isChecked():
+            args.append("--visual")
         workdir = str(Path(__file__).resolve().parent.parent)
         ok, pid = QProcess.startDetached(_sys.executable, args, workdir)
         if not ok:
