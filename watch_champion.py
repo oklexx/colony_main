@@ -59,6 +59,48 @@ def read_stage_from_meta(model_dir):
         return None
 
 
+def write_action(action_file: Path, action: int) -> None:
+    """Write action int to the IPC file."""
+    action_file.write_text(str(action), encoding="utf-8")
+
+
+def read_state(state_file: Path) -> dict | None:
+    """Read state JSON from the IPC file. Returns None if not found."""
+    import json
+    if not state_file.exists():
+        return None
+    try:
+        with open(state_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def launch_visual_watch(
+    model_dir: Path,
+    exe_path: str,
+    actions_file: Path,
+    state_file: Path,
+    seed: int,
+    map_size: int,
+    curriculum_stage: int | None = None,
+) -> "subprocess.Popen":
+    """Launch the GUI exe in headless-ai mode."""
+    import subprocess
+    args = [
+        exe_path,
+        "--headless-ai",
+        "--actions-file", str(actions_file),
+        "--state-file", str(state_file),
+        "--seed", str(seed),
+        "--map-size", str(map_size),
+    ]
+    if curriculum_stage is not None:
+        args.extend(["--stage", str(curriculum_stage)])
+    workdir = str(PROJECT_ROOT)
+    return subprocess.Popen(args, cwd=workdir)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Watch champion model play")
     parser.add_argument("--model-dir", type=str, required=True,
@@ -79,6 +121,8 @@ def main():
     parser.add_argument("--curriculum-stage", type=int, default=None,
                         help="Override curriculum stage (0=all buildings, 1-3). "
                              "If not set, reads from best_model.meta.json")
+    parser.add_argument("--visual", action="store_true",
+                        help="Open visual GUI window (requires sakhalin_colony_gui.exe)")
     args = parser.parse_args()
 
     if args.log_file:
@@ -189,6 +233,82 @@ def main():
                 emit_log(msg)
             else:
                 print(f"\n>>> {msg}")
+
+    if args.visual:
+        exe_path = str(PROJECT_ROOT / "sakhalin_colony_gui.exe")
+        if not Path(exe_path).exists():
+            print(f"ERROR: GUI exe not found: {exe_path}")
+            print("Build it first: build_gui.bat")
+            sys.exit(1)
+
+        import tempfile
+        tmp_dir = Path(tempfile.gettempdir()) / "colony_watch"
+        tmp_dir.mkdir(exist_ok=True)
+        actions_file = tmp_dir / "actions.txt"
+        state_file = tmp_dir / "state.json"
+
+        print(f"Launching visual watch: {exe_path}")
+        proc = launch_visual_watch(
+            model_dir=model_dir,
+            exe_path=exe_path,
+            actions_file=actions_file,
+            state_file=state_file,
+            seed=args.seed,
+            map_size=args.map_size,
+            curriculum_stage=stage,
+        )
+
+        # Clean up IPC files
+        for f in (actions_file, state_file):
+            if f.exists():
+                f.unlink()
+        actions_file.touch()
+
+        speed = args.speed if args.speed > 0 else 1.0
+        print(f"Visual watch running. Speed: {speed} steps/s. Close GUI window to stop.")
+
+        last_state_hash = None
+        try:
+            while proc.poll() is None:
+                state = read_state(state_file)
+                if state is None:
+                    time.sleep(0.05)
+                    continue
+
+                if state.get("terminated"):
+                    print(f"Episode terminated at day {state.get('day')}")
+                    break
+
+                # Only compute action if state changed (new obs from C++)
+                state_hash = hash(tuple(state.get("obs", [])))
+                if state_hash == last_state_hash:
+                    time.sleep(0.05)
+                    continue
+                last_state_hash = state_hash
+
+                # Compute action from policy using obs from state
+                obs = state.get("obs", [])
+                if obs:
+                    with torch.no_grad():
+                        obs_t = torch.tensor(obs, dtype=torch.float32, device=dev)
+                        obs_t = obs_t.reshape(1, -1)
+                        logits, _ = policy(obs_t)
+                        action = int(logits.argmax(dim=-1).item())
+                    write_action(actions_file, action)
+
+                time.sleep(1.0 / speed)
+
+        except KeyboardInterrupt:
+            pass
+        finally:
+            if proc.poll() is None:
+                proc.terminate()
+                proc.wait(timeout=5)
+            for f in (actions_file, state_file):
+                if f.exists():
+                    f.unlink()
+            print("Visual watch stopped.")
+        return
 
     env.close()
     final_msg = f"Done. {args.episodes} episode(s) completed."
