@@ -493,6 +493,8 @@ static void ai_reset_env(ColonyEnvCpp& env) {
     // Clear action file so Python knows to send a new one
     std::ofstream out(ai_actions_path, std::ios::trunc);
     out.close();
+    // Write fresh state so Python's hash gate unblocks and sends a new action
+    ai_write_state(env.game(), env.obs(), -1, false);
 }
 
 static bool btn(int x, int y, int w, int h, const char* label, bool enabled = true) {

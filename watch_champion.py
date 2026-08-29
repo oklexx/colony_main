@@ -297,7 +297,8 @@ def main():
                         action = int(logits.argmax(dim=-1).item())
                     write_action(actions_file, action)
 
-                time.sleep(1.0 / speed)
+                if args.speed > 0:
+                    time.sleep(1.0 / args.speed)
 
         except KeyboardInterrupt:
             pass
@@ -308,6 +309,7 @@ def main():
             for f in (actions_file, state_file):
                 if f.exists():
                     f.unlink()
+            env.close()
             print("Visual watch stopped.")
         return
 
