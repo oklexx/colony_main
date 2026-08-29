@@ -14,16 +14,23 @@ def reference_gae(
     values: list[float],
     last_value: float,
     dones: list[bool],
+    last_done: bool = False,
     gamma: float = 0.99,
     lam: float = 0.98,
 ) -> tuple[list[float], list[float]]:
-    """Reference GAE implementation (sequential, for verification)."""
+    """Reference GAE implementation (sequential, for verification).
+
+    Uses transition-based done semantics: ``dones[t]`` indicates whether the
+    state entered at step ``t`` (i.e. ``s_{t+1}``) is terminal. Therefore the
+    bootstrap mask for step ``t`` is ``dones[t]`` (and ``last_done`` for the
+    final step ``T-1``).
+    """
     T = len(rewards)
     advantages = [0.0] * T
     last_gae = 0.0
     for t in range(T - 1, -1, -1):
         next_value = values[t + 1] if t < T - 1 else last_value
-        next_done = dones[t + 1] if t < T - 1 else False
+        next_done = dones[t] if t < T - 1 else last_done
         delta = rewards[t] + gamma * next_value * (1 - next_done) - values[t]
         last_gae = delta + gamma * lam * (1 - next_done) * last_gae
         advantages[t] = last_gae
@@ -46,7 +53,7 @@ def test_gae_single_env():
     last_value = 1.5
     last_done = False
 
-    ref_adv, ref_ret = reference_gae(rewards, values, last_value, dones, gamma, lam)
+    ref_adv, ref_ret = reference_gae(rewards, values, last_value, dones, last_done, gamma, lam)
 
     device = torch.device("cpu")
     buf = RolloutBuffer(

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import random
 import subprocess
 import time
 from pathlib import Path
@@ -20,7 +21,7 @@ from PySide6.QtWidgets import (
 
 from train_ui import protocol as P
 from train_ui.models import ModelInfo, ModelRegistry
-from train_ui.parameter_widget import PARAM_SPECS, ParamSpec, scale_value
+from train_ui.parameter_widget import PARAM_SPECS, ParamSpec, scale_value, spec_for
 
 CONFIG_PATH = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "sakhalin_colony_ui" / "config.json"
 
@@ -273,6 +274,15 @@ class MainWindow(QMainWindow):
             row.value_changed.connect(lambda _k, _v: self._on_param_changed)
             self.param_rows[spec.key] = row
             grid.addWidget(row, i, 0)
+            if spec.key == "seed":
+                self.chk_random_seed = QCheckBox("🎲 random")
+                self.chk_random_seed.setObjectName("chk_random_seed")
+                self.chk_random_seed.setToolTip(
+                    "При активации сразу генерирует случайный сид. "
+                    "При каждом запуске обучения сид будет перегенерирован заново."
+                )
+                self.chk_random_seed.toggled.connect(self._on_random_seed_toggled)
+                grid.addWidget(self.chk_random_seed, i, 1)
 
         checks = QHBoxLayout()
         self.chk_amp = QCheckBox("AMP (bfloat16)")
@@ -294,7 +304,7 @@ class MainWindow(QMainWindow):
         self.btn_start = QPushButton("Запустить обучение")
         self.btn_start.setObjectName("btn_start")
         self.btn_start.setToolTip("Собрать параметры и запустить обучение в отдельном процессе")
-        self.btn_start.clicked.connect(self._start_training)
+        self.btn_start.clicked.connect(lambda _checked=False: self._start_training())
         self.btn_stop = QPushButton("Остановить")
         self.btn_stop.setObjectName("btn_stop")
         self.btn_stop.setEnabled(False)
@@ -544,8 +554,9 @@ class MainWindow(QMainWindow):
             return
         if not self._poll_process_alive():
             self._read_eval_file()
+            eval_succeeded = self._eval_done
             self._cleanup_eval()
-            if not self._eval_done:
+            if not eval_succeeded:
                 self.log("error", "Eval завершился с ошибкой")
             self.btn_eval.setEnabled(True)
 
@@ -581,6 +592,15 @@ class MainWindow(QMainWindow):
     def _on_param_changed(self):
         pass
 
+    def _randomize_seed(self):
+        spec = spec_for("seed")
+        lo, hi = int(spec.min), int(spec.max)
+        self.param_rows["seed"].set_value(random.randint(lo, hi))
+
+    def _on_random_seed_toggled(self, checked: bool):
+        if checked:
+            self._randomize_seed()
+
     def _collect_config(self) -> Dict[str, Any]:
         cfg: Dict[str, Any] = {
             "name": self.name_edit.text().strip() or "run",
@@ -597,6 +617,8 @@ class MainWindow(QMainWindow):
         if self._train_pid is not None:
             self.log("warn", "Обучение уже запущено")
             return
+        if getattr(self, "chk_random_seed", None) is not None and self.chk_random_seed.isChecked():
+            self._randomize_seed()
         cfg = self._collect_config()
         if resume_model is not None:
             cfg["name"] = cfg["name"] + "_ft"
@@ -769,6 +791,10 @@ class MainWindow(QMainWindow):
             row.set_value(DEFAULT_PARAMS[key])
         self.chk_amp.setChecked(bool(DEFAULT_PARAMS["use_amp"]))
         self.chk_compile.setChecked(bool(DEFAULT_PARAMS["torch_compile"]))
+        if getattr(self, "chk_random_seed", None) is not None:
+            self.chk_random_seed.blockSignals(True)
+            self.chk_random_seed.setChecked(False)
+            self.chk_random_seed.blockSignals(False)
         self.log("info", "Параметры сброшены к значениям по умолчанию")
 
     def _restore_state(self):
@@ -781,6 +807,10 @@ class MainWindow(QMainWindow):
             row.set_value(float(v))
         self.chk_amp.setChecked(bool(cfg.get("use_amp", DEFAULT_PARAMS["use_amp"])))
         self.chk_compile.setChecked(bool(cfg.get("torch_compile", DEFAULT_PARAMS["torch_compile"])))
+        if getattr(self, "chk_random_seed", None) is not None:
+            self.chk_random_seed.blockSignals(True)
+            self.chk_random_seed.setChecked(bool(cfg.get("random_seed", False)))
+            self.chk_random_seed.blockSignals(False)
         geom = cfg.get("geometry")
         if geom:
             try:
@@ -793,6 +823,10 @@ class MainWindow(QMainWindow):
         state["name"] = self.name_edit.text()
         state["use_amp"] = self.chk_amp.isChecked()
         state["torch_compile"] = self.chk_compile.isChecked()
+        state["random_seed"] = bool(
+            getattr(self, "chk_random_seed", None) is not None
+            and self.chk_random_seed.isChecked()
+        )
         for key, row in self.param_rows.items():
             state[key] = row.value()
         state["geometry"] = {"w": self.width(), "h": self.height()}

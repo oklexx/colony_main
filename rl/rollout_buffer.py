@@ -37,6 +37,10 @@ class RolloutBuffer:
         self.log_probs = torch.empty(total, dtype=torch.float32, device=device)
         self.values = torch.empty(total, dtype=torch.float32, device=device)
         self.dones = torch.empty(total, dtype=torch.bool, device=device)
+        # True termination flag (excludes time-limit truncation). Used as the
+        # GAE bootstrap mask so that truncated episodes keep their value
+        # bootstrap. Defaults to `done` when not supplied (backwards compat).
+        self.terminated = torch.empty(total, dtype=torch.bool, device=device)
 
         self.advantages = torch.empty(total, dtype=torch.float32, device=device)
         self.returns = torch.empty(total, dtype=torch.float32, device=device)
@@ -52,8 +56,14 @@ class RolloutBuffer:
         log_prob: torch.Tensor,
         value: torch.Tensor,
         done: torch.Tensor,
+        terminated: Optional[torch.Tensor] = None,
     ):
-        """Add one step of data. All tensors shape [n_envs]."""
+        """Add one step of data. All tensors shape [n_envs].
+
+        `done` is the episode-end flag (terminated | truncated) used for
+        reward/length accounting. `terminated` is the true terminal flag used
+        for the GAE bootstrap mask; if None it defaults to `done`.
+        """
         if self.pos >= self.n_steps:
             raise RuntimeError("Buffer full, call reset() first")
         start = self.pos * self.n_envs
@@ -64,6 +74,7 @@ class RolloutBuffer:
         self.log_probs[start:end] = log_prob
         self.values[start:end] = value
         self.dones[start:end] = done
+        self.terminated[start:end] = done if terminated is None else terminated
         self.pos += 1
         if self.pos == self.n_steps:
             self.full = True
@@ -92,7 +103,11 @@ class RolloutBuffer:
             else:
                 next_start = (t + 1) * self.n_envs
                 next_values = self.values[next_start:next_start + self.n_envs]
-                next_dones = self.dones[next_start:next_start + self.n_envs]
+                # terminated[t] is transition-based: terminated[t] == terminal(s_{t+1}).
+                # The bootstrap mask for step t must use terminal(s_{t+1}), and must
+                # NOT treat time-limit truncation as terminal (so the value
+                # bootstrap is preserved across truncated episodes).
+                next_dones = self.terminated[start:end]
 
             delta = (
                 self.rewards[start:end]

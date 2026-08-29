@@ -86,6 +86,9 @@ public:
     int64_t free_people() const { return people - busy_people > 0 ? people - busy_people : 0; }
 
     // ---- налоги ----
+    bool tax_postponed() const { return tax_postponed_; }
+    void set_tax_postponed(bool v) { tax_postponed_ = v; }
+    bool tax_postponed_ = false;  // отложен через GUI — авто-оплата в step запрещена
     bool annual_tax_due() const;
     bool main_tax_due() const;
     std::pair<bool, std::string> check_advance() const;

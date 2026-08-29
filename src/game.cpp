@@ -115,6 +115,7 @@ Game::Game(const Game& other)
       no_people_days_limit_(other.no_people_days_limit_),
       tax_annual_paid_(other.tax_annual_paid_),
       tax_main_paid_(other.tax_main_paid_),
+      tax_postponed_(other.tax_postponed_),
       next_uid_(other.next_uid_),
       enable_undo_(other.enable_undo_) {
     data_id_to_idx_ = other.data_id_to_idx_;
@@ -147,6 +148,7 @@ Game& Game::operator=(const Game& other) {
     no_people_days_limit_ = other.no_people_days_limit_;
     tax_annual_paid_ = other.tax_annual_paid_;
     tax_main_paid_ = other.tax_main_paid_;
+    tax_postponed_ = other.tax_postponed_;
     next_uid_ = other.next_uid_;
     enable_undo_ = other.enable_undo_;
     data_id_to_idx_ = other.data_id_to_idx_;
@@ -315,7 +317,10 @@ DayResult Game::new_day() {
             people >= b.data->need_workers)
             n_puerp++;
     }
-    int64_t birth_days = BIRTH_DAYS >> n_puerp;
+    // Guard against undefined behaviour: shifting by >= 64 bits is UB for a
+    // 64-bit integer. With many puerperal hospitals the effective birth
+    // interval can only get as small as 1 day, so clamp there.
+    int64_t birth_days = (n_puerp >= 64) ? 1 : (BIRTH_DAYS >> n_puerp);
     if (birth_days < 1) birth_days = 1;
     int64_t people_at_start = people;
     if (people_at_start) {
