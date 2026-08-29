@@ -232,6 +232,7 @@ class AsyncTrainer:
                 "min_return": min_return,
                 "total_timesteps": total_done,
                 "episodes": len(all_days),
+                "curriculum_stage_at_best": self._curriculum_stage,
             }
             meta_path = save_dir / "best_model.meta.json"
             with open(meta_path, "w") as f:

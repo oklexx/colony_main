@@ -221,6 +221,54 @@ def test_composite_score_calculation():
     assert abs(expected_neg - 74.0) < 1e-9
 
 
+def test_curriculum_stage_in_meta(tmp_path):
+    """best_model.meta.json must contain curriculum_stage_at_best."""
+    import json
+    from unittest.mock import MagicMock, patch
+    from rl.async_trainer import AsyncTrainer
+    from rl.config import Config
+
+    cfg = Config(
+        model_dir=str(tmp_path),
+        eval_episodes=1,
+        eval_freq=100,
+        n_steps=128,
+        batch_size=64,
+        total_timesteps=200,
+        curriculum_schedule=[(0, 1), (100, 2)],
+    )
+
+    mock_em = MagicMock()
+    mock_em.device = torch.device("cpu")
+    mock_em.cfg = cfg
+
+    mock_ppo = MagicMock()
+    mock_ppo.save = MagicMock()
+
+    trainer = AsyncTrainer(
+        cfg=cfg,
+        env_manager=mock_em,
+    )
+    trainer.em = mock_em
+    trainer.em.ppo = mock_ppo
+    trainer._curriculum_stage = 2
+    trainer.best_score = None
+
+    with patch("train_ui.evaluator.run_eval") as mock_run_eval:
+        mock_run_eval.return_value = {
+            "days": 100.0, "bases": 10.0, "people": 50.0,
+            "avg_return": 1000.0,
+            "episode_days": [100.0], "episode_bases": [10.0],
+            "episode_people": [50.0], "episode_returns": [1000.0],
+        }
+        trainer._eval(200)
+
+    meta_path = tmp_path / "best_model.meta.json"
+    assert meta_path.exists()
+    meta = json.loads(meta_path.read_text())
+    assert meta["curriculum_stage_at_best"] == 2
+
+
 def test_multi_seed_eval(tmp_path):
     """Verify that eval runs for each seed in eval_seeds and aggregates results."""
     import json
