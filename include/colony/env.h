@@ -66,6 +66,7 @@ public:
     // Возврат: [8, 2R+1, 2R+1] float32 (0/1), значения за границей карты = 0.
     int minimap_radius() const { return minimap_radius_; }
     int minimap_channels() const { return 8; }
+    void set_minimap_radius(int r) { minimap_radius_ = r; }
     std::vector<float> minimap() const;
 
     struct StepOut {
@@ -202,6 +203,7 @@ public:
     // Миникарты всех сред: [n_envs, 8, 2R+1, 2R+1]
     int minimap_radius() const { return minimap_radius_; }
     int minimap_channels() const { return 8; }
+    void set_minimap_radius(int r) { minimap_radius_ = r; for (auto& e : envs_) e.set_minimap_radius(r); }
     std::vector<float> minimap_batch() const;
 
     void save_normalization(const std::string& path);

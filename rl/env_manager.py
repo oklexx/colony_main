@@ -47,10 +47,15 @@ class EnvManager:
         self.obs_size = self.env.observation_space.shape[0]
         self.n_actions = self.env.action_space.n
 
+        radius = cfg.minimap_radius
+        if radius != 14:
+            self.env.venv.set_minimap_radius(radius)
+
         self.obs_mode = getattr(cfg, "obs_mode", "flat")
         if self.obs_mode == "minimap":
             from minimap import MinimapVecEnvWrapper
             self.mm_env = MinimapVecEnvWrapper(self.env)
+            self.mm_env.refresh()
             C, H, W = self.mm_env.minimap_shape
             self.model = ActorCriticCNN(
                 n_channels=C,

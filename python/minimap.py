@@ -39,6 +39,14 @@ class MinimapVecEnvWrapper:
         mm = self.venv.venv.minimap_batch()
         return np.ascontiguousarray(mm, dtype=np.float32)
 
+    def refresh(self):
+        self.radius = int(self.venv.venv.minimap_radius())
+        self.grid = 2 * self.radius + 1
+        self.minimap_space = gym.spaces.Box(
+            low=0.0, high=1.0, shape=(self.channels, self.grid, self.grid),
+            dtype=np.float32,
+        )
+
 
 class MinimapSingleEnvWrapper:
     """Adds a minimap() method to a CppColonyEnv-like single env."""
@@ -61,3 +69,11 @@ class MinimapSingleEnvWrapper:
         """Current minimap: (C, H, W) float32."""
         mm = self.env.cpp_env.minimap()
         return np.ascontiguousarray(mm, dtype=np.float32)
+
+    def refresh(self):
+        self.radius = int(self.env.cpp_env.minimap_radius())
+        self.grid = 2 * self.radius + 1
+        self.minimap_space = gym.spaces.Box(
+            low=0.0, high=1.0, shape=(self.channels, self.grid, self.grid),
+            dtype=np.float32,
+        )

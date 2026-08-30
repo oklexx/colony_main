@@ -44,6 +44,8 @@ def parse_args():
     p.add_argument("--net-arch", type=int, nargs="+", default=[256, 256])
     p.add_argument("--obs-mode", type=str, default="flat", choices=["flat", "minimap"],
                    help="flat = 209-dim vector + MLP; minimap = 2D spatial tensor + CNN")
+    p.add_argument("--minimap-radius", type=int, default=14,
+                   help="Minimap radius R (grid = 2R+1). Default 14 -> 29x29")
     p.add_argument("--device", type=str, default="cuda")
     p.add_argument("--amp", type=str, default="bfloat16", choices=["bfloat16", "float16", "off"])
     p.add_argument("--compile", action="store_true", help="Enable torch.compile")
@@ -104,6 +106,7 @@ def main():
         max_grad_norm=args.max_grad_norm,
         net_arch=args.net_arch,
         obs_mode=args.obs_mode,
+        minimap_radius=args.minimap_radius,
         total_timesteps=args.steps,
         save_freq=args.save_freq,
         eval_freq=args.eval_freq,

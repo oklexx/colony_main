@@ -340,6 +340,7 @@ PYBIND11_MODULE(colony_cpp, m) {
             return arr;
         })
         .def("minimap_radius", &ColonyEnvCpp::minimap_radius)
+        .def("set_minimap_radius", [](ColonyEnvCpp& env, int r) { env.set_minimap_radius(r); })
         .def("n_build", &ColonyEnvCpp::n_build)
         .def("n_bases", &ColonyEnvCpp::n_bases)
         .def("n_actions", &ColonyEnvCpp::n_actions)
@@ -454,6 +455,7 @@ PYBIND11_MODULE(colony_cpp, m) {
             return arr;
         })
         .def("minimap_radius", &ColonyVecEnvCpp::minimap_radius)
+        .def("set_minimap_radius", [](ColonyVecEnvCpp& v, int r) { v.set_minimap_radius(r); })
         .def("obs_buffer", [](const ColonyVecEnvCpp& v) {
             const size_t n = (size_t)v.n_envs() * (size_t)v.obs_size();
             const float* src = v.obs_buffer();
