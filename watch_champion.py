@@ -168,6 +168,13 @@ def main():
     print(f"Loading policy from {model_path} on {dev}")
     policy = _load_policy(model_path, dev)
 
+    is_cnn = hasattr(policy, "cnn")
+    is_hybrid = hasattr(policy, "flat_proj") and hasattr(policy, "cnn")
+    if is_hybrid:
+        print(f"Model: hybrid (flat + minimap CNN)")
+    elif is_cnn:
+        print(f"Model: CNN minimap")
+
     print(f"Creating env (map_size={args.map_size})")
     env = CppColonyEnv(map_size=args.map_size)
     if norm_path.exists():
@@ -200,10 +207,28 @@ def main():
 
             for step in range(1, args.max_steps + 1):
                 with torch.no_grad():
-                    obs_t = torch.from_numpy(np.asarray(obs, dtype=np.float32)).to(dev)
-                    obs_t = obs_t.reshape(1, -1)
-                    logits, _ = policy(obs_t)
-                    action = int(logits.argmax(dim=-1).item())
+                    if is_hybrid:
+                        # flat obs is already normalized by env.normalizer
+                        flat_t = torch.from_numpy(np.asarray(obs, dtype=np.float32)).to(dev)
+                        flat_t = flat_t.reshape(1, -1)
+                        mm = env.cpp_env.minimap()
+                        mm_t = torch.as_tensor(
+                            np.ascontiguousarray(mm, dtype=np.float32)
+                        ).to(dev).reshape(1, *np.asarray(mm).shape)
+                        logits, _ = policy(flat_t, mm_t)
+                        action = int(logits.argmax(dim=-1).item())
+                    elif is_cnn:
+                        mm = env.cpp_env.minimap()
+                        mm_t = torch.as_tensor(
+                            np.ascontiguousarray(mm, dtype=np.float32)
+                        ).to(dev).reshape(1, *np.asarray(mm).shape)
+                        logits, _ = policy(mm_t)
+                        action = int(logits.argmax(dim=-1).item())
+                    else:
+                        obs_t = torch.from_numpy(np.asarray(obs, dtype=np.float32)).to(dev)
+                        obs_t = obs_t.reshape(1, -1)
+                        logits, _ = policy(obs_t)
+                        action = int(logits.argmax(dim=-1).item())
 
                 obs, reward, terminated, truncated, info = env.step(action)
                 total_reward += reward
