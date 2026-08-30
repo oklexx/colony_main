@@ -66,6 +66,8 @@ def parse_args():
     p.add_argument("--reward-config", type=str, default="", help="Path to reward JSON")
     p.add_argument("--disable-net-worth", action="store_true")
     p.add_argument("--disable-daily-income", action="store_true")
+    p.add_argument("--curriculum-schedule", type=str, default=None,
+                   help="Stage schedule as 'timesteps:stage,timesteps:stage,...' e.g. '200000:1,400000:2,500000:3'")
     return p.parse_args()
 
 
@@ -129,6 +131,12 @@ def main():
         model_dir=args.model_dir,
         reward=reward,
     )
+    if args.curriculum_schedule:
+        schedule = []
+        for part in args.curriculum_schedule.split(","):
+            ts_str, stage_str = part.strip().split(":")
+            schedule.append((int(ts_str), int(stage_str)))
+        cfg.curriculum_schedule = schedule
 
     run_dir = Path(cfg.model_dir) / args.name
     run_dir.mkdir(parents=True, exist_ok=True)
