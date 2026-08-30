@@ -56,6 +56,10 @@ def parse_args():
     p.add_argument("--save-freq", type=int, default=500_000)
     p.add_argument("--eval-freq", type=int, default=100_000)
     p.add_argument("--eval-episodes", type=int, default=10)
+    p.add_argument("--eval-seeds", type=int, nargs="+", default=None,
+                   help="Seeds for eval rollouts (e.g. --eval-seeds 42 43 44)")
+    p.add_argument("--eval-use-mean", action="store_true",
+                   help="Use mean instead of median for multi-seed eval")
     p.add_argument("--log-dir", type=str, default="")
     p.add_argument("--model-dir", type=str, default="")
     p.add_argument("--name", type=str, default="colony_run")
@@ -92,6 +96,8 @@ def main():
 
     cfg = Config(
         map_size=args.map_size,
+        eval_seeds=args.eval_seeds if args.eval_seeds is not None else [42],
+        eval_use_median=not args.eval_use_mean,
         n_envs=args.envs,
         seed=args.seed,
         learning_rate=args.lr,
