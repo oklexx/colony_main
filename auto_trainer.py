@@ -32,6 +32,9 @@ def objective(trial: optuna.Trial, base_args: dict) -> float:
     clip_range = trial.suggest_float("clip_range", 0.1, 0.3)
     net_arch_choice = trial.suggest_categorical("net_arch", ["256x256", "512x512", "512x512x512"])
     net_arch = [int(x) for x in net_arch_choice.split("x")]
+    obs_mode = trial.suggest_categorical("obs_mode", ["flat", "minimap", "hybrid"])
+    minimap_radius = trial.suggest_int("minimap_radius", 10, 28, step=4) \
+        if obs_mode in ("minimap", "hybrid") else 14
 
     trial_name = f"optuna_{trial.number}"
     model_dir = str(Path(base_args["model_dir"]) / trial_name)
@@ -53,6 +56,8 @@ def objective(trial: optuna.Trial, base_args: dict) -> float:
         "--vf-coef", str(vf_coef),
         "--max-grad-norm", str(base_args["max_grad_norm"]),
         "--net-arch", *[str(x) for x in net_arch],
+        "--obs-mode", obs_mode,
+        "--minimap-radius", str(minimap_radius),
         "--device", base_args["device"],
         "--amp", base_args["amp"],
         "--save-freq", str(base_args["save_freq"]),
