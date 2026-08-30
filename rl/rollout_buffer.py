@@ -144,3 +144,43 @@ class RolloutBuffer:
 
     def clear_gpu_memory(self):
         torch.cuda.empty_cache()
+
+
+class _TensorRolloutBuffer(RolloutBuffer):
+    """RolloutBuffer with N-D observation tensors (e.g. minimap [C, H, W]).
+
+    Same GAE logic as the base class, but `obs` is allocated with an explicit
+    shape instead of a flat size.
+    """
+
+    def __init__(
+        self,
+        n_steps: int,
+        n_envs: int,
+        obs_shape: tuple[int, ...],
+        n_actions: int,
+        gamma: float,
+        gae_lambda: float,
+        device: torch.device,
+    ):
+        self.n_steps = n_steps
+        self.n_envs = n_envs
+        self._obs_shape = tuple(obs_shape)
+        self.obs_size = int(np.prod(obs_shape))
+        self.n_actions = n_actions
+        self.gamma = gamma
+        self.gae_lambda = gae_lambda
+        self.device = device
+
+        total = n_steps * n_envs
+        self.obs = torch.empty(total, *obs_shape, dtype=torch.float32, device=device)
+        self.actions = torch.empty(total, dtype=torch.long, device=device)
+        self.rewards = torch.empty(total, dtype=torch.float32, device=device)
+        self.log_probs = torch.empty(total, dtype=torch.float32, device=device)
+        self.values = torch.empty(total, dtype=torch.float32, device=device)
+        self.dones = torch.empty(total, dtype=torch.bool, device=device)
+        self.terminated = torch.empty(total, dtype=torch.bool, device=device)
+        self.advantages = torch.empty(total, dtype=torch.float32, device=device)
+        self.returns = torch.empty(total, dtype=torch.float32, device=device)
+        self.pos = 0
+        self.full = False

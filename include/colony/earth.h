@@ -34,6 +34,7 @@ private:
     void generate();
     void carve(int cx0, int cy0, int radius, int lot_type, MtRandom& rngr);
     void carve_soft(int cx0, int cy0, int radius, int lot_type, MtRandom& rngr);
+    void carve_resource(int cx0, int cy0, int radius, int lot_type, MtRandom& rngr);
 
     int size_;
     uint64_t seed_;

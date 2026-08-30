@@ -143,6 +143,16 @@ void Earth::generate() {
     int cdx = cx0 + (int)rng.randint(-14, 14);
     int cdy = cy0 + (int)rng.randint(-14, 14);
     carve_soft(cdx, cdy, 6, LT_COAL, rng);
+    // Добавляем железо, нефть и золото возле старта (перезаписываем существующие ресурсы)
+    int idx = cx0 + (int)rng.randint(-16, 16);
+    int idy = cy0 + (int)rng.randint(-16, 16);
+    carve_resource(idx, idy, 8, LT_IRON, rng);
+    int oix = cx0 + (int)rng.randint(-16, 16);
+    int oiy = cy0 + (int)rng.randint(-16, 16);
+    carve_resource(oix, oiy, 6, LT_OIL, rng);
+    int gdx = cx0 + (int)rng.randint(-18, 18);
+    int gdy = cy0 + (int)rng.randint(-18, 18);
+    carve_resource(gdx, gdy, 4, LT_GOLD, rng);
 
     // Гарантированно суша в центре (после всех вырезаний).
     // Python: lots[size/2-6 : size/2+7, ...] -> строки/столбцы 134..146 (13 шт)
@@ -192,6 +202,26 @@ void Earth::carve_soft(int cx0, int cy0, int radius, int lot_type, MtRandom& rng
             double d2 = (dx * dx + dy * dy) / (double)r2;
             if (rngr.random() > d2 * 0.85) {
                 if (lots_[(size_t)y * size + x] == LT_NORMAL) {
+                    lots_[(size_t)y * size + x] = (int8_t)lot_type;
+                }
+            }
+        }
+    }
+}
+
+void Earth::carve_resource(int cx0, int cy0, int radius, int lot_type, MtRandom& rngr) {
+    int size = size_;
+    int y0 = std::max(0, cy0 - radius), y1 = std::min(size, cy0 + radius + 1);
+    int x0 = std::max(0, cx0 - radius), x1 = std::min(size, cx0 + radius + 1);
+    int r2 = std::max(1, radius * radius);
+    for (int y = y0; y < y1; y++) {
+        for (int x = x0; x < x1; x++) {
+            double dx = (double)x - cx0, dy = (double)y - cy0;
+            double d2 = (dx * dx + dy * dy) / (double)r2;
+            if (rngr.random() > d2 * 0.85) {
+                int8_t cur = lots_[(size_t)y * size + x];
+                // Allow overwriting any resource except WATER and NONE
+                if (cur != LT_WATER && cur != LT_NONE) {
                     lots_[(size_t)y * size + x] = (int8_t)lot_type;
                 }
             }

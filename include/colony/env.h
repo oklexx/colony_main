@@ -54,6 +54,20 @@ public:
     std::vector<float> obs() const;
     std::vector<float> obs(const Game& g) const;
 
+    // Миникарта: окно 2R+1 вокруг старта (init_sel), каналы:
+    //   0: суша (LT_NORMAL)
+    //   1: вода (LT_WATER)
+    //   2: лес (LT_WOOD)
+    //   3: уголь (LT_COAL)
+    //   4: железо (LT_IRON)
+    //   5: нефть (LT_OIL)
+    //   6: золото (LT_GOLD)
+    //   7: здание (occupied)
+    // Возврат: [8, 2R+1, 2R+1] float32 (0/1), значения за границей карты = 0.
+    int minimap_radius() const { return minimap_radius_; }
+    int minimap_channels() const { return 8; }
+    std::vector<float> minimap() const;
+
     struct StepOut {
         std::vector<float> obs;
         double rew = 0.0;
@@ -133,6 +147,9 @@ private:
     std::vector<float> sale_prices_;
     std::vector<std::vector<float>> catalog_by_season_;  // [4][n_build*4]
 
+    // Миникарта: фиксированный радиус окна (не зависит от map_size)
+    int minimap_radius_ = 14;
+
     Game game_;
     int64_t steps_ = 0;
     double ep_return_ = 0.0;
@@ -182,6 +199,11 @@ public:
     void step_async_batch(const std::vector<int>& actions);
     StepBatchResult step_wait_batch();
 
+    // Миникарты всех сред: [n_envs, 8, 2R+1, 2R+1]
+    int minimap_radius() const { return minimap_radius_; }
+    int minimap_channels() const { return 8; }
+    std::vector<float> minimap_batch() const;
+
     void save_normalization(const std::string& path);
     void load_normalization(const std::string& path);
 
@@ -221,6 +243,7 @@ private:
     int obs_size_;
     int n_actions_;
     int64_t base_seed_;
+    int minimap_radius_ = 14;
 
     std::vector<ColonyEnvCpp> envs_;
     ThreadPool pool_;

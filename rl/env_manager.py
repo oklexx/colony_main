@@ -7,7 +7,8 @@ from typing import Optional, Dict, Any, List
 
 from rl.config import Config
 from rl.actor_critic import ActorCritic
-from rl.rollout_buffer import RolloutBuffer
+from rl.actor_critic_cnn import ActorCriticCNN
+from rl.rollout_buffer import RolloutBuffer, _TensorRolloutBuffer
 from rl.ppo import PPO
 
 
@@ -46,22 +47,48 @@ class EnvManager:
         self.obs_size = self.env.observation_space.shape[0]
         self.n_actions = self.env.action_space.n
 
-        self.model = ActorCritic(
-            obs_size=self.obs_size,
-            n_actions=self.n_actions,
-            hidden_sizes=cfg.net_arch,
-            device=device,
-        )
+        self.obs_mode = getattr(cfg, "obs_mode", "flat")
+        if self.obs_mode == "minimap":
+            from minimap import MinimapVecEnvWrapper
+            self.mm_env = MinimapVecEnvWrapper(self.env)
+            C, H, W = self.mm_env.minimap_shape
+            self.model = ActorCriticCNN(
+                n_channels=C,
+                grid_size=W,
+                n_actions=self.n_actions,
+                hidden_sizes=cfg.net_arch,
+                device=device,
+            )
+        else:
+            self.mm_env = None
+            self.model = ActorCritic(
+                obs_size=self.obs_size,
+                n_actions=self.n_actions,
+                hidden_sizes=cfg.net_arch,
+                device=device,
+            )
 
-        self.buffer = RolloutBuffer(
-            n_steps=cfg.n_steps,
-            n_envs=cfg.n_envs,
-            obs_size=self.obs_size,
-            n_actions=self.n_actions,
-            gamma=cfg.gamma,
-            gae_lambda=cfg.gae_lambda,
-            device=device,
-        )
+        if self.mm_env is not None:
+            C, H, W = self.mm_env.minimap_shape
+            self.buffer = _TensorRolloutBuffer(
+                n_steps=cfg.n_steps,
+                n_envs=cfg.n_envs,
+                obs_shape=(C, H, W),
+                n_actions=self.n_actions,
+                gamma=cfg.gamma,
+                gae_lambda=cfg.gae_lambda,
+                device=device,
+            )
+        else:
+            self.buffer = RolloutBuffer(
+                n_steps=cfg.n_steps,
+                n_envs=cfg.n_envs,
+                obs_size=self.obs_size,
+                n_actions=self.n_actions,
+                gamma=cfg.gamma,
+                gae_lambda=cfg.gae_lambda,
+                device=device,
+            )
 
         self.ppo = PPO(
             model=self.model,
@@ -84,10 +111,16 @@ class EnvManager:
         self._obs_gpu = None
         self._pinned_obs = None
 
+    def _policy_obs(self, obs_np: np.ndarray) -> torch.Tensor:
+        """Convert raw env observations to the tensor the policy consumes."""
+        if self.mm_env is not None:
+            mm = self.mm_env.minimap_obs()
+            return torch.from_numpy(np.ascontiguousarray(mm, dtype=np.float32)).to(self.device, non_blocking=True)
+        return torch.from_numpy(np.asarray(obs_np, dtype=np.float32)).to(self.device, non_blocking=True)
+
     def reset(self) -> torch.Tensor:
         obs_np = self.env.reset()
-        obs_gpu = torch.from_numpy(np.asarray(obs_np, dtype=np.float32)).to(self.device, non_blocking=True)
-        return obs_gpu
+        return self._policy_obs(obs_np)
 
     def step(self, actions: np.ndarray) -> Dict[str, Any]:
         """Step env with actions (CPU numpy int array [n_envs])."""
@@ -95,7 +128,7 @@ class EnvManager:
         self.env.step_async(actions)
         obs_np, rewards_np, dones_np, infos = self.env.step_wait()
 
-        obs = torch.from_numpy(np.asarray(obs_np, dtype=np.float32)).to(self.device, non_blocking=True)
+        obs = self._policy_obs(obs_np)
         rewards = torch.from_numpy(np.asarray(rewards_np, dtype=np.float32)).to(self.device)
         dones = torch.from_numpy(np.asarray(dones_np, dtype=bool)).to(self.device)
         # `terminated` is the true terminal flag (without truncation). The RL

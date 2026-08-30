@@ -145,6 +145,20 @@ def main():
     norm_path = model_dir / "normalization.json"
     if not norm_path.exists():
         norm_path = model_path.with_suffix(".norm.json")
+    if not norm_path.exists():
+        # Look up the matching checkpoint norm by total_timesteps from best_model.meta.json
+        meta_path = model_dir / "best_model.meta.json"
+        if meta_path.exists():
+            import json as _json
+            try:
+                meta = _json.loads(meta_path.read_text(encoding="utf-8"))
+                ts = meta.get("total_timesteps")
+                if ts:
+                    candidate = model_dir / f"checkpoint_{ts}_steps.norm.json"
+                    if candidate.exists():
+                        norm_path = candidate
+            except (json.JSONDecodeError, OSError):
+                pass
 
     if not model_path.exists():
         print(f"ERROR: model not found: {model_path}")
@@ -263,7 +277,10 @@ def main():
         for f in (actions_file, state_file):
             if f.exists():
                 f.unlink()
-        actions_file.touch()
+
+        # Seed initial action so C++ can step and write the first state.json
+        # (breaks the startup deadlock: Python writes action → C++ reads, steps, writes state)
+        write_action(actions_file, 0)  # 0 = DAY
 
         speed = args.speed if args.speed > 0 else 1.0
         print(f"Visual watch running. Speed: {speed} steps/s. Close GUI window to stop.")
@@ -290,9 +307,11 @@ def main():
                 # Compute action from policy using obs from state
                 obs = state.get("obs", [])
                 if obs:
+                    import numpy as np
+                    obs_arr = np.array(obs, dtype=np.float32)
+                    obs_arr = env.normalizer.normalize(obs_arr)
                     with torch.no_grad():
-                        obs_t = torch.tensor(obs, dtype=torch.float32, device=dev)
-                        obs_t = obs_t.reshape(1, -1)
+                        obs_t = torch.from_numpy(obs_arr).to(dev).reshape(1, -1)
                         logits, _ = policy(obs_t)
                         action = int(logits.argmax(dim=-1).item())
                     write_action(actions_file, action)

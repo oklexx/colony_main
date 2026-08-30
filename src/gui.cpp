@@ -277,7 +277,7 @@ static int base_icon_index(const std::string& id) {
         {"CowFarm",17},{"Mushroom",18},{"BigHouse",19},{"BigFarm",20},
         {"Apiary",21},{"Torchlight",22},{"Hothouse",23},{"SuperHouse",24},
         {"BigSawmill",25},{"WaterMill",26},{"BigRefinary",27},{"Puerperal",28},
-        {"BigIronmine",29},{"AirStation",30},{"SmallAtomStation",31},{"AtomStation",32},
+        {"BigIronmine",29},{"AirStation",31},{"SmallAtomStation",32},{"AtomStation",30},
     };
     for (auto& e : m) if (id == e.first) return e.second;
     return -1;

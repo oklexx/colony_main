@@ -1162,6 +1162,9 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.log("error", f"Не удалось остановить процесс: {e}")
         self._cleanup_training()
+        self.btn_start.setEnabled(True)
+        self.btn_stop.setEnabled(False)
+        self.status_label.setText("Остановлено")
 
     def _poll_pid_alive(self, pid: int) -> bool:
         if pid is None:

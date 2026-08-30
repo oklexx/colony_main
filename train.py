@@ -42,6 +42,8 @@ def parse_args():
     p.add_argument("--vf-coef", type=float, default=0.5)
     p.add_argument("--max-grad-norm", type=float, default=0.5)
     p.add_argument("--net-arch", type=int, nargs="+", default=[256, 256])
+    p.add_argument("--obs-mode", type=str, default="flat", choices=["flat", "minimap"],
+                   help="flat = 209-dim vector + MLP; minimap = 2D spatial tensor + CNN")
     p.add_argument("--device", type=str, default="cuda")
     p.add_argument("--amp", type=str, default="bfloat16", choices=["bfloat16", "float16", "off"])
     p.add_argument("--compile", action="store_true", help="Enable torch.compile")
@@ -101,6 +103,7 @@ def main():
         vf_coef=args.vf_coef,
         max_grad_norm=args.max_grad_norm,
         net_arch=args.net_arch,
+        obs_mode=args.obs_mode,
         total_timesteps=args.steps,
         save_freq=args.save_freq,
         eval_freq=args.eval_freq,

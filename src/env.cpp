@@ -202,136 +202,81 @@ bool ColonyEnvCpp::lot_ok(int x, int y, int need_earth, bool no_near_base) const
 std::optional<std::pair<int, int>> ColonyEnvCpp::find_lot(int need_earth, bool no_near_base) {
     const Game& g = game_;
     const int ms = g.map_size();
-    const int cx = g.earth.init_sel_x, cy = g.earth.init_sel_y;
-    // Определяем максимальный радиус, ограниченный границами карты
-    int max_r = LOT_RADIUS;
-    if (cx < max_r) max_r = cx;
-    if (cx >= ms - max_r) max_r = ms - 1 - cx;
-    if (cy < max_r) max_r = cy;
-    if (cy >= ms - max_r) max_r = ms - 1 - cy;
-    // Ограничиваем также LOT_RADIUS
-    if (max_r > LOT_RADIUS) max_r = LOT_RADIUS;
-
     const int8_t* lots = g.earth.lots().data();
     const int32_t* idx_map = g.base_index_map().data();
 
-    for (int r = 0; r <= max_r; r++) {
-        // Верхняя и нижняя границы кольца
-        {
-            int y = cy - r;
-            if (y >= 0) {
-                int x_start = (cx - r >= 0) ? cx - r : 0;
-                int x_end = (cx + r < ms) ? cx + r : ms - 1;
-                for (int x = x_start; x <= x_end; x++) {
-                    size_t idx = (size_t)y * ms + x;
-                    if (idx_map[idx] < 0) {
-                        int8_t cur = lots[idx];
-                        if (cur >= LT_NORMAL && cur < LT_LAST &&
-                            (need_earth == LT_EVERYWHERE || cur == need_earth) &&
-                            !no_near_base)
-                        {
-                            return std::make_pair(x, y);
-                        }
-                        if (cur >= LT_NORMAL && cur < LT_LAST &&
-                            (need_earth == LT_EVERYWHERE || cur == need_earth) &&
-                            no_near_base) {
-                            // Проверяем соседей
-                            bool ok = true;
-                            if (x > 0 && idx_map[idx - 1] >= 0) ok = false;
-                            else if (x < ms - 1 && idx_map[idx + 1] >= 0) ok = false;
-                            else if (y > 0 && idx_map[idx - ms] >= 0) ok = false;
-                            else if (y < ms - 1 && idx_map[idx + ms] >= 0) ok = false;
-                            if (ok) return std::make_pair(x, y);
-                        }
-                    }
+    auto lot_matches = [&](int x, int y) -> bool {
+        if (!g.earth.in_bounds(x, y)) return false;
+        size_t idx = (size_t)y * ms + x;
+        if (idx_map[idx] >= 0) return false;
+        int8_t cur = lots[idx];
+        if (!(cur >= LT_NORMAL && cur < LT_LAST)) return false;
+        if (need_earth != LT_EVERYWHERE && cur != need_earth) return false;
+        return true;
+    };
+
+    auto has_base_neighbor = [&](int x, int y) -> bool {
+        if (x > 0 && idx_map[(size_t)y * ms + (x - 1)] >= 0) return true;
+        if (x < ms - 1 && idx_map[(size_t)y * ms + (x + 1)] >= 0) return true;
+        if (y > 0 && idx_map[(size_t)(y - 1) * ms + x] >= 0) return true;
+        if (y < ms - 1 && idx_map[(size_t)(y + 1) * ms + x] >= 0) return true;
+        return false;
+    };
+
+
+
+
+
+    // Первый случай: нет зданий → строить у init_sel
+    if (g.bases.empty()) {
+        int cx = g.earth.init_sel_x, cy = g.earth.init_sel_y;
+        if (lot_matches(cx, cy)) return std::make_pair(cx, cy);
+        return std::nullopt;
+    }
+
+    // BFS от существующих зданий: ищем свободную клетку рядом
+    std::vector<std::pair<int, int>> frontier;
+    std::vector<char> visited((size_t)ms * ms, 0);
+    for (const auto& b : g.bases) {
+        const int dx4[4] = {1, -1, 0, 0};
+        const int dy4[4] = {0, 0, 1, -1};
+        for (int i = 0; i < 4; i++) {
+            int nx = b.x + dx4[i], ny = b.y + dy4[i];
+            if (!g.earth.in_bounds(nx, ny)) continue;
+            size_t nidx = (size_t)ny * ms + nx;
+            if (visited[nidx]) continue;
+            visited[nidx] = 1;
+            if (lot_matches(nx, ny)) {
+                if (no_near_base) {
+                    if (!has_base_neighbor(nx, ny)) return std::make_pair(nx, ny);
+                } else {
+                    return std::make_pair(nx, ny);
                 }
             }
+            frontier.push_back({nx, ny});
         }
-        {
-            int y = cy + r;
-            if (y < ms) {
-                int x_start = (cx - r >= 0) ? cx - r : 0;
-                int x_end = (cx + r < ms) ? cx + r : ms - 1;
-                for (int x = x_start; x <= x_end; x++) {
-                    size_t idx = (size_t)y * ms + x;
-                    if (idx_map[idx] < 0) {
-                        int8_t cur = lots[idx];
-                        if (cur >= LT_NORMAL && cur < LT_LAST &&
-                            (need_earth == LT_EVERYWHERE || cur == need_earth) &&
-                            !no_near_base)
-                        {
-                            return std::make_pair(x, y);
-                        }
-                        if (cur >= LT_NORMAL && cur < LT_LAST &&
-                            (need_earth == LT_EVERYWHERE || cur == need_earth) &&
-                            no_near_base) {
-                            bool ok = true;
-                            if (x > 0 && idx_map[idx - 1] >= 0) ok = false;
-                            else if (x < ms - 1 && idx_map[idx + 1] >= 0) ok = false;
-                            else if (y > 0 && idx_map[idx - ms] >= 0) ok = false;
-                            else if (y < ms - 1 && idx_map[idx + ms] >= 0) ok = false;
-                            if (ok) return std::make_pair(x, y);
-                        }
-                    }
+    }
+
+    // Расширяем BFS наружу
+    while (!frontier.empty()) {
+        auto [x, y] = frontier.front();
+        frontier.erase(frontier.begin());
+        const int dx8[8] = {1,-1,0,0,1,1,-1,-1};
+        const int dy8[8] = {0,0,1,-1,1,-1,1,-1};
+        for (int i = 0; i < 8; i++) {
+            int nx = x + dx8[i], ny = y + dy8[i];
+            if (!g.earth.in_bounds(nx, ny)) continue;
+            size_t nidx = (size_t)ny * ms + nx;
+            if (visited[nidx]) continue;
+            visited[nidx] = 1;
+            if (lot_matches(nx, ny)) {
+                if (no_near_base) {
+                    if (!has_base_neighbor(nx, ny)) return std::make_pair(nx, ny);
+                } else {
+                    return std::make_pair(nx, ny);
                 }
             }
-        }
-        // Левая и правая границы кольца (без углов, чтобы не дублировать)
-        if (r > 0) {
-            int x_left = cx - r;
-            if (x_left >= 0) {
-                int y_start = cy - r + 1;
-                int y_end = cy + r - 1;
-                for (int y = y_start; y <= y_end; y++) {
-                    size_t idx = (size_t)y * ms + x_left;
-                    if (idx_map[idx] < 0) {
-                        int8_t cur = lots[idx];
-                        if (cur >= LT_NORMAL && cur < LT_LAST &&
-                            (need_earth == LT_EVERYWHERE || cur == need_earth) &&
-                            !no_near_base)
-                        {
-                            return std::make_pair(x_left, y);
-                        }
-                        if (cur >= LT_NORMAL && cur < LT_LAST &&
-                            (need_earth == LT_EVERYWHERE || cur == need_earth) &&
-                            no_near_base) {
-                            bool ok = true;
-                            if (x_left > 0 && idx_map[idx - 1] >= 0) ok = false;
-                            else if (x_left < ms - 1 && idx_map[idx + 1] >= 0) ok = false;
-                            else if (y > 0 && idx_map[idx - ms] >= 0) ok = false;
-                            else if (y < ms - 1 && idx_map[idx + ms] >= 0) ok = false;
-                            if (ok) return std::make_pair(x_left, y);
-                        }
-                    }
-                }
-            }
-            int x_right = cx + r;
-            if (x_right < ms) {
-                int y_start = cy - r + 1;
-                int y_end = cy + r - 1;
-                for (int y = y_start; y <= y_end; y++) {
-                    size_t idx = (size_t)y * ms + x_right;
-                    if (idx_map[idx] < 0) {
-                        int8_t cur = lots[idx];
-                        if (cur >= LT_NORMAL && cur < LT_LAST &&
-                            (need_earth == LT_EVERYWHERE || cur == need_earth) &&
-                            !no_near_base)
-                        {
-                            return std::make_pair(x_right, y);
-                        }
-                        if (cur >= LT_NORMAL && cur < LT_LAST &&
-                            (need_earth == LT_EVERYWHERE || cur == need_earth) &&
-                            no_near_base) {
-                            bool ok = true;
-                            if (x_right > 0 && idx_map[idx - 1] >= 0) ok = false;
-                            else if (x_right < ms - 1 && idx_map[idx + 1] >= 0) ok = false;
-                            else if (y > 0 && idx_map[idx - ms] >= 0) ok = false;
-                            else if (y < ms - 1 && idx_map[idx + ms] >= 0) ok = false;
-                            if (ok) return std::make_pair(x_right, y);
-                        }
-                    }
-                }
-            }
+            frontier.push_back({nx, ny});
         }
     }
     return std::nullopt;
@@ -451,6 +396,45 @@ std::vector<float> ColonyEnvCpp::obs(const Game& g) const {
     const std::vector<float>& cat = catalog_by_season_[season_idx];
     for (float c : cat) push(c);
     return obs_buf_;
+}
+
+std::vector<float> ColonyEnvCpp::minimap() const {
+    const int R = minimap_radius_;
+    const int N = 2 * R + 1;
+    const Game& g = game_;
+    const int ms = g.map_size();
+    const int cx = g.earth.init_sel_x, cy = g.earth.init_sel_y;
+    const int8_t* lots = g.earth.lots().data();
+    const uint8_t* occ = g.occupied.data();
+
+    std::vector<float> out((size_t)8 * N * N, 0.0f);
+    auto put = [&](int ch, int x, int y) {
+        out[(size_t)ch * N * N + (size_t)y * N + x] = 1.0f;
+    };
+
+    for (int dy = -R; dy <= R; dy++) {
+        int wy = cy + dy;
+        if (wy < 0 || wy >= ms) continue;
+        for (int dx = -R; dx <= R; dx++) {
+            int wx = cx + dx;
+            if (wx < 0 || wx >= ms) continue;
+            int8_t lot = lots[(size_t)wy * ms + wx];
+            int ch = -1;
+            switch (lot) {
+                case LT_NORMAL: ch = 0; break;
+                case LT_WATER:  ch = 1; break;
+                case LT_WOOD:   ch = 2; break;
+                case LT_COAL:   ch = 3; break;
+                case LT_IRON:   ch = 4; break;
+                case LT_OIL:    ch = 5; break;
+                case LT_GOLD:   ch = 6; break;
+                default: break;
+            }
+            if (ch >= 0) put(ch, dx + R, dy + R);
+            if (occ[(size_t)wy * ms + wx]) put(7, dx + R, dy + R);
+        }
+    }
+    return out;
 }
 
 ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
@@ -588,6 +572,8 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
     } else if (action == manager_base_ + 10) {  // Заплатить налог
         rew -= 0.5;
     }
+
+    g.refresh_occupied();
 
     // прожить день/неделю
     std::vector<DayResult> results;
@@ -912,6 +898,20 @@ StepBatchResult ColonyVecEnvCpp::step_wait_batch() {
     }
 
     return result;
+}
+
+std::vector<float> ColonyVecEnvCpp::minimap_batch() const {
+    if (envs_.empty()) return {};
+    const int n = (int)envs_.size();
+    const int R = minimap_radius_;
+    const int N = 2 * R + 1;
+    const size_t per = (size_t)8 * N * N;
+    std::vector<float> out((size_t)n * per, 0.0f);
+    for (int i = 0; i < n; i++) {
+        std::vector<float> mm = envs_[(size_t)i].minimap();
+        std::copy(mm.begin(), mm.end(), out.begin() + (size_t)i * per);
+    }
+    return out;
 }
 
 void ColonyVecEnvCpp::save_normalization(const std::string& path) {

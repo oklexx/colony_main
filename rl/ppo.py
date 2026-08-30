@@ -175,13 +175,19 @@ class PPO:
             ck = k.replace("_orig_mod.", "") if k.startswith("_orig_mod.") else k
             clean_state[ck] = v
         hidden_sizes = [m.out_features for m in model.trunk if isinstance(m, nn.Linear)]
+        extra = {}
+        if hasattr(model, "n_channels"):
+            extra["n_channels"] = model.n_channels
+            extra["grid_size"] = model.grid_size
+        elif hasattr(model, "obs_size"):
+            extra["obs_size"] = model.obs_size
         torch.save({
             "model_state": clean_state,
             "optimizer_state": self.optimizer.state_dict(),
             "buffer_pos": self.buffer.pos,
-            "obs_size": model.obs_size,
             "n_actions": model.n_actions,
             "hidden_sizes": hidden_sizes,
+            **extra,
         }, path)
 
     def load(self, path: str):

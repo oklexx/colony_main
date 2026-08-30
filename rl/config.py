@@ -76,6 +76,10 @@ class Config:
 
     # Network
     net_arch: List[int] = field(default_factory=lambda: [256, 256])
+    # Observation mode: "flat" = 209-dim vector + MLP (legacy),
+    # "minimap" = 2D spatial tensor (8, 2R+1, 2R+1) + CNN trunk
+    obs_mode: str = "flat"
+    minimap_radius: int = 14
 
     # Training
     total_timesteps: int = 1_000_000
@@ -118,6 +122,8 @@ class Config:
             self.model_dir = str(home / "colony_runs" / "models")
         if self.amp_dtype not in ("bfloat16", "float16"):
             raise ValueError(f"amp_dtype must be bfloat16 or float16, got {self.amp_dtype}")
+        if self.obs_mode not in ("flat", "minimap"):
+            raise ValueError(f"obs_mode must be 'flat' or 'minimap', got {self.obs_mode}")
 
     def to_dict(self) -> Dict[str, Any]:
         d = {}
@@ -125,7 +131,8 @@ class Config:
             "map_size", "n_envs", "seed", "curriculum_stage", "unlock_ids",
             "learning_rate", "n_steps", "batch_size", "n_epochs",
             "gamma", "gae_lambda", "clip_range", "ent_coef", "vf_coef", "max_grad_norm",
-            "net_arch", "total_timesteps", "save_freq", "eval_freq", "eval_episodes",
+            "net_arch", "obs_mode", "minimap_radius",
+            "total_timesteps", "save_freq", "eval_freq", "eval_episodes",
             "eval_score_weights", "eval_min_bases", "eval_min_return",
             "eval_use_median", "eval_seeds", "curriculum_schedule",
             "device", "use_amp", "amp_dtype", "torch_compile",
@@ -156,6 +163,8 @@ class Config:
             vf_coef=d.get("vf_coef", 0.5),
             max_grad_norm=d.get("max_grad_norm", 0.5),
             net_arch=d.get("net_arch", [256, 256]),
+            obs_mode=d.get("obs_mode", "flat"),
+            minimap_radius=d.get("minimap_radius", 14),
             total_timesteps=d.get("total_timesteps", 1_000_000),
             save_freq=d.get("save_freq", 500_000),
             eval_freq=d.get("eval_freq", 100_000),

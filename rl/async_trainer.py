@@ -175,6 +175,8 @@ class AsyncTrainer:
                     device=str(self.device),
                     normalization_path=norm_str,
                     map_size=self.em.cfg.map_size,
+                    mode=getattr(self.cfg, "obs_mode", "flat"),
+                    minimap_radius=getattr(self.cfg, "minimap_radius", 14),
                 )
                 all_days.extend(result.get("episode_days", [result["days"]]))
                 all_bases.extend(result.get("episode_bases", [result["bases"]]))
