@@ -65,9 +65,28 @@ def _load_policy(model_path: Path, device, mode: str = "auto", minimap_radius: i
             raise ValueError("cannot infer hidden sizes from checkpoint")
         hidden = [model_state[k].shape[0] for k in hidden_keys]
 
-    n_actions = model_state["actor_head.weight"].shape[0]
+    has_flat_net = any(k.startswith("flat_proj") for k in model_state)
+    if has_flat_net:
+        n_actions = model_state["actor.weight"].shape[0]
+    elif "actor_head.weight" in model_state:
+        n_actions = model_state["actor_head.weight"].shape[0]
+    else:
+        n_actions = int(ckpt.get("n_actions", 0))
 
-    if mode == "minimap":
+    if has_flat_net:
+        from rl.actor_critic_hybrid import ActorCriticHybrid
+        obs_size = int(ckpt.get("obs_size", 0)) or int(model_state["flat_proj.weight"].shape[1])
+        n_channels = int(ckpt.get("n_channels", 8))
+        grid = int(ckpt.get("grid_size", 2 * minimap_radius + 1))
+        model = ActorCriticHybrid(
+            obs_size=obs_size,
+            n_channels=n_channels,
+            grid_size=grid,
+            n_actions=int(n_actions),
+            hidden_sizes=[int(h) for h in hidden],
+            device=device,
+        )
+    elif mode == "minimap" or has_cnn:
         first_conv = None
         for k in sorted(model_state):
             if k.startswith("cnn.") and k.endswith(".weight") and model_state[k].dim() == 4:
@@ -130,10 +149,12 @@ def run_eval(
     dev = torch.device(device if torch.cuda.is_available() and device == "cuda" else "cpu")
     policy = _load_policy(model_path, dev, mode=mode, minimap_radius=minimap_radius)
     from rl.actor_critic_cnn import ActorCriticCNN
+    from rl.actor_critic_hybrid import ActorCriticHybrid
     use_minimap = isinstance(policy, ActorCriticCNN)
+    is_hybrid = isinstance(policy, ActorCriticHybrid)
 
     env = CppColonyEnv(map_size=map_size)
-    if normalization_path is not None and not use_minimap:
+    if normalization_path is not None and not use_minimap and not is_hybrid:
         norm_path = Path(normalization_path)
         if not norm_path.exists():
             raise FileNotFoundError(
@@ -142,7 +163,12 @@ def run_eval(
             )
         env.normalizer.load(str(norm_path))
         env.normalizer.set_update(False)
-    mm_wrap = MinimapSingleEnvWrapper(env) if use_minimap else None
+    if normalization_path is not None and is_hybrid:
+        norm_path = Path(normalization_path)
+        if norm_path.exists():
+            env.normalizer.load(str(norm_path))
+            env.normalizer.set_update(False)
+    mm_wrap = MinimapSingleEnvWrapper(env) if (use_minimap or is_hybrid) else None
     days_list: list[int] = []
     people_list: list[int] = []
     bases_list: list[int] = []
@@ -154,14 +180,22 @@ def run_eval(
             total_reward = 0.0
             for _ in range(max_days):
                 with torch.no_grad():
-                    if use_minimap:
+                    if is_hybrid:
+                        flat_t = torch.from_numpy(np.asarray(obs, dtype=np.float32)).to(dev).reshape(1, -1)
+                        mm = mm_wrap.minimap_obs()
+                        mm_t = torch.from_numpy(np.ascontiguousarray(mm, dtype=np.float32)).to(dev).reshape(1, *mm.shape)
+                        logits, _values = policy(flat_t, mm_t)
+                        action = int(logits.argmax(dim=-1).item())
+                    elif use_minimap:
                         mm = mm_wrap.minimap_obs()
                         obs_t = torch.from_numpy(np.ascontiguousarray(mm, dtype=np.float32)).to(dev).reshape(1, *mm.shape)
+                        logits, _values = policy(obs_t)
+                        action = int(logits.argmax(dim=-1).item())
                     else:
                         obs_t = torch.from_numpy(np.asarray(obs, dtype=np.float32)).to(dev)
                         obs_t = obs_t.reshape(1, -1)
-                    logits, _values = policy(obs_t)
-                    action = int(logits.argmax(dim=-1).item())
+                        logits, _values = policy(obs_t)
+                        action = int(logits.argmax(dim=-1).item())
                 obs, reward, terminated, truncated, info = env.step(action)
                 total_reward += float(reward)
                 if terminated or truncated:

@@ -52,18 +52,29 @@ class EnvManager:
             self.env.venv.set_minimap_radius(radius)
 
         self.obs_mode = getattr(cfg, "obs_mode", "flat")
-        if self.obs_mode == "minimap":
+        if self.obs_mode in ("minimap", "hybrid"):
             from minimap import MinimapVecEnvWrapper
             self.mm_env = MinimapVecEnvWrapper(self.env)
             self.mm_env.refresh()
             C, H, W = self.mm_env.minimap_shape
-            self.model = ActorCriticCNN(
-                n_channels=C,
-                grid_size=W,
-                n_actions=self.n_actions,
-                hidden_sizes=cfg.net_arch,
-                device=device,
-            )
+            if self.obs_mode == "hybrid":
+                from rl.actor_critic_hybrid import ActorCriticHybrid
+                self.model = ActorCriticHybrid(
+                    obs_size=self.obs_size,
+                    n_channels=C,
+                    grid_size=W,
+                    n_actions=self.n_actions,
+                    hidden_sizes=cfg.net_arch,
+                    device=device,
+                )
+            else:
+                self.model = ActorCriticCNN(
+                    n_channels=C,
+                    grid_size=W,
+                    n_actions=self.n_actions,
+                    hidden_sizes=cfg.net_arch,
+                    device=device,
+                )
         else:
             self.mm_env = None
             self.model = ActorCritic(
@@ -73,7 +84,19 @@ class EnvManager:
                 device=device,
             )
 
-        if self.mm_env is not None:
+        if self.obs_mode == "hybrid":
+            C, H, W = self.mm_env.minimap_shape
+            self.buffer = _TensorRolloutBuffer(
+                n_steps=cfg.n_steps,
+                n_envs=cfg.n_envs,
+                obs_shape=(C, H, W),
+                n_actions=self.n_actions,
+                gamma=cfg.gamma,
+                gae_lambda=cfg.gae_lambda,
+                device=device,
+                flat_dim=self.obs_size,
+            )
+        elif self.mm_env is not None:
             C, H, W = self.mm_env.minimap_shape
             self.buffer = _TensorRolloutBuffer(
                 n_steps=cfg.n_steps,
@@ -115,15 +138,25 @@ class EnvManager:
 
         self._obs_gpu = None
         self._pinned_obs = None
+        self._last_flat = None
 
-    def _policy_obs(self, obs_np: np.ndarray) -> torch.Tensor:
-        """Convert raw env observations to the tensor the policy consumes."""
+    def _policy_obs(self, obs_np: np.ndarray):
+        """Convert raw env observations to the tensor(s) the policy consumes.
+
+        Returns a (flat, minimap) tuple in hybrid mode, a single minimap
+        tensor in minimap mode, or a single flat tensor in flat mode.
+        """
+        flat = torch.from_numpy(np.asarray(obs_np, dtype=np.float32)).to(self.device, non_blocking=True)
+        if self.obs_mode == "hybrid":
+            mm = self.mm_env.minimap_obs()
+            mm_t = torch.from_numpy(np.ascontiguousarray(mm, dtype=np.float32)).to(self.device, non_blocking=True)
+            return flat, mm_t
         if self.mm_env is not None:
             mm = self.mm_env.minimap_obs()
             return torch.from_numpy(np.ascontiguousarray(mm, dtype=np.float32)).to(self.device, non_blocking=True)
-        return torch.from_numpy(np.asarray(obs_np, dtype=np.float32)).to(self.device, non_blocking=True)
+        return flat
 
-    def reset(self) -> torch.Tensor:
+    def reset(self):
         obs_np = self.env.reset()
         return self._policy_obs(obs_np)
 
@@ -144,17 +177,26 @@ class EnvManager:
         )
         terminated = torch.from_numpy(terminated_np).to(self.device)
 
-        return {
+        out = {
             "obs": obs,
             "rewards": rewards,
             "dones": dones,
             "terminated": terminated,
             "infos": infos,
         }
+        if isinstance(obs, tuple):
+            out["flat"] = obs[0]
+            out["minimap"] = obs[1]
+        return out
 
-    def collect_step(self, obs: torch.Tensor) -> tuple[torch.Tensor, list[dict]]:
+    def collect_step(self, obs) -> tuple:
         """One full step: policy → env step → buffer add. Returns (new_obs, infos)."""
-        policy_out = self.ppo.collect_step(obs)
+        if self.obs_mode == "hybrid":
+            flat, minimap = obs
+            self._last_flat = flat
+            policy_out = self.ppo.collect_step(flat, minimap)
+        else:
+            policy_out = self.ppo.collect_step(obs)
         action_gpu = policy_out["action"]
         action_np = action_gpu.cpu().numpy().astype(np.int32)
 
@@ -165,22 +207,39 @@ class EnvManager:
         terminated = env_out["terminated"]
         infos = env_out["infos"]
 
-        self.buffer.add(
-            obs=obs,
-            action=action_gpu,
-            reward=rewards,
-            log_prob=policy_out["log_prob"],
-            value=policy_out["value"],
-            done=dones,
-            terminated=terminated,
-        )
+        if self.obs_mode == "hybrid":
+            flat, minimap = obs
+            self.buffer.add(
+                obs=minimap,
+                action=action_gpu,
+                reward=rewards,
+                log_prob=policy_out["log_prob"],
+                value=policy_out["value"],
+                done=dones,
+                terminated=terminated,
+                flat=flat,
+            )
+        else:
+            self.buffer.add(
+                obs=obs,
+                action=action_gpu,
+                reward=rewards,
+                log_prob=policy_out["log_prob"],
+                value=policy_out["value"],
+                done=dones,
+                terminated=terminated,
+            )
 
         return new_obs, infos
 
-    def finish_episode(self, last_obs: torch.Tensor, last_dones: torch.Tensor):
+    def finish_episode(self, last_obs, last_dones: torch.Tensor):
         """Compute last values and GAE."""
         with torch.no_grad():
-            last_value = self.ppo.model.get_value(last_obs)
+            if self.obs_mode == "hybrid":
+                last_flat, last_minimap = last_obs
+                last_value = self.ppo.model.get_value(last_flat, last_minimap)
+            else:
+                last_value = self.ppo.model.get_value(last_obs)
         self.ppo.update(last_value=last_value, last_done=last_dones)
 
     def get_stats(self) -> Dict[str, float]:

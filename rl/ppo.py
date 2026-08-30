@@ -47,6 +47,9 @@ class PPO:
         self.amp_dtype = torch.bfloat16 if amp_dtype == "bfloat16" else torch.float16
         self.scaler = torch.amp.GradScaler(self.device.type, enabled=(amp_dtype == "float16"))
 
+        from rl.actor_critic_hybrid import ActorCriticHybrid
+        self.is_hybrid = isinstance(model, ActorCriticHybrid)
+
         self.optimizer = torch.optim.Adam(
             model.params, lr=lr, eps=1e-5, weight_decay=0.0
         )
@@ -58,12 +61,19 @@ class PPO:
             self._compiled = False
 
     def collect_step(
-        self, obs: torch.Tensor
+        self, flat, minimap=None
     ) -> Dict[str, torch.Tensor]:
-        """Get action, log_prob, value for current obs (no grad)."""
+        """Get action, log_prob, value for current obs (no grad).
+
+        In hybrid mode call as collect_step(flat, minimap); otherwise pass a
+        single obs tensor as `flat`.
+        """
         self.model.eval()
         with torch.no_grad():
-            action, log_prob, value = self.model.get_action_and_value(obs)
+            if self.is_hybrid:
+                action, log_prob, value = self.model.get_action_and_value(flat, minimap)
+            else:
+                action, log_prob, value = self.model.get_action_and_value(flat)
         return {
             "action": action,
             "log_prob": log_prob,
@@ -94,18 +104,21 @@ class PPO:
                 advantages = batch["advantages"]
                 returns = batch["returns"]
                 old_values = batch["values"]
+                flat = batch.get("flat", None) if self.is_hybrid else None
 
                 self.optimizer.zero_grad()
 
                 if self.use_amp:
                     with torch.autocast(device_type=self.device.type, dtype=self.amp_dtype):
                         policy_loss, value_loss, entropy, approx_kl = self._compute_loss_components(
-                            obs, actions, old_log_probs, advantages, returns, old_values
+                            obs, actions, old_log_probs, advantages, returns, old_values,
+                            flat=flat
                         )
                         loss = policy_loss + self.vf_coef * value_loss - self.ent_coef * entropy
                 else:
                     policy_loss, value_loss, entropy, approx_kl = self._compute_loss_components(
-                        obs, actions, old_log_probs, advantages, returns, old_values
+                        obs, actions, old_log_probs, advantages, returns, old_values,
+                        flat=flat
                     )
                     loss = policy_loss + self.vf_coef * value_loss - self.ent_coef * entropy
 
@@ -147,8 +160,12 @@ class PPO:
         advantages: torch.Tensor,
         returns: torch.Tensor,
         old_values: torch.Tensor,
+        flat: Optional[torch.Tensor] = None,
     ):
-        logits, values = self.model(obs)
+        if self.is_hybrid:
+            logits, values = self.model(flat, obs)
+        else:
+            logits, values = self.model(obs)
         dist = D.Categorical(logits=logits)
         new_log_probs = dist.log_prob(actions)
         entropy = dist.entropy().mean()
@@ -176,7 +193,11 @@ class PPO:
             clean_state[ck] = v
         hidden_sizes = [m.out_features for m in model.trunk if isinstance(m, nn.Linear)]
         extra = {}
-        if hasattr(model, "n_channels"):
+        if self.is_hybrid:
+            extra["n_channels"] = model.n_channels
+            extra["grid_size"] = model.grid_size
+            extra["obs_size"] = model.obs_size
+        elif hasattr(model, "n_channels"):
             extra["n_channels"] = model.n_channels
             extra["grid_size"] = model.grid_size
         elif hasattr(model, "obs_size"):

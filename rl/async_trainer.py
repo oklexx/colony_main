@@ -112,7 +112,11 @@ class AsyncTrainer:
             obs = new_obs
 
         with torch.no_grad():
-            last_value = self.em.ppo.model.get_value(obs)
+            if getattr(self.em, "obs_mode", "flat") == "hybrid":
+                last_flat, last_minimap = obs
+                last_value = self.em.ppo.model.get_value(last_flat, last_minimap)
+            else:
+                last_value = self.em.ppo.model.get_value(obs)
             # last_done must be the TRUE termination flag of the LAST collected
             # step (== buffer.terminated[T-1] == terminal(s_T)), NOT an OR over
             # the whole rollout and NOT including time-limit truncation. This is

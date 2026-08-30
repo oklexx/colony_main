@@ -162,6 +162,7 @@ class _TensorRolloutBuffer(RolloutBuffer):
         gamma: float,
         gae_lambda: float,
         device: torch.device,
+        flat_dim: int = 0,
     ):
         self.n_steps = n_steps
         self.n_envs = n_envs
@@ -171,9 +172,14 @@ class _TensorRolloutBuffer(RolloutBuffer):
         self.gamma = gamma
         self.gae_lambda = gae_lambda
         self.device = device
+        self.flat_dim = int(flat_dim)
 
         total = n_steps * n_envs
         self.obs = torch.empty(total, *obs_shape, dtype=torch.float32, device=device)
+        if self.flat_dim > 0:
+            self.flat_obs = torch.empty(total, self.flat_dim, dtype=torch.float32, device=device)
+        else:
+            self.flat_obs = None
         self.actions = torch.empty(total, dtype=torch.long, device=device)
         self.rewards = torch.empty(total, dtype=torch.float32, device=device)
         self.log_probs = torch.empty(total, dtype=torch.float32, device=device)
@@ -184,3 +190,37 @@ class _TensorRolloutBuffer(RolloutBuffer):
         self.returns = torch.empty(total, dtype=torch.float32, device=device)
         self.pos = 0
         self.full = False
+
+    def add(self, obs, action, reward, log_prob, value, done, terminated=None, flat=None):
+        """Add one step of data. All tensors shape [n_envs].
+
+        `flat` is the flat observation tensor (shape [n_envs, flat_dim]) stored
+        only when the buffer was created with `flat_dim > 0` (hybrid mode).
+        """
+        super().add(obs, action, reward, log_prob, value, done, terminated)
+        if self.flat_obs is not None:
+            if flat is None:
+                raise RuntimeError("flat observation required but not provided (hybrid buffer)")
+            start = (self.pos - 1) * self.n_envs
+            end = self.pos * self.n_envs
+            self.flat_obs[start:end] = flat
+
+    def get_batches(self, batch_size: int):
+        """Yield mini-batches. Each batch: dict of tensors."""
+        n = self.n_steps * self.n_envs
+        indices = torch.randperm(n, device=self.device)
+        for start in range(0, n, batch_size):
+            idx = indices[start:start + batch_size]
+            batch = {
+                "obs": self.obs[idx],
+                "actions": self.actions[idx],
+                "rewards": self.rewards[idx],
+                "old_log_probs": self.log_probs[idx],
+                "values": self.values[idx],
+                "advantages": self.advantages[idx],
+                "returns": self.returns[idx],
+                "dones": self.dones[idx],
+            }
+            if self.flat_obs is not None:
+                batch["flat"] = self.flat_obs[idx]
+            yield batch

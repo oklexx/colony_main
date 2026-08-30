@@ -122,8 +122,8 @@ class Config:
             self.model_dir = str(home / "colony_runs" / "models")
         if self.amp_dtype not in ("bfloat16", "float16"):
             raise ValueError(f"amp_dtype must be bfloat16 or float16, got {self.amp_dtype}")
-        if self.obs_mode not in ("flat", "minimap"):
-            raise ValueError(f"obs_mode must be 'flat' or 'minimap', got {self.obs_mode}")
+        if self.obs_mode not in ("flat", "minimap", "hybrid"):
+            raise ValueError(f"obs_mode must be 'flat', 'minimap', or 'hybrid', got {self.obs_mode}")
 
     def to_dict(self) -> Dict[str, Any]:
         d = {}

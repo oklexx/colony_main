@@ -42,8 +42,8 @@ def parse_args():
     p.add_argument("--vf-coef", type=float, default=0.5)
     p.add_argument("--max-grad-norm", type=float, default=0.5)
     p.add_argument("--net-arch", type=int, nargs="+", default=[256, 256])
-    p.add_argument("--obs-mode", type=str, default="flat", choices=["flat", "minimap"],
-                   help="flat = 209-dim vector + MLP; minimap = 2D spatial tensor + CNN")
+    p.add_argument("--obs-mode", type=str, default="flat", choices=["flat", "minimap", "hybrid"],
+                   help="flat = 209-dim vector + MLP; minimap = 2D spatial tensor + CNN; hybrid = both")
     p.add_argument("--minimap-radius", type=int, default=14,
                    help="Minimap radius R (grid = 2R+1). Default 14 -> 29x29")
     p.add_argument("--device", type=str, default="cuda")
