@@ -54,6 +54,13 @@ class FakeEnvManager:
         self.env.venv.set_curriculum_stage(stage)
         self.cfg.curriculum_stage = stage
 
+    def get_allowed_buildings_for_stage(self, stage):
+        return []
+
+    @property
+    def action_names(self):
+        return ["ACT初始化", "ACT建造房屋", "ACT储备物资", "ACT空闲等待", "ACT向右移动"]
+
     def reset(self):
         return torch.randn(self.n_envs, self.obs_size)
 

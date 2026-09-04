@@ -23,78 +23,41 @@ class CurriculumProgressWidget(QWidget):
     
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        
-        # Stage badge
+        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setSpacing(2)
+
         self._stage_badge = QLabel("Stage: 0/3")
         self._stage_badge.setAlignment(Qt.AlignCenter)
         self._stage_badge.setStyleSheet("""
-            background-color: #2196F3;
+            background-color: #1565c0;
             color: white;
             font-weight: bold;
-            border-radius: 8px;
-            padding: 8px 20px;
-            font-size: 11pt;
+            border-radius: 4px;
+            padding: 3px 10px;
+            font-size: 9pt;
         """)
         layout.addWidget(self._stage_badge)
-        
-        # Progress bar container
-        bar_container = QFrame()
-        bar_container.setFixedHeight(25)
-        bar_layout = QHBoxLayout(bar_container)
-        bar_layout.addStretch()
-        
-        # Progress bar
+
         self._progress_bar = QProgressBar(self)
         self._progress_bar.setValue(0)
         self._progress_bar.setTextVisible(False)
         self._progress_bar.setRange(0, 100)
+        self._progress_bar.setFixedHeight(8)
         self._progress_bar.setStyleSheet("""
-            QProgressBar {
-                background-color: #ddd;
-                border: none;
-                border-radius: 4px;
-            }
-            QProgressBar::chunk {
-                background-color: #2196F3;
-            }
+            QProgressBar { background-color: #2a2a2a; border: none; border-radius: 3px; }
+            QProgressBar::chunk { background-color: #1565c0; border-radius: 3px; }
         """)
-        bar_layout.addWidget(self._progress_bar)
-        bar_layout.addStretch()
-        
-        layout.addWidget(bar_container)
-        
-        # Available actions info
-        self._actions_label = QLabel("Actions: INITIALIZE | MOVE_RIGHT | BUILD_HOUSE | PRESERVE | WAIT")
-        self._actions_label.setStyleSheet("""
-            font-size: 9pt;
-            color: #666;
-            padding: 3px 0;
-        """)
+        layout.addWidget(self._progress_bar)
+
+        self._actions_label = QLabel("Actions: --")
+        self._actions_label.setStyleSheet("font-size: 8pt; color: #888; padding: 1px; background: transparent;")
         layout.addWidget(self._actions_label)
-        
-        # Upcoming stages list
+
         self._upcoming_list = QListWidget()
-        self._upcoming_list.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        self._upcoming_list.setMaximumHeight(80)
+        self._upcoming_list.setMaximumHeight(50)
         self._upcoming_list.setStyleSheet("""
-            QListWidget {
-                border: 1px solid #4a4a4a;
-                border-radius: 4px;
-                background-color: #2a2a2a;
-                color: white;
-                font-size: 9pt;
-            }
-            QListWidget::item {
-                padding: 5px;
-                background-color: #333;
-                color: white;
-                border-radius: 2px;
-            }
-            QListWidget::item:selected {
-                background-color: #4a90d9;
-                color: white;
-            }
+            QListWidget { border: 1px solid #3a3a3a; border-radius: 3px; background-color: #2a2a2a; color: #d4d4d4; font-size: 8pt; }
+            QListWidget::item { padding: 2px; background-color: #2a2a2a; color: #d4d4d4; }
         """)
         layout.addWidget(self._upcoming_list)
     

@@ -13,10 +13,10 @@ from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QPalette, QColor
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog,
-    QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
+    QFrame, QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
     QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QProgressBar,
-    QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout,
-    QWidget, QSizePolicy,
+    QPushButton, QSpinBox, QSplitter, QTableWidget, QTableWidgetItem,
+    QVBoxLayout, QWidget, QSizePolicy, QListWidget,
 )
 
 from train_ui import protocol as P
@@ -191,173 +191,90 @@ class MainWindow(QMainWindow):
         self._build_right(right)
         self._build_menubar()
         
-        # ── Learning Metrics Panel (separate 300px panel on far right) ──
-        metrics_outer_panel = QWidget()
-        metrics_outer_layout = QVBoxLayout(metrics_outer_panel)
-        metrics_outer_layout.setContentsMargins(10, 10, 10, 10)
-        metrics_outer_layout.setSpacing(0)
-        
-        # Main metrics container (fixed width 300px)
-        metrics_main_panel = QWidget()
-        metrics_main_panel.setFixedWidth(290)  # 300px minus margins
-        metrics_main_panel.setStyleSheet("""
-            QFrame {
-                background-color: #2a2a2a;
-                border: 2px solid #4a90d9;
-                border-radius: 8px;
-                padding: 10px;
-            }
-            QLabel, QSpinBox, QComboBox {
-                color: white !important;
-                background-color: #3a3a3a !important;
-                border: 1px solid #4a4a4a !important;
-                font-size: 9pt;
-            }
-            QListWidget {
-                background-color: #2a2a2a !important;
-                color: white !important;
-                border: 1px solid #4a4a4a !important;
-            }
+        # ── Combined Right Panel: Metrics + Widgets (compact dark theme) ──
+        right_panel = QWidget()
+        right_panel.setStyleSheet("""
+            QWidget { background-color: #1e1e1e; }
+            QFrame { background-color: #252525; border: 1px solid #3a3a3a; border-radius: 6px; }
+            QLabel { color: #d4d4d4; background-color: transparent; border: none; }
         """)
-        
-        metrics_container = QVBoxLayout(metrics_main_panel)
-        metrics_container.setContentsMargins(0, 0, 0, 0)
-        metrics_container.setSpacing(10)
-        
-        # Title
-        self._metrics_title = QLabel("📈 Learning Metrics")
-        self._metrics_title.setStyleSheet("""
-            font-size: 16pt;
-            font-weight: bold;
-            color: #1976D2;
-            padding-bottom: 8px;
-            border-bottom: 2px solid #BBDEFB;
-        """)
-        metrics_container.addWidget(self._metrics_title)
-        
-        # Metrics grid
-        metrics_grid = QGridLayout()
-        metrics_grid.setSpacing(10)
-        
+        right_outer = QVBoxLayout(right_panel)
+        right_outer.setContentsMargins(2, 2, 2, 2)
+        right_outer.setSpacing(3)
+
+        # -- Learning Metrics (compact) --
+        metrics_frame = QFrame()
+        metrics_frame.setStyleSheet("QFrame { background-color: #252525; border: 1px solid #3a3a3a; border-radius: 6px; }")
+        metrics_layout = QVBoxLayout(metrics_frame)
+        metrics_layout.setContentsMargins(6, 4, 6, 4)
+        metrics_layout.setSpacing(2)
+        metrics_title = QLabel("Learning Metrics")
+        metrics_title.setStyleSheet("font-size: 11pt; font-weight: bold; color: #4a90d9; padding: 2px; background: transparent;")
+        metrics_layout.addWidget(metrics_title)
+        mg = QGridLayout()
+        mg.setSpacing(3)
         self._episodes_label = QLabel("Episodes: 0")
         self._steps_label = QLabel("Step: 0")
-        self._total_reward_label = QLabel("Total Reward: 0.0")
-        self._avg_reward_label = QLabel("Avg Reward: 0.0")
-        self._best_reward_label = QLabel("Best Reward: 0.0")
-        
-        self._episodes_label.setStyleSheet("""
-            font-size: 13pt;
-            font-weight: bold;
-            color: #424242;
-            padding: 8px 12px;
-            background-color: white;
-            border-radius: 4px;
-        """)
-        self._steps_label.setStyleSheet(self._episodes_label.styleSheet())
-        self._total_reward_label.setStyleSheet("""
-            font-size: 13pt;
-            font-weight: bold;
-            color: #2E7D32;
-            padding: 8px 12px;
-            background-color: #E8F5E9;
-            border-radius: 4px;
-        """)
-        self._avg_reward_label.setStyleSheet("""
-            font-size: 13pt;
-            font-weight: bold;
-            color: #1565C0;
-            padding: 8px 12px;
-            background-color: #E3F2FD;
-            border-radius: 4px;
-        """)
-        self._best_reward_label.setStyleSheet("""
-            font-size: 15pt;
-            font-weight: bold;
-            color: white;
-            padding: 10px 15px;
-            background-color: #4CAF50;
-            border-radius: 6px;
-        """)
-        
-        metrics_grid.addWidget(self._episodes_label, 0, 0)
-        metrics_grid.addWidget(self._steps_label, 0, 1)
-        metrics_grid.addWidget(self._total_reward_label, 1, 0)
-        metrics_grid.addWidget(self._avg_reward_label, 1, 1)
-        metrics_grid.addWidget(self._best_reward_label, 2, 0, 1, 2)
-        
-        metrics_container.addLayout(metrics_grid)
-        metrics_outer_layout.addWidget(metrics_main_panel, 1)
+        self._total_reward_label = QLabel("Total Reward: --")
+        self._avg_reward_label = QLabel("Avg Reward: --")
+        self._best_reward_label = QLabel("Best Reward: --")
+        _mlbl = "font-size: 10pt; font-weight: bold; padding: 3px 6px; border-radius: 3px;"
+        self._episodes_label.setStyleSheet(f"{_mlbl} color: #d4d4d4; background-color: #2a2a2a;")
+        self._steps_label.setStyleSheet(f"{_mlbl} color: #d4d4d4; background-color: #2a2a2a;")
+        self._total_reward_label.setStyleSheet(f"{_mlbl} color: #81c784; background-color: #1b3a1b;")
+        self._avg_reward_label.setStyleSheet(f"{_mlbl} color: #64b5f6; background-color: #1a2a3a;")
+        self._best_reward_label.setStyleSheet(f"{_mlbl} color: white; background-color: #2e7d32; font-size: 11pt; padding: 4px 8px;")
+        mg.addWidget(self._episodes_label, 0, 0)
+        mg.addWidget(self._steps_label, 0, 1)
+        mg.addWidget(self._total_reward_label, 1, 0)
+        mg.addWidget(self._avg_reward_label, 1, 1)
+        mg.addWidget(self._best_reward_label, 2, 0, 1, 2)
+        metrics_layout.addLayout(mg)
+        right_outer.addWidget(metrics_frame)
 
-        # Add Learning Metrics Panel to right side (next to main UI)
-        root.addWidget(metrics_outer_panel)
-
-        # ── New Widgets Panel (KL Status + Curriculum + Action Loop + Returns + Quick Actions) ──
-        new_widgets_outer_panel = QWidget()
-        new_widgets_outer_layout = QVBoxLayout(new_widgets_outer_panel)
-        new_widgets_outer_layout.setContentsMargins(10, 10, 10, 10)
-        new_widgets_outer_layout.setSpacing(0)
-        
-        # Main widgets container (fixed width matching Learning Metrics)
-        new_widgets_main_panel = QWidget()
-        new_widgets_main_panel.setFixedWidth(290)  # Same as learning metrics panel
-        new_widgets_main_panel.setStyleSheet("""
-            QFrame {
-                background-color: #2a2a2a;
-                border: 2px solid #4a90d9;
-                border-radius: 8px;
-                padding: 10px;
-            }
-            QLabel, QSpinBox, QComboBox {
-                color: white !important;
-                background-color: #3a3a3a !important;
-                border: 1px solid #4a4a4a !important;
-                font-size: 9pt;
-            }
-            QListWidget, QPushButton {
-                background-color: #3a3a3a !important;
-                color: white !important;
-                border: 1px solid #4a4a4a !important;
-            }
-        """)
-        
-        new_widgets_container = QVBoxLayout(new_widgets_main_panel)
-        new_widgets_container.setContentsMargins(5, 5, 5, 5)
-        new_widgets_container.setSpacing(2)
-        
-        # KL Status Widget
+        # -- KL Status + Curriculum + Action Loop + Returns (compact) --
+        widgets_frame = QFrame()
+        widgets_frame.setStyleSheet("QFrame { background-color: #252525; border: 1px solid #3a3a3a; border-radius: 6px; }")
+        widgets_layout = QVBoxLayout(widgets_frame)
+        widgets_layout.setContentsMargins(4, 4, 4, 4)
+        widgets_layout.setSpacing(2)
         self.kl_status_widget = KLStatusWidget()
-        new_widgets_container.addWidget(self.kl_status_widget, 1)
-        
-        # Curriculum Progress Widget
+        widgets_layout.addWidget(self.kl_status_widget)
         self.curriculum_progress_widget = CurriculumProgressWidget()
-        new_widgets_container.addWidget(self.curriculum_progress_widget, 0)
-        
-        # Action Loop Widget
+        widgets_layout.addWidget(self.curriculum_progress_widget)
         self.action_loop_widget = ActionLoopWidget()
-        new_widgets_container.addWidget(self.action_loop_widget, 0)
-        
-        # Return Statistics Widget
+        widgets_layout.addWidget(self.action_loop_widget)
         self.return_statistics_widget = ReturnStatisticsWidget()
-        new_widgets_container.addWidget(self.return_statistics_widget, 1)
-        
-        # Quick Actions Widget
+        widgets_layout.addWidget(self.return_statistics_widget)
+        right_outer.addWidget(widgets_frame)
+
+        # -- Quick Actions --
+        qa_frame = QFrame()
+        qa_frame.setStyleSheet("QFrame { background-color: #252525; border: 1px solid #3a3a3a; border-radius: 6px; }")
+        qa_layout = QVBoxLayout(qa_frame)
+        qa_layout.setContentsMargins(4, 4, 4, 4)
+        qa_layout.setSpacing(2)
         self.quick_actions_widget = QuickActionsWidget()
-        new_widgets_container.addWidget(self.quick_actions_widget, 0)
+        qa_layout.addWidget(self.quick_actions_widget)
+        right_outer.addWidget(qa_frame)
 
-        # Training Dashboard Widget
+        # -- Training Dashboard (plots) --
+        dash_frame = QFrame()
+        dash_frame.setStyleSheet("QFrame { background-color: #252525; border: 1px solid #3a3a3a; border-radius: 6px; }")
+        dash_layout = QVBoxLayout(dash_frame)
+        dash_layout.setContentsMargins(4, 4, 4, 4)
+        dash_layout.setSpacing(2)
         self.dashboard = TrainingDashboardWidget()
-        new_widgets_container.addWidget(self.dashboard, 1)
+        dash_layout.addWidget(self.dashboard)
+        right_outer.addWidget(dash_frame, 1)
 
-        # Connect QuickActionsWidget signals to MainWindow handler
+        # Connect QuickActionsWidget signals
         self.quick_actions_widget.cmd_boost_entropy.connect(self._on_quick_boost_entropy)
         self.quick_actions_widget.cmd_pause_training.connect(self._on_quick_pause)
         self.quick_actions_widget.cmd_resume_training.connect(self._on_quick_resume)
         self.quick_actions_widget.cmd_stop_training.connect(self._on_quick_stop)
 
-        new_widgets_outer_layout.addWidget(new_widgets_main_panel, 1)
-
-        # Add to main window central widget (as separate panel on far right, next to learning metrics)
-        root.addWidget(new_widgets_outer_panel)
+        root.addWidget(right_panel)
 
     # ── LEFT COLUMN ──
 
@@ -550,6 +467,11 @@ class MainWindow(QMainWindow):
         self.watch_override_stage_chk.toggled.connect(
             self._watch_stage_mode_changed)
         watch_lay.addWidget(self.watch_override_stage_chk)
+
+        self.watch_visual_chk = QCheckBox("Визуализация")
+        self.watch_visual_chk.setStyleSheet(STYLE_SMALL)
+        self.watch_visual_chk.setChecked(False)
+        watch_lay.addWidget(self.watch_visual_chk)
 
         watch_lay.addWidget(QLabel("Stage:"))
         self.stage_combo = QComboBox()
@@ -1232,6 +1154,14 @@ class MainWindow(QMainWindow):
             eta = f" ~{int((m.total - m.done) / fps // 60)}min"
         self.status_label.setText(
             f"FPS {fps:.0f} best {m.best_reward:.1f} ep{m.episodes}{eta}")
+
+        # Update Learning Metrics labels
+        self._episodes_label.setText(f"Episodes: {m.episodes}")
+        self._steps_label.setText(f"Step: {m.done:,}")
+        self._best_reward_label.setText(f"Best Reward: {m.best_reward:.2f}")
+        avg_ret = m.avg_return if m.avg_return != 0 else 0.0
+        self._avg_reward_label.setText(f"Avg Return: {avg_ret:.2f}")
+        self._total_reward_label.setText(f"Episodes: {m.n_episodes_for_stats} (last 50)")
 
         # KL Status Widget
         if m.kl is not None:

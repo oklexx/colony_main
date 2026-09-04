@@ -251,6 +251,43 @@ def _run_train_inner(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_
 
     def progress_cb(metrics, extra_data=None) -> None:
         try:
+            import numpy as np
+            avg_ret = 0.0
+            med_ret = 0.0
+            max_ret = 0.0
+            min_ret = 0.0
+            n_for_stats = 0
+            top_actions = {}
+            loop_detected = False
+            loop_action_name = None
+            envs_with_loops = 0
+            cur_stage = 0
+            cur_progress = 0.0
+            cur_actions = ""
+            cur_next = None
+            cur_upcoming = []
+
+            if hasattr(metrics, '_ep_returns') and metrics._ep_returns:
+                recent = metrics._ep_returns[-50:]
+                avg_ret = float(np.mean(recent))
+                med_ret = float(np.median(recent))
+                max_ret = float(np.max(recent))
+                min_ret = float(np.min(recent))
+                n_for_stats = len(metrics._ep_returns)
+
+            if hasattr(metrics, '_action_names') and hasattr(metrics, '_action_history'):
+                counts = [0] * len(metrics._action_names)
+                for _, aname in metrics._action_history[-1000:]:
+                    try:
+                        idx = metrics._action_names.index(aname)
+                        counts[idx] += 1
+                    except ValueError:
+                        pass
+                total_c = max(sum(counts), 1)
+                for i, c in enumerate(counts[:5]):
+                    if i < len(metrics._action_names):
+                        top_actions[metrics._action_names[i]] = round(c / total_c * 100, 2)
+
             mf.write(P.ProgressMsg(
                 done=metrics.total_timesteps,
                 total=cfg.total_timesteps,
@@ -261,22 +298,22 @@ def _run_train_inner(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_
                 value_loss=float(getattr(metrics, 'value_loss', 0.0)),
                 entropy=float(getattr(metrics, 'entropy', 0.0)),
                 kl=float(getattr(metrics, 'approx_kl', 0.0)),
-                ent_coef=float(getattr(metrics, 'ent_coef', 0.005)),
-                top_actions={},
-                loop_detected=False,
-                loop_action_name=None,
-                envs_with_loops=0,
-                curriculum_stage_active=0,
-                curriculum_next_at_step=None,
-                curriculum_stage=0,
-                curriculum_progress_percent=0.0,
-                curriculum_available_actions="",
-                curriculum_upcoming_stages=[],
-                avg_return=0.0,
-                median_return=0.0,
-                max_return=0.0,
-                min_return=0.0,
-                n_episodes_for_stats=0,
+                ent_coef=float(getattr(metrics, 'ent_coef', cfg.ent_coef)),
+                top_actions=top_actions,
+                loop_detected=loop_detected,
+                loop_action_name=loop_action_name,
+                envs_with_loops=envs_with_loops,
+                curriculum_stage_active=cur_stage,
+                curriculum_next_at_step=cur_next,
+                curriculum_stage=cur_stage,
+                curriculum_progress_percent=cur_progress,
+                curriculum_available_actions=cur_actions,
+                curriculum_upcoming_stages=cur_upcoming,
+                avg_return=avg_ret,
+                median_return=med_ret,
+                max_return=max_ret,
+                min_return=min_ret,
+                n_episodes_for_stats=n_for_stats,
             ))
         except Exception as e:
             try:

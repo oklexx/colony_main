@@ -27,95 +27,50 @@ class ActionLoopWidget(QWidget):
     
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        
-        # Alert label (hidden by default)
+        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setSpacing(2)
+
         self._alert_frame = QFrame()
         self._alert_frame.setVisible(False)
-        self._alert_frame.setStyleSheet("""
-            background-color: rgba(255, 0, 0, 0.1);
-            border: 2px solid red;
-            border-radius: 8px;
-            padding: 15px;
-        """)
-        
+        self._alert_frame.setStyleSheet("background-color: #3e1a1a; border: 1px solid #c62828; border-radius: 4px; padding: 4px;")
         alert_layout = QVBoxLayout(self._alert_frame)
-        
-        # Alert icon/text
-        self._alert_label = QLabel("⚠️ ACTION LOOP DETECTED")
-        self._alert_label.setStyleSheet("""
-            font-size: 14pt;
-            font-weight: bold;
-            color: red;
-        """)
+        alert_layout.setContentsMargins(4, 2, 4, 2)
+        alert_layout.setSpacing(1)
+
+        self._alert_label = QLabel("LOOP DETECTED")
+        self._alert_label.setStyleSheet("font-size: 9pt; font-weight: bold; color: #ef5350; background: transparent;")
         alert_layout.addWidget(self._alert_label)
-        
-        # Action name display
-        self._action_name_label = QLabel("Repeated action: MOVE_RIGHT")
-        self._action_name_label.setStyleSheet("""
-            font-size: 12pt;
-            font-weight: bold;
-            color: #d32f2f;
-            padding: 5px 0;
-        """)
+
+        self._action_name_label = QLabel("Action: --")
+        self._action_name_label.setStyleSheet("font-size: 8pt; color: #e57373; background: transparent;")
         alert_layout.addWidget(self._action_name_label)
-        
-        # Consecutive count and threshold
-        self._stats_label = QLabel(f"Consecutive: 10 / {self._consecutive_threshold}")
-        self._stats_label.setStyleSheet("""
-            font-size: 10pt;
-            color: #c62828;
-        """)
+
+        self._stats_label = QLabel("Consecutive: 0 / 3")
+        self._stats_label.setStyleSheet("font-size: 8pt; color: #ef9a9a; background: transparent;")
         alert_layout.addWidget(self._stats_label)
-        
+
         layout.addWidget(self._alert_frame)
-        
-        # Hidden spacer (shown when no alert)
-        self._alert_spacer = QLabel(" ")
-        self._alert_spacer.setAlignment(Qt.AlignCenter)
+
+        self._alert_spacer = QLabel("")
         self._alert_spacer.setVisible(True)
-        self._alert_spacer.setStyleSheet("""
-            background-color: transparent;
-            border: none;
-            padding: 15px;
-        """)
         layout.addWidget(self._alert_spacer)
-        
-        # Statistics grid
-        stats_frame = QFrame()
-        stats_frame.setVisible(True)
-        stats_layout = QVBoxLayout(stats_frame)
-        stats_layout.setContentsMargins(0, 0, 0, 0)
-        
-        stats_title = QLabel("Loop Detection Statistics")
-        stats_title.setStyleSheet("""
-            font-weight: bold;
-            font-size: 11pt;
-            padding-bottom: 5px;
-            border-bottom: 1px solid #eee;
-        """)
-        stats_layout.addWidget(stats_title)
-        
-        # Stats grid
+
+        title = QLabel("Loop Detection")
+        title.setStyleSheet("font-size: 10pt; font-weight: bold; color: #4a90d9; padding: 2px; background: transparent;")
+        layout.addWidget(title)
+
         self._stats_grid = QTableWidget()
-        self._stats_grid.setColumnCount(3)
-        self._stats_grid.setHorizontalHeaderLabels(["Metric", "Value", "Threshold"])
+        self._stats_grid.setColumnCount(2)
+        self._stats_grid.setHorizontalHeaderLabels(["Metric", "Value"])
         self._stats_grid.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self._stats_grid.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self._stats_grid.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self._stats_grid.setMaximumHeight(90)
         self._stats_grid.setStyleSheet("""
-            QTableWidget {
-                gridline-color: #eee;
-                alternate-background-color: #f9f9f9;
-            }
-            QTableWidgetItem {
-                padding: 5px;
-                border: none;
-            }
+            QTableWidget { background-color: #2a2a2a; color: #d4d4d4; gridline-color: #3a3a3a; border: 1px solid #3a3a3a; border-radius: 3px; font-size: 8pt; }
+            QTableWidget::item { padding: 2px; background: #2a2a2a; color: #d4d4d4; }
+            QHeaderView::section { background-color: #2a2a2a; color: #888; border: 1px solid #3a3a3a; padding: 2px; font-size: 8pt; }
         """)
-        stats_layout.addWidget(self._stats_grid)
-        
-        layout.addWidget(stats_frame)
+        layout.addWidget(self._stats_grid)
     
     def set_loop_status(
         self, 
@@ -178,21 +133,14 @@ class ActionLoopWidget(QWidget):
         self._update_stats_grid(history_stats)
     
     def _update_stats_grid(self, history_stats: Dict = None):
-        """Update the statistics table with current data."""
-        self._stats_grid.setRowCount(5)
-        
+        self._stats_grid.setRowCount(4)
         rows_data = [
-            ("Envs in Loops", f"{self._envs_with_loops}", ""),
-            ("Loop Rate", f"{(self._envs_with_loops * 100 / max(8, self._envs_with_loops + (8-self._envs_with_loops))):.1f}%", "N/A"),
-            ("Threshold", f"{self._consecutive_threshold}", ""),
-            ("Status", "ACTIVE" if self._loop_detected else "NORMAL", ""),
-            ("Action", self._loop_action_name or "N/A", "")
+            ("Envs in Loops", str(self._envs_with_loops)),
+            ("Status", "ACTIVE" if self._loop_detected else "Normal"),
+            ("Action", self._loop_action_name or "--"),
+            ("Threshold", str(self._consecutive_threshold)),
         ]
-        
         self._stats_grid.clearContents()
-        
-        for i, (metric, value, threshold) in enumerate(rows_data[:self._stats_grid.rowCount()]):
+        for i, (metric, value) in enumerate(rows_data):
             self._stats_grid.setItem(i, 0, QTableWidgetItem(metric))
             self._stats_grid.setItem(i, 1, QTableWidgetItem(str(value)))
-            if threshold:
-                self._stats_grid.setItem(i, 2, QTableWidgetItem(str(threshold)))

@@ -45,59 +45,59 @@ class TrainingDashboardWidget(QWidget):
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(5, 5, 5, 5)
-        layout.setSpacing(5)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(3)
 
         title_label = QLabel("Training Dashboard")
-        title_label.setAlignment(Qt.AlignCenter)
-        title_label.setStyleSheet("""
-            font-size: 18pt;
-            font-weight: bold;
-            color: #2196F3;
-            padding: 10px;
-            background-color: white;
-        """)
+        title_label.setStyleSheet("font-size: 10pt; font-weight: bold; color: #4a90d9; padding: 2px; background: transparent;")
         layout.addWidget(title_label)
 
         splitter = QSplitter(Qt.Horizontal)
 
         # KL plot
         kl_frame = QFrame()
-        kl_frame.setStyleSheet("background-color: #fafafa; border-radius: 8px;")
+        kl_frame.setStyleSheet("QFrame { background-color: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; }")
         kl_layout = QVBoxLayout(kl_frame)
-        kl_layout.setContentsMargins(0, 0, 0, 0)
-        kl_title = QLabel("KL Divergence")
-        kl_title.setStyleSheet("font-size: 12pt; font-weight: bold; padding: 8px; background-color: #e3f2fd; border-radius: 4px;")
+        kl_layout.setContentsMargins(2, 2, 2, 2)
+        kl_title = QLabel("KL")
+        kl_title.setStyleSheet("font-size: 8pt; color: #888; padding: 1px; background: transparent;")
         kl_layout.addWidget(kl_title)
-        self._kl_plot_widget = pg.PlotWidget(title="KL Divergence", background='w', showGrid=(True, False))
-        self._kl_plot_widget.setMouseEnabled(x=True, y=True)
+        self._kl_plot_widget = pg.PlotWidget(background='#1e1e1e', showGrid=(True, True, '#333'))
+        self._kl_plot_widget.setMouseEnabled(x=False, y=False)
+        self._kl_plot_widget.hideAxis('bottom')
+        self._kl_plot_widget.hideAxis('left')
+        self._kl_plot_widget.setMinimumHeight(60)
         kl_layout.addWidget(self._kl_plot_widget)
         splitter.addWidget(kl_frame)
 
         # Entropy plot
         ent_frame = QFrame()
-        ent_frame.setStyleSheet("background-color: #fafafa; border-radius: 8px;")
+        ent_frame.setStyleSheet("QFrame { background-color: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; }")
         ent_layout = QVBoxLayout(ent_frame)
-        ent_layout.setContentsMargins(0, 0, 0, 0)
+        ent_layout.setContentsMargins(2, 2, 2, 2)
         ent_title = QLabel("Entropy")
-        ent_title.setStyleSheet("font-size: 12pt; font-weight: bold; padding: 8px; background-color: #e3f2fd; border-radius: 4px;")
+        ent_title.setStyleSheet("font-size: 8pt; color: #888; padding: 1px; background: transparent;")
         ent_layout.addWidget(ent_title)
-        self._entropy_plot_widget = pg.PlotWidget(title="Entropy", background='w', showGrid=(True, False))
-        self._entropy_plot_widget.setMouseEnabled(x=True, y=True)
+        self._entropy_plot_widget = pg.PlotWidget(background='#1e1e1e', showGrid=(True, True, '#333'))
+        self._entropy_plot_widget.setMouseEnabled(x=False, y=False)
+        self._entropy_plot_widget.hideAxis('bottom')
+        self._entropy_plot_widget.hideAxis('left')
+        self._entropy_plot_widget.setMinimumHeight(60)
         ent_layout.addWidget(self._entropy_plot_widget)
         splitter.addWidget(ent_frame)
 
         # Action distribution plot
         act_frame = QFrame()
-        act_frame.setStyleSheet("background-color: #fafafa; border-radius: 8px;")
+        act_frame.setStyleSheet("QFrame { background-color: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; }")
         act_layout = QVBoxLayout(act_frame)
-        act_layout.setContentsMargins(0, 0, 0, 0)
-        act_title = QLabel("Action Distribution")
-        act_title.setStyleSheet("font-size: 12pt; font-weight: bold; padding: 8px; background-color: #e3f2fd; border-radius: 4px;")
+        act_layout.setContentsMargins(2, 2, 2, 2)
+        act_title = QLabel("Actions")
+        act_title.setStyleSheet("font-size: 8pt; color: #888; padding: 1px; background: transparent;")
         act_layout.addWidget(act_title)
-        self._action_plot_widget = pg.PlotWidget(title="Action Distribution", background='w', showGrid=(True, False))
-        self._action_plot_widget.setLabel('left', 'Frequency (%)', units='')
-        self._action_plot_widget.setLabel('bottom', 'Action Index', '')
+        self._action_plot_widget = pg.PlotWidget(background='#1e1e1e', showGrid=(True, True, '#333'))
+        self._action_plot_widget.setLabel('left', '%', units='')
+        self._action_plot_widget.setLabel('bottom', '', units='')
+        self._action_plot_widget.setMinimumHeight(60)
         act_layout.addWidget(self._action_plot_widget)
         splitter.addWidget(act_frame)
 

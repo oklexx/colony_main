@@ -28,138 +28,63 @@ class QuickActionsWidget(QWidget):
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(4)
 
         title_label = QLabel("Quick Actions")
         title_label.setStyleSheet("""
-            font-size: 16pt;
+            font-size: 11pt;
             font-weight: bold;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #2196F3;
+            color: #4a90d9;
+            padding: 2px;
+            border-bottom: 1px solid #3a3a3a;
         """)
         layout.addWidget(title_label)
 
-        # Pause/Resume section
-        pause_frame = QFrame()
-        pause_frame.setStyleSheet("background-color: #f5f5f5; border-radius: 8px; padding: 10px;")
-        pause_layout = QVBoxLayout(pause_frame)
+        # Pause/Resume
+        self._status_label = QLabel("Status: IDLE")
+        self._status_label.setStyleSheet("font-size: 9pt; color: #888; padding: 2px; background: transparent;")
+        layout.addWidget(self._status_label)
 
-        self._status_label = QLabel("Training: RUNNING")
-        self._status_label.setStyleSheet("""
-            font-size: 11pt;
-            font-weight: bold;
-            color: #4caf50;
-            padding: 8px;
-            background-color: white;
-            border-radius: 4px;
-        """)
-        pause_layout.addWidget(self._status_label)
-
-        pause_resume_buttons = QHBoxLayout()
-
-        self._pause_button = QPushButton("Pause Training")
-        self._pause_button.setStyleSheet("""
+        btn_style = """
             QPushButton {
-                background-color: #ff9800;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 6px;
-                font-weight: bold;
+                background-color: #3a3a3a;
+                color: #d4d4d4;
+                border: 1px solid #4a4a4a;
+                border-radius: 4px;
+                padding: 6px 10px;
+                font-size: 9pt;
+                min-height: 20px;
             }
-            QPushButton:hover {
-                background-color: #f57c00;
-            }
-        """)
+            QPushButton:hover { background-color: #4a4a4a; }
+            QPushButton:disabled { color: #666; background-color: #2a2a2a; }
+        """
+
+        pr_layout = QHBoxLayout()
+        self._pause_button = QPushButton("Pause")
+        self._pause_button.setStyleSheet(btn_style + "QPushButton { background-color: #e65100; color: white; } QPushButton:hover { background-color: #bf360c; }")
         self._pause_button.clicked.connect(self._on_pause_clicked)
-        pause_resume_buttons.addWidget(self._pause_button)
+        pr_layout.addWidget(self._pause_button)
 
-        self._resume_button = QPushButton("Resume Training")
+        self._resume_button = QPushButton("Resume")
         self._resume_button.setEnabled(False)
-        self._resume_button.setStyleSheet("""
-            QPushButton {
-                background-color: #2196F3;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 6px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-        """)
+        self._resume_button.setStyleSheet(btn_style + "QPushButton { background-color: #1565c0; color: white; } QPushButton:hover { background-color: #0d47a1; }")
         self._resume_button.clicked.connect(self._on_resume_clicked)
-        pause_resume_buttons.addWidget(self._resume_button)
+        pr_layout.addWidget(self._resume_button)
+        layout.addLayout(pr_layout)
 
-        pause_layout.addLayout(pause_resume_buttons)
-        layout.addWidget(pause_frame)
-
-        # Entropy Boost section
-        boost_frame = QFrame()
-        boost_frame.setStyleSheet("background-color: #f5f5f5; border-radius: 8px; padding: 10px;")
-        boost_layout = QVBoxLayout(boost_frame)
-
-        boost_label = QLabel("Boost Entropy x2")
-        boost_label.setStyleSheet("""
-            font-size: 12pt;
-            font-weight: bold;
-            color: #ff5722;
-            padding-bottom: 8px;
-        """)
-        boost_layout.addWidget(boost_label)
-
-        self._boost_button = QPushButton("Boost Entropy (x2)")
-        self._boost_button.setStyleSheet("""
-            QPushButton {
-                background-color: #ff5722;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 6px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #e64a19;
-            }
-        """)
+        # Boost + Reset
+        rr_layout = QHBoxLayout()
+        self._boost_button = QPushButton("Boost Entropy x2")
+        self._boost_button.setStyleSheet(btn_style + "QPushButton { background-color: #bf360c; color: white; } QPushButton:hover { background-color: #8b2500; }")
         self._boost_button.clicked.connect(self._on_boost_clicked)
-        boost_layout.addWidget(self._boost_button)
+        rr_layout.addWidget(self._boost_button)
 
-        layout.addWidget(boost_frame)
-
-        # Reset Curriculum section
-        reset_frame = QFrame()
-        reset_frame.setStyleSheet("background-color: #f5f5f5; border-radius: 8px; padding: 10px;")
-        reset_layout = QVBoxLayout(reset_frame)
-
-        reset_label = QLabel("Reset Curriculum")
-        reset_label.setStyleSheet("""
-            font-size: 12pt;
-            font-weight: bold;
-            color: #9c27b0;
-            padding-bottom: 8px;
-        """)
-        reset_layout.addWidget(reset_label)
-
-        self._reset_button = QPushButton("Reset to Stage 0")
-        self._reset_button.setStyleSheet("""
-            QPushButton {
-                background-color: #9c27b0;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 6px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #7b1fa2;
-            }
-        """)
+        self._reset_button = QPushButton("Reset Stage 0")
+        self._reset_button.setStyleSheet(btn_style + "QPushButton { background-color: #6a1b9a; color: white; } QPushButton:hover { background-color: #4a148c; }")
         self._reset_button.clicked.connect(self._on_reset_clicked)
-        reset_layout.addWidget(self._reset_button)
-
-        layout.addWidget(reset_frame)
+        rr_layout.addWidget(self._reset_button)
+        layout.addLayout(rr_layout)
 
     def _log(self, msg: str):
         print(f"[QuickActions] {msg}")

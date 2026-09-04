@@ -39,8 +39,8 @@ class TestMainWindowCreation:
         assert "Сахалинская колония" in main_window.windowTitle()
 
     def test_minimum_size(self, main_window):
-        assert main_window.minimumWidth() == 980
-        assert main_window.minimumHeight() == 600
+        assert main_window.minimumWidth() == 1400
+        assert main_window.minimumHeight() == 700
 
 
 class TestLeftColumn:
@@ -147,7 +147,7 @@ class TestRightColumnWatchStage:
     def test_watch_default_state(self, main_window):
         assert main_window.watch_use_model_stage_chk.isChecked() is True
         assert main_window.watch_override_stage_chk.isChecked() is False
-        assert main_window.watch_override_stage_chk.isEnabled() is False
+        assert main_window.watch_override_stage_chk.isEnabled() is True
 
     def test_watch_stage_mode_use_model(self, main_window):
         main_window.watch_override_stage_chk.setChecked(False)

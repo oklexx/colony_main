@@ -31,35 +31,26 @@ class ReturnStatisticsWidget(QWidget):
     
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        
-        # Statistics panel
-        stats_frame = QFrame()
-        stats_layout = QVBoxLayout(stats_frame)
-        stats_layout.setContentsMargins(10, 5, 10, 5)
-        
-        # Labels for each statistic
-        self._avg_label = self._create_stat_label("Average Return:")
-        self._med_label = self._create_stat_label("Median Return:")
-        self._max_label = self._create_stat_label("Maximum Return:")
-        self._min_label = self._create_stat_label("Minimum Return:")
-        
-        stats_layout.addWidget(self._avg_label)
-        stats_layout.addWidget(self._med_label)
-        stats_layout.addWidget(self._max_label)
-        stats_layout.addWidget(self._min_label)
-        
-        layout.addWidget(stats_frame)
-    
+        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setSpacing(2)
+
+        title = QLabel("Return Statistics")
+        title.setStyleSheet("font-size: 10pt; font-weight: bold; color: #4a90d9; padding: 2px; background: transparent;")
+        layout.addWidget(title)
+
+        self._avg_label = self._create_stat_label("Avg:")
+        self._med_label = self._create_stat_label("Median:")
+        self._max_label = self._create_stat_label("Max:")
+        self._min_label = self._create_stat_label("Min:")
+
+        layout.addWidget(self._avg_label)
+        layout.addWidget(self._med_label)
+        layout.addWidget(self._max_label)
+        layout.addWidget(self._min_label)
+
     def _create_stat_label(self, prefix: str) -> QLabel:
-        """Create a label for displaying a statistic."""
-        label = QLabel(f"{prefix} {0:.1f}")
-        label.setStyleSheet("""
-            font-size: 12pt;
-            padding: 5px;
-            border-radius: 4px;
-            background-color: #e3f2fd;
-        """)
+        label = QLabel(f"{prefix} --")
+        label.setStyleSheet("font-size: 9pt; padding: 2px 4px; color: #d4d4d4; background: transparent;")
         return label
     
     def update_statistics(
@@ -102,48 +93,17 @@ class ReturnStatisticsWidget(QWidget):
         self._update_display()
     
     def _update_display(self):
-        """Update the widget display with current statistics."""
-        # Average label (highlighted)
-        avg_text = f"{self._avg_return:.2f}"
-        if self._avg_return >= 10:
-            style = "background-color: #4caf50;"
-        else:
-            style = "background-color: #ffcdd2;"
-        
-        self._avg_label.setText(f"Average Return: {avg_text}")
-        self._avg_label.setStyleSheet(f"""
-            font-size: 12pt;
-            padding: 8px;
-            border-radius: 4px;
-            font-weight: bold;
-            color: white;
-        """)
-        
-        # Median label
-        med_text = f"{self._median_return:.2f}"
-        self._med_label.setText(f"Median Return: {med_text}")
-        self._med_label.setStyleSheet("font-size: 11pt; padding: 5px; background-color: #e3f2fd;")
-        
-        # Max label (highlighted in green if good)
-        max_text = f"{self._max_return:.2f}"
-        if self._max_return >= 15:
-            style_max = "background-color: #4caf50;"
-        elif self._max_return >= 8:
-            style_max = "background-color: #8bc34a;"
-        else:
-            style_max = "background-color: #ffcdd2;"
-        
-        self._max_label.setText(f"Maximum Return: {max_text}")
-        self._max_label.setStyleSheet(f"""
-            font-size: 11pt;
-            padding: 5px;
-            background-color: {style_max};
-        """)
-        
-        # Min label
-        min_text = f"{self._min_return:.2f}"
-        self._min_label.setText(f"Minimum Return: {min_text}")
-        self._min_label.setStyleSheet("font-size: 11pt; padding: 5px; background-color: #e3f2fd;")
+        self._avg_label.setText(f"Avg: {self._avg_return:.2f}")
+        self._avg_label.setStyleSheet(f"font-size: 9pt; padding: 2px 4px; color: #81c784; background: transparent;")
+
+        self._med_label.setText(f"Median: {self._median_return:.2f}")
+        self._med_label.setStyleSheet("font-size: 9pt; padding: 2px 4px; color: #d4d4d4; background: transparent;")
+
+        self._max_label.setText(f"Max: {self._max_return:.2f}")
+        self._max_label.setStyleSheet(f"font-size: 9pt; padding: 2px 4px; color: #64b5f6; background: transparent;")
+
+        self._min_label.setText(f"Min: {self._min_return:.2f}")
+        self._min_label.setStyleSheet("font-size: 9pt; padding: 2px 4px; color: #e57373; background: transparent;")
     
     def add_return(self, return_value: float):
         """Add a single return value to history."""

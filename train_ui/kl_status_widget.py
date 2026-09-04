@@ -24,45 +24,45 @@ class KLStatusWidget(QWidget):
     
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        
-        # Status indicator label
+        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setSpacing(2)
+
+        title = QLabel("KL Divergence")
+        title.setStyleSheet("font-size: 10pt; font-weight: bold; color: #4a90d9; padding: 2px; background: transparent;")
+        layout.addWidget(title)
+
         self._status_label = QLabel("OPTIMAL")
         self._status_label.setAlignment(Qt.AlignCenter)
         self._status_label.setStyleSheet("""
-            background-color: lime;
-            color: black;
+            background-color: #2e7d32;
+            color: white;
             font-weight: bold;
             border-radius: 4px;
-            padding: 5px 15px;
-            font-size: 12pt;
+            padding: 3px 10px;
+            font-size: 10pt;
         """)
         layout.addWidget(self._status_label)
-        
-        # Progress bar container
+
         bar_container = QFrame()
-        bar_container.setFixedHeight(20)
+        bar_container.setFixedHeight(16)
+        bar_container.setStyleSheet("background: transparent; border: none;")
         bar_layout = QHBoxLayout(bar_container)
+        bar_layout.setContentsMargins(0, 0, 0, 0)
         bar_layout.addStretch()
-        
-        # Progress bar with custom colors
+
         self._progress_bar = QProgressBar(self)
         self._progress_bar.setValue(50)
         self._progress_bar.setTextVisible(False)
         self._progress_bar.setRange(0, 100)
+        self._progress_bar.setFixedHeight(8)
         bar_layout.addWidget(self._progress_bar)
         bar_layout.addStretch()
-        
-        # Info label with exact values
-        self._info_label = QLabel("KL: 0.025 | ent_coef: 0.005")
-        self._info_label.setStyleSheet("""
-            font-size: 10pt;
-            color: #888;
-            padding: 3px 0;
-        """)
-        bar_layout.addWidget(self._info_label)
-        
+
         layout.addWidget(bar_container)
+
+        self._info_label = QLabel("KL: 0.025 | ent_coef: 0.005")
+        self._info_label.setStyleSheet("font-size: 9pt; color: #888; padding: 1px; background: transparent;")
+        layout.addWidget(self._info_label)
     
     def update(self, kl: float, ent_coef: float = None):
         """Update widget with new KL value.
@@ -76,112 +76,40 @@ class KLStatusWidget(QWidget):
         self._update_info_label(kl, ent_coef)
     
     def _update_status(self, kl: float):
-        """Update status label with color coding."""
         if kl < self.kl_low:
             self._status_label.setText("LOW")
-            self._status_label.setStyleSheet("""
-                background-color: orange;
-                color: black;
-                font-weight: bold;
-                border-radius: 4px;
-                padding: 5px 15px;
-                font-size: 12pt;
-            """)
+            self._status_label.setStyleSheet("background-color: #e65100; color: white; font-weight: bold; border-radius: 4px; padding: 3px 10px; font-size: 10pt;")
         elif kl < self.kl_optimal:
             self._status_label.setText("OK")
-            self._status_label.setStyleSheet("""
-                background-color: lime;
-                color: black;
-                font-weight: bold;
-                border-radius: 4px;
-                padding: 5px 15px;
-                font-size: 12pt;
-            """)
+            self._status_label.setStyleSheet("background-color: #2e7d32; color: white; font-weight: bold; border-radius: 4px; padding: 3px 10px; font-size: 10pt;")
         elif kl < self.kl_high:
             self._status_label.setText("OPTIMAL")
-            self._status_label.setStyleSheet("""
-                background-color: turquoise;
-                color: black;
-                font-weight: bold;
-                border-radius: 4px;
-                padding: 5px 15px;
-                font-size: 12pt;
-            """)
+            self._status_label.setStyleSheet("background-color: #1565c0; color: white; font-weight: bold; border-radius: 4px; padding: 3px 10px; font-size: 10pt;")
         else:
             self._status_label.setText("HIGH")
-            self._status_label.setStyleSheet("""
-                background-color: red;
-                color: white;
-                font-weight: bold;
-                border-radius: 4px;
-                padding: 5px 15px;
-                font-size: 12pt;
-            """)
+            self._status_label.setStyleSheet("background-color: #c62828; color: white; font-weight: bold; border-radius: 4px; padding: 3px 10px; font-size: 10pt;")
     
     def _update_progress_bar(self, kl: float):
-        """Update progress bar (0.01-0.8 normalized to 0-100%)."""
-        # Normalize KL value to progress range
         min_kl = self.kl_low
         max_kl = self.kl_high
-        
         if max_kl > min_kl:
             progress = (kl - min_kl) / (max_kl - min_kl) * 100
-            # Cap at 0-100%
             progress = max(0, min(100, progress))
         else:
             progress = 50
-        
         self._progress_bar.setValue(int(progress))
-        
-        # Color code the bar based on status
         if kl < self.kl_low:
-            self._progress_bar.setStyleSheet("""
-                QProgressBar {
-                    background-color: orange;
-                    border: none;
-                    border-radius: 3px;
-                    text-align: center;
-                }
-                QProgressBar::chunk {
-                    background-color: orange;
-                }
-            """)
+            color = "#e65100"
         elif kl < self.kl_optimal:
-            self._progress_bar.setStyleSheet("""
-                QProgressBar {
-                    background-color: lime;
-                    border: none;
-                    border-radius: 3px;
-                    text-align: center;
-                }
-                QProgressBar::chunk {
-                    background-color: lime;
-                }
-            """)
+            color = "#2e7d32"
         elif kl < self.kl_high:
-            self._progress_bar.setStyleSheet("""
-                QProgressBar {
-                    background-color: turquoise;
-                    border: none;
-                    border-radius: 3px;
-                    text-align: center;
-                }
-                QProgressBar::chunk {
-                    background-color: turquoise;
-                }
-            """)
+            color = "#1565c0"
         else:
-            self._progress_bar.setStyleSheet("""
-                QProgressBar {
-                    background-color: red;
-                    border: none;
-                    border-radius: 3px;
-                    text-align: center;
-                }
-                QProgressBar::chunk {
-                    background-color: red;
-                }
-            """)
+            color = "#c62828"
+        self._progress_bar.setStyleSheet(f"""
+            QProgressBar {{ background-color: #2a2a2a; border: none; border-radius: 3px; }}
+            QProgressBar::chunk {{ background-color: {color}; border-radius: 3px; }}
+        """)
     
     def _update_info_label(self, kl: float, ent_coef: float = None):
         """Update info label with exact values."""
