@@ -61,23 +61,31 @@ class PPO:
             self._compiled = False
 
     def collect_step(
-        self, flat, minimap=None
+        self, flat, minimap=None, action_masks=None
     ) -> Dict[str, torch.Tensor]:
         """Get action, log_prob, value for current obs (no grad).
 
         In hybrid mode call as collect_step(flat, minimap); otherwise pass a
         single obs tensor as `flat`.
+        `action_masks`: [n_envs, n_actions] float tensor, 1.0=available, 0.0=blocked.
         """
         self.model.eval()
         with torch.no_grad():
-            if self.is_hybrid:
-                action, log_prob, value = self.model.get_action_and_value(flat, minimap)
-            else:
-                action, log_prob, value = self.model.get_action_and_value(flat)
+            logits, values = self.model(flat)
+            if action_masks is not None:
+                # Mask unavailable actions: set logits to -inf
+                logits = logits.masked_fill(action_masks == 0, float("-inf"))
+            dist = torch.distributions.Categorical(logits=logits)
+            action = dist.sample()
+            log_prob = dist.log_prob(action)
+            values = values.squeeze(-1)
+        # Clamp actions to valid range (prevent CUDA assert from NaN logits)
+        n_actions = self.model.n_actions
+        action = action.clamp(0, n_actions - 1)
         return {
             "action": action,
             "log_prob": log_prob,
-            "value": value,
+            "value": values,
         }
 
     def update(
@@ -105,6 +113,7 @@ class PPO:
                 returns = batch["returns"]
                 old_values = batch["values"]
                 flat = batch.get("flat", None) if self.is_hybrid else None
+                action_masks = batch.get("action_masks", None)
 
                 self.optimizer.zero_grad()
 
@@ -112,15 +121,19 @@ class PPO:
                     with torch.autocast(device_type=self.device.type, dtype=self.amp_dtype):
                         policy_loss, value_loss, entropy, approx_kl = self._compute_loss_components(
                             obs, actions, old_log_probs, advantages, returns, old_values,
-                            flat=flat
+                            flat=flat, action_masks=action_masks
                         )
                         loss = policy_loss + self.vf_coef * value_loss - self.ent_coef * entropy
                 else:
                     policy_loss, value_loss, entropy, approx_kl = self._compute_loss_components(
                         obs, actions, old_log_probs, advantages, returns, old_values,
-                        flat=flat
+                        flat=flat, action_masks=action_masks
                     )
                     loss = policy_loss + self.vf_coef * value_loss - self.ent_coef * entropy
+
+                if not torch.isfinite(loss):
+                    self.optimizer.zero_grad()
+                    continue
 
                 if self.use_amp and self.amp_dtype == torch.float16:
                     self.scaler.scale(loss).backward()
@@ -161,11 +174,15 @@ class PPO:
         returns: torch.Tensor,
         old_values: torch.Tensor,
         flat: Optional[torch.Tensor] = None,
+        action_masks: Optional[torch.Tensor] = None,
     ):
         if self.is_hybrid:
             logits, values = self.model(flat, obs)
         else:
             logits, values = self.model(obs)
+        # Apply action masks: set blocked actions to -inf
+        if action_masks is not None:
+            logits = logits.masked_fill(action_masks == 0, float("-inf"))
         dist = D.Categorical(logits=logits)
         new_log_probs = dist.log_prob(actions)
         entropy = dist.entropy().mean()

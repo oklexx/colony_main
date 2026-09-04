@@ -8,17 +8,40 @@ from typing import Any, Dict, List, Optional
 
 @dataclass
 class RewardConfig:
-    build_bonus: float = 5.0
-    chain_bonus: float = 0.5
-    chain_daily: float = 2.0
-    novelty: float = 20.0
-    daily_income: float = 0.1
-    sale_bonus: float = 0.1
-    tax_daily_bonus: float = 0.77
-    survival_bonus: float = 0.0
-    game_over_penalty: float = 20.0
+    # --- base bonuses ---
+    build_bonus: float = 1.0
+    chain_bonus: float = 1.0
+    chain_daily: float = 0.5
+    novelty: float = 15.0
+    daily_income: float = 0.3
+    sale_bonus: float = 0.2
+    tax_daily_bonus: float = 0.3
+    survival_bonus: float = 0.1
+    game_over_penalty: float = 10.0
+    diversity_bonus: float = 8.0
+    # --- penalties for errors / special actions ---
+    error_penalty: float = -5.0
+    preserve_penalty: float = -8.0
+    demolish_penalty: float = -3.0
+    manual_tax_penalty: float = -0.5
+    build_cost_penalty: float = 0.0001
+    idle_build_penalty: float = -10.0
+    idle_build_threshold_days: int = 3
+    survival_coeff: float = 0.001
+    # --- milestone bonuses ---
+    milestone_base_bonus: float = 10.0
+    milestone_people_bonus: float = 2.0
+    milestone_day_bonus: float = 2.0
+    milestone_year_bonus: float = 5.0
+    # --- spatial bonuses ---
+    proximity_bonus: float = 0.5
+    # --- clip raw reward ---
+    clip_reward_min: float = -10.0
+    clip_reward_max: float = 10.0
+    # --- flags ---
     disable_net_worth: bool = False
     disable_daily_income: bool = False
+    disable_provider_bonus: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -31,24 +54,58 @@ class RewardConfig:
             "tax_daily_bonus": self.tax_daily_bonus,
             "survival_bonus": self.survival_bonus,
             "game_over_penalty": self.game_over_penalty,
+            "diversity_bonus": self.diversity_bonus,
+            "error_penalty": self.error_penalty,
+            "preserve_penalty": self.preserve_penalty,
+            "demolish_penalty": self.demolish_penalty,
+            "manual_tax_penalty": self.manual_tax_penalty,
+            "build_cost_penalty": self.build_cost_penalty,
+            "idle_build_penalty": self.idle_build_penalty,
+            "idle_build_threshold_days": self.idle_build_threshold_days,
+            "survival_coeff": self.survival_coeff,
+            "milestone_base_bonus": self.milestone_base_bonus,
+            "milestone_people_bonus": self.milestone_people_bonus,
+            "milestone_day_bonus": self.milestone_day_bonus,
+            "milestone_year_bonus": self.milestone_year_bonus,
+            "proximity_bonus": self.proximity_bonus,
+            "clip_reward_min": self.clip_reward_min,
+            "clip_reward_max": self.clip_reward_max,
             "disable_net_worth": self.disable_net_worth,
             "disable_daily_income": self.disable_daily_income,
+            "disable_provider_bonus": self.disable_provider_bonus,
         }
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "RewardConfig":
         return cls(
-            build_bonus=d.get("build_bonus", 5.0),
-            chain_bonus=d.get("chain_bonus", 0.5),
-            chain_daily=d.get("chain_daily", 2.0),
-            novelty=d.get("novelty", 20.0),
-            daily_income=d.get("daily_income", 0.1),
-            sale_bonus=d.get("sale_bonus", 0.1),
-            tax_daily_bonus=d.get("tax_daily_bonus", 0.77),
-            survival_bonus=d.get("survival_bonus", 0.0),
-            game_over_penalty=d.get("game_over_penalty", 20.0),
+            build_bonus=d.get("build_bonus", 1.0),
+            chain_bonus=d.get("chain_bonus", 1.0),
+            chain_daily=d.get("chain_daily", 0.5),
+            novelty=d.get("novelty", 15.0),
+            daily_income=d.get("daily_income", 0.3),
+            sale_bonus=d.get("sale_bonus", 0.2),
+            tax_daily_bonus=d.get("tax_daily_bonus", 0.3),
+            survival_bonus=d.get("survival_bonus", 0.1),
+            game_over_penalty=d.get("game_over_penalty", 10.0),
+            diversity_bonus=d.get("diversity_bonus", 8.0),
+            error_penalty=d.get("error_penalty", -5.0),
+            preserve_penalty=d.get("preserve_penalty", -8.0),
+            demolish_penalty=d.get("demolish_penalty", -3.0),
+            manual_tax_penalty=d.get("manual_tax_penalty", -0.5),
+            build_cost_penalty=d.get("build_cost_penalty", 0.0001),
+            idle_build_penalty=d.get("idle_build_penalty", -10.0),
+            idle_build_threshold_days=int(d.get("idle_build_threshold_days", 3)),
+            survival_coeff=d.get("survival_coeff", 0.001),
+            milestone_base_bonus=d.get("milestone_base_bonus", 10.0),
+            milestone_people_bonus=d.get("milestone_people_bonus", 2.0),
+            milestone_day_bonus=d.get("milestone_day_bonus", 2.0),
+            milestone_year_bonus=d.get("milestone_year_bonus", 5.0),
+            proximity_bonus=d.get("proximity_bonus", 0.5),
+            clip_reward_min=d.get("clip_reward_min", -10.0),
+            clip_reward_max=d.get("clip_reward_max", 10.0),
             disable_net_worth=d.get("disable_net_worth", False),
             disable_daily_income=d.get("disable_daily_income", False),
+            disable_provider_bonus=d.get("disable_provider_bonus", False),
         )
 
 
@@ -70,7 +127,7 @@ class Config:
     gamma: float = 0.995
     gae_lambda: float = 0.98
     clip_range: float = 0.2
-    ent_coef: float = 0.01
+    ent_coef: float = 0.005  # Reduced from 0.01 to discourage action loops
     vf_coef: float = 0.5
     max_grad_norm: float = 0.5
 
@@ -159,7 +216,7 @@ class Config:
             gamma=d.get("gamma", 0.995),
             gae_lambda=d.get("gae_lambda", 0.98),
             clip_range=d.get("clip_range", 0.2),
-            ent_coef=d.get("ent_coef", 0.01),
+            ent_coef=d.get("ent_coef", 0.005),
             vf_coef=d.get("vf_coef", 0.5),
             max_grad_norm=d.get("max_grad_norm", 0.5),
             net_arch=d.get("net_arch", [256, 256]),

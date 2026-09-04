@@ -54,6 +54,12 @@ class ProgressMsg:
     value_loss: float = 0.0
     entropy: float = 0.0
     kl: float = 0.0
+    top_actions: Dict[str, float] = field(default_factory=dict)
+    loop_detected: bool = False
+    loop_action_name: Optional[str] = None
+    envs_with_loops: int = 0
+    curriculum_stage_active: int = 0
+    curriculum_next_at_step: Optional[int] = None
     type: MsgType = field(default=MsgType.PROGRESS, init=False)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -68,6 +74,12 @@ class ProgressMsg:
             "value_loss": _safe_float(self.value_loss),
             "entropy": _safe_float(self.entropy),
             "kl": _safe_float(self.kl),
+            "top_actions": self.top_actions,
+            "loop_detected": self.loop_detected,
+            "loop_action_name": self.loop_action_name,
+            "envs_with_loops": int(self.envs_with_loops),
+            "curriculum_stage_active": int(self.curriculum_stage_active),
+            "curriculum_next_at_step": int(self.curriculum_next_at_step) if self.curriculum_next_at_step else None,
         }
 
 
@@ -107,7 +119,68 @@ class ErrorMsg:
         return {"type": "error", "message": self.message}
 
 
-Msg = ReadyMsg | LogMsg | ProgressMsg | SavedMsg | DoneMsg | ErrorMsg
+class CommandType(str, Enum):
+    START_TRAINING = "start"
+    PAUSE_TRAINING = "pause"
+    RESUME_TRAINING = "resume"
+    STOP_TRAINING = "stop"
+    BOOST_ENTROPY = "boost_entropy"
+    RESET_CURRICULUM = "reset_curriculum"
+
+
+@dataclass
+class CommandMsg:
+    cmd: str
+    payload: Optional[Dict[str, Any]] = None
+    type: MsgType = field(default=MsgType.LOG, init=False)  # Reuse LOG type for backward compatibility
+
+    def __post_init__(self):
+        if self.payload is None:
+            self.payload = {}
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "type": "command",
+            "cmd": str(self.cmd),
+            "payload": self.payload or {},
+        }
+
+
+def encode_command(cmd: str, payload: Optional[Dict[str, Any]] = None) -> str:
+    """Encode a command to JSON."""
+    msg = CommandMsg(cmd=cmd, payload=payload or {})
+    return json.dumps(msg.to_dict(), ensure_ascii=False, allow_nan=False)
+
+
+def decode_command(line: str) -> Dict[str, Any]:
+    """Parse a command from JSON line.
+    
+    Returns dict with 'cmd' and 'payload' keys.
+    """
+    try:
+        d = json.loads(line)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"invalid JSON: {e}") from e
+    
+    if not isinstance(d, dict):
+        raise ValueError("command must be a JSON object")
+    
+    t = d.get("type")
+    if t != "command":
+        raise ValueError(f"expected command type, got: {t}")
+    
+    cmd = d.get("cmd")
+    if cmd is None:
+        raise ValueError("missing 'cmd' field")
+    
+    payload = d.get("payload", {})
+    if not isinstance(payload, dict):
+        raise ValueError("'payload' must be an object")
+    
+    return {"cmd": cmd, "payload": payload}
+
+
+Msg = ReadyMsg | LogMsg | ProgressMsg | SavedMsg | DoneMsg | ErrorMsg | CommandMsg
 
 _REQUIRED: Dict[MsgType, tuple] = {
     MsgType.READY: (),
@@ -144,6 +217,14 @@ def decode(line: str) -> Msg:
         mt = MsgType(t)
     except ValueError as e:
         raise ValueError(f"unknown message type: {t!r}") from e
+    
+    # Handle command messages separately
+    if t == "command":
+        return CommandMsg(
+            cmd=d["cmd"],
+            payload=d.get("payload", {}),
+        )
+    
     missing = [k for k in _REQUIRED[mt] if k not in d]
     if missing:
         raise ValueError(f"missing fields for {mt.value}: {missing}")
@@ -162,6 +243,12 @@ def decode(line: str) -> Msg:
             value_loss=d.get("value_loss", 0.0),
             entropy=d.get("entropy", 0.0),
             kl=d.get("kl", 0.0),
+            top_actions={k: _safe_float(v) for k, v in d.get("top_actions", {}).items()},
+            loop_detected=d.get("loop_detected", False),
+            loop_action_name=d.get("loop_action_name"),
+            envs_with_loops=d.get("envs_with_loops", 0),
+            curriculum_stage_active=d.get("curriculum_stage_active", 0),
+            curriculum_next_at_step=d.get("curriculum_next_at_step"),
         )
     if mt is MsgType.SAVED:
         return SavedMsg(path=d["path"])
@@ -176,4 +263,7 @@ def decode(line: str) -> Msg:
 
 
 def encode_stop() -> str:
-    return json.dumps({"cmd": "stop"}, ensure_ascii=False)
+    """Encode stop command with optional final save flag."""
+    payload = {"final_save": True}
+    msg = CommandMsg(cmd="stop", payload=payload)
+    return json.dumps(msg.to_dict(), ensure_ascii=False, allow_nan=False)

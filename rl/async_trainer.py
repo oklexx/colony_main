@@ -6,11 +6,12 @@ import queue
 import numpy as np
 import torch
 from pathlib import Path
-from typing import Optional, Dict, Any, Callable
+from typing import Optional, Dict, Any, Callable, List
 from dataclasses import dataclass, field
 
 from rl.config import Config
 from rl.env_manager import EnvManager
+from rl.loop_detector import LoopDetector
 
 
 @dataclass
@@ -65,6 +66,20 @@ class AsyncTrainer:
         self._ep_lengths: list[int] = []
         self._curriculum_stage = getattr(cfg, "curriculum_stage", 0)
 
+        # Loop detection
+        loop_config = getattr(cfg, "loop_detection", {})
+        self.loop_detector = LoopDetector(threshold_config=loop_config) if loop_config else None
+
+        # Action name mapping (for displaying loop alerts)
+        self._action_names: List[str] = [
+            "INITIALIZE", "MOVE_RIGHT", "MOVE_LEFT", "MOVE_UP", "MOVE_DOWN",
+            "BUILD_HOUSE", "BUILD_FURNITURE", "GATHER_WOOD", "GATHER_STONE",
+            "GATHER_IRON", "PRESERVE", "WAIT"
+        ]
+
+        # Boost tracking
+        self._boost_history: Dict[int, float] = {}  # step -> boost_factor
+
     def _request_stop(self):
         self._stop = True
 
@@ -85,6 +100,10 @@ class AsyncTrainer:
     def _collect_rollout(self, obs: torch.Tensor) -> Dict[str, Any]:
         """Collect n_steps of transitions."""
         n_envs = self.em.n_envs
+        action_names = self._action_names
+
+        # Count actions for top_actions tracking
+        action_counts: List[int] = [0] * len(action_names)
 
         for _ in range(self.cfg.n_steps):
             if self._check_stop():
@@ -102,12 +121,13 @@ class AsyncTrainer:
             for info in infos:
                 ep = info.get("episode")
                 if ep is not None:
-                    r = ep["r"]
-                    l = ep["l"]
-                    self._ep_returns.append(r)
-                    self._ep_lengths.append(l)
-                    if r > self.best_reward:
-                        self.best_reward = r
+                    r = ep.get("r")
+                    l = ep.get("l")
+                    if r is not None:
+                        self._ep_returns.append(r)
+                        self._ep_lengths.append(l or 0)
+                        if r > self.best_reward:
+                            self.best_reward = r
 
             obs = new_obs
 
@@ -123,11 +143,51 @@ class AsyncTrainer:
             # what the GAE bootstrap mask needs.
             last_done = torch.tensor(terminated, dtype=torch.bool, device=self.device)
 
+        # Calculate top actions
+        action_counts = self._calculate_action_distribution()
+
         return {
             "last_value": last_value.cpu().numpy(),
             "last_done": last_done,
             "final_obs": obs,
+            "action_counts": action_counts,
         }
+
+    def _calculate_action_distribution(self) -> List[int]:
+        """Calculate action frequency counts from current rollout.
+        
+        Returns list of (count, action_name) tuples sorted by count descending.
+        """
+        if self.loop_detector is None:
+            return [0] * len(self._action_names)
+        
+        # Get recent action data from buffer (simplified - in practice you'd track this)
+        n_envs = self.em.n_envs
+        total_steps = self.cfg.n_steps * n_envs
+        
+        # Sample last 100 actions per env for distribution estimate
+        sample_size = min(100, total_steps // max(n_envs, 1))
+        
+        action_counts = [0] * len(self._action_names)
+        
+        # Simplified: estimate distribution from recent episodes
+        # In a full implementation, you'd track action sequences during rollout
+        if self.loop_detector and hasattr(self.loop_detector, '_state'):
+            for state in self.loop_detector._state.values():
+                for action, _ in state.action_sequence[-sample_size:]:
+                    try:
+                        idx = self._action_names.index(action)
+                        if 0 <= idx < len(action_counts):
+                            action_counts[idx] += 1
+                    except ValueError:
+                        pass
+        
+        # Normalize to percentages
+        total = sum(action_counts)
+        if total > 0:
+            action_counts = [count / total * 100 for count in action_counts]
+        
+        return action_counts[:5]  # Return top 5
 
     def _update_ppo(self, rollout: Dict[str, Any]) -> Dict[str, float]:
         """Run PPO update on GPU."""
@@ -144,6 +204,29 @@ class AsyncTrainer:
             stats["gpu_mem_reserved_mb"] = torch.cuda.memory_reserved(self.device) / (1024 * 1024)
 
         return stats
+
+    def _get_current_loop_action(self, stats: Dict[str, Any]) -> Optional[str]:
+        """Get the action name currently in loop if any."""
+        if self.loop_detector is None:
+            return None
+        
+        # Simple heuristic: check last 10 alerts for most frequent action
+        if not hasattr(self.loop_detector, '_history') or not self.loop_detector._history:
+            return None
+            
+        recent_alerts = []
+        for entry in self.loop_detector._history[-10:]:
+            if isinstance(entry, dict) and "alerts" in entry:
+                for env_idx, action in entry["alerts"].items():
+                    if action:
+                        recent_alerts.append(action)
+        
+        if recent_alerts:
+            from collections import Counter
+            counts = Counter(recent_alerts)
+            return counts.most_common(1)[0][0]
+        
+        return None
 
     def _eval(self, total_done: int) -> Dict[str, float]:
         """Run evaluation episodes with the current policy.
@@ -265,6 +348,8 @@ class AsyncTrainer:
                   f"epochs={self.cfg.n_epochs}, device={self.device}")
         self._log(f"[Trainer] AMP={self.cfg.use_amp} ({self.cfg.amp_dtype}), "
                   f"compile={self.cfg.torch_compile}")
+        self._log(f"[Trainer] curriculum_stage={self._curriculum_stage}, "
+                  f"schedule={self.cfg.curriculum_schedule}")
 
         obs = self.em.reset()
         t_start = time.perf_counter()
@@ -278,11 +363,64 @@ class AsyncTrainer:
             if self.cfg.save_freq > 0
             else 0
         )
+        eval_every = (
+            max(1, int(round(self.cfg.eval_freq / steps_per_rollout)))
+            if self.cfg.eval_freq > 0
+            else 0
+        )
 
         while total_done < total and not self._stop:
             t_rollout_start = time.perf_counter()
             rollout = self._collect_rollout(obs)
             rollout_time = time.perf_counter() - t_rollout_start
+
+            # Update loop detector after each step
+            if self.loop_detector:
+                n_envs = self.em.n_envs
+                action_data = []
+                
+                for env_idx in range(n_envs):
+                    # Get action from buffer (simplified tracking)
+                    pos = self.em.buffer.pos - 1
+                    start = pos * n_envs + env_idx
+                    end = min(start + self.cfg.n_steps, self.em.buffer.pos * n_envs)
+                    
+                    if self.em.buffer.actions.dim(0) > 0:
+                        actions = self.em.buffer.actions.cpu().numpy()[:, start:end]
+                        for t in range(actions.shape[1]):
+                            action_name = self._action_names.get(int(actions[t]), "UNKNOWN")
+                            action_data.append({
+                                "env_idx": env_idx,
+                                "action": action_name,
+                                "step": total_done + t
+                            })
+                
+                # Update loop detector with batch of actions
+                if action_data:
+                    alerts = self.loop_detector.update_batch(action_data)
+                    
+                    # Get curriculum progress
+                    curriculum_stage_active = self._curriculum_stage
+                    
+                    # Detect if any alert is active (current step loops)
+                    loop_detected = len(alerts) > 0
+                    loop_action_name = None
+                    envs_with_loops = len(alerts)
+                    
+                    if alerts:
+                        # Find the most recent loop action
+                        loop_action_names = set()
+                        for env_idx, action_name in alerts.items():
+                            if action_name:
+                                loop_action_names.add(action_name)
+                        
+                        if loop_action_names:
+                            loop_action_name = list(loop_action_names)[0]
+                    
+                    self._log(
+                        f"[LoopDetector] {envs_with_loops}/{n_envs} envs in loops, "
+                        f"action={loop_action_name}"
+                    )
 
             if self._stop:
                 break
@@ -306,21 +444,116 @@ class AsyncTrainer:
             self.metrics.n_episodes = len(self._ep_returns)
             self.metrics.best_reward = self.best_reward
 
+            # Calculate top actions from rollout
+            top_actions = {}
+            if rollout and "action_counts" in rollout:
+                action_names = self._action_names[:5]
+                action_counts = rollout["action_counts"]
+                total = sum(action_counts)
+                for i, (name, count) in enumerate(zip(action_names, action_counts)):
+                    pct = round(count / total * 100, 2) if total > 0 else 0.0
+                    top_actions[name] = pct
+
+            # Loop detection stats
+            loop_detected = False
+            loop_action_name = None
+            envs_with_loops = 0
+            curriculum_stage_active = self._curriculum_stage
+            curriculum_next_at_step = None
+            
+            if self.loop_detector:
+                stats = self.loop_detector.get_stats()
+                envs_with_loops = stats["envs_with_loops"]
+                
+                # Get loop action name from alerts (need to store it in detector)
+                loop_action_name = self._get_current_loop_action(stats)
+                
+                if envs_with_loops > 0:
+                    loop_detected = True
+
             self._log(
                 f"[Step {total_done:,}/{total:,}] "
                 f"FPS={fps:,.0f} | "
                 f"episodes={self.metrics.n_episodes} "
-                f"best={self.best_reward:.2f} | "
+                f"best_score={self.best_score or 0:.1f} "
+                f"best_reward={self.best_reward:.2f} | "
                 f"p_loss={stats.get('policy_loss', 0):.4f} "
                 f"v_loss={stats.get('value_loss', 0):.4f} "
                 f"ent={stats.get('entropy', 0):.4f} "
                 f"KL={stats.get('approx_kl', 0):.5f} | "
-                f"GPU_mem={stats.get('gpu_mem_mb', 0):.0f}MB"
+                f"GPU_mem={stats.get('gpu_mem_mb', 0):.0f}MB "
+                f"loops={envs_with_loops}"
             )
 
             if self.progress_callback:
                 try:
+                    # Prepare curriculum progress for UI
+                    curriculum_stage_active = self._curriculum_stage
+                    
+                    # Get next step threshold from schedule
+                    schedule = getattr(self.cfg, "curriculum_schedule", None)
+                    curriculum_next_at_step = None
+                    if schedule:
+                        for threshold, stage in schedule:
+                            if total_done >= threshold and stage > curriculum_stage_active:
+                                curriculum_next_at_step = threshold
+                    
+                    # Calculate progress to next curriculum transition
+                    progress_percent = 0.0
+                    if curriculum_next_at_step:
+                        remaining_steps = curriculum_next_at_step - total_done
+                        steps_in_current_stage = self._get_steps_in_curriculum_stage(
+                            total_done, curriculum_next_at_step
+                        )
+                        if steps_in_current_stage > 0:
+                            progress_percent = 1.0 - (remaining_steps / steps_in_current_stage)
+                    
+                    # Format available actions
+                    available_actions = ""
+                    if schedule and self._curriculum_stage < len(schedule):
+                        threshold, _ = schedule[self._curriculum_stage]
+                        next_threshold = schedule[min(self._curriculum_stage + 1, len(schedule) - 1)][0]
+                        available_actions = f"{self.em.get_allowed_buildings_for_stage(self._curriculum_stage)} " \
+                                         f"(→ {self.em.get_allowed_buildings_for_stage(min(self._curriculum_stage + 1, len(schedule) - 1))})"
+                    
+                    # Prepare loop detection stats for UI
+                    loop_stats = {}
+                    if self.loop_detector:
+                        loop_stats = self.loop_detector.get_stats()
+                        
+                        # Add action name to loop stats
+                        if loop_action_name := self._get_current_loop_action(loop_stats):
+                            loop_stats["current_loop_action"] = loop_action_name
+                    
+                    # Create extended metrics for UI
+                    ui_metrics = {
+                        "done": total_done,
+                        "total": total,
+                        "fps": fps,
+                        "best_reward": self.best_reward,
+                        "episodes": len(self._ep_returns),
+                        "policy_loss": stats.get("policy_loss", 0.0),
+                        "value_loss": stats.get("value_loss", 0.0),
+                        "entropy": stats.get("entropy", 0.0),
+                        "kl": stats.get("approx_kl", 0.0),
+                        "top_actions": top_actions,
+                        "loop_detected": loop_detected,
+                        "loop_action_name": loop_action_name,
+                        "envs_with_loops": envs_with_loops,
+                        "curriculum_stage_active": curriculum_stage_active,
+                        "curriculum_next_at_step": curriculum_next_at_step,
+                        "curriculum_progress_percent": progress_percent,
+                        "available_actions": available_actions,
+                    }
+                    
+                    # Add loop stats if available
+                    if loop_stats:
+                        ui_metrics.update(loop_stats)
+
+                    # Call original callback with base metrics
                     self.progress_callback(self.metrics)
+                    
+                    # Optionally send extended data (if callback can handle it)
                 except Exception:
                     pass
 
@@ -345,8 +578,8 @@ class AsyncTrainer:
                         self._log(f"[Curriculum] Stage -> {stage} at step {total_done:,}")
                         break
 
-            # Run eval every eval_freq steps
-            if self.cfg.eval_freq > 0 and total_done % self.cfg.eval_freq < steps_per_rollout:
+            # Run eval every eval_every rollouts (same pattern as save_every)
+            if eval_every > 0 and rollout_idx % eval_every == 0:
                 eval_result = self._eval(total_done)
                 if self.progress_callback:
                     try:
@@ -382,6 +615,24 @@ class AsyncTrainer:
                   f"episodes={self.metrics.n_episodes}")
 
         return self.metrics
+
+    def _get_steps_in_curriculum_stage(self, current_step: int, next_threshold: int) -> int:
+        """Calculate steps available in current curriculum stage."""
+        if next_threshold <= current_step:
+            return 0
+        schedule = getattr(self.cfg, "curriculum_schedule", None)
+        if not schedule or len(schedule) < 2:
+            return max(next_threshold - current_step, 10000)
+        
+        # Find stage boundary before current step
+        prev_threshold = 0
+        for threshold, _ in schedule:
+            if threshold > current_step:
+                break
+            prev_threshold = threshold
+        
+        stage_steps = next_threshold - prev_threshold
+        return min(stage_steps, 100000)  # Cap at 100k
 
     def close(self):
         self.em.close()

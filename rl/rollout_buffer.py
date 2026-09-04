@@ -41,6 +41,8 @@ class RolloutBuffer:
         # GAE bootstrap mask so that truncated episodes keep their value
         # bootstrap. Defaults to `done` when not supplied (backwards compat).
         self.terminated = torch.empty(total, dtype=torch.bool, device=device)
+        # Action masks: [total, n_actions] — 1.0=available, 0.0=blocked
+        self.action_masks = torch.empty(total, n_actions, dtype=torch.float32, device=device)
 
         self.advantages = torch.empty(total, dtype=torch.float32, device=device)
         self.returns = torch.empty(total, dtype=torch.float32, device=device)
@@ -57,12 +59,14 @@ class RolloutBuffer:
         value: torch.Tensor,
         done: torch.Tensor,
         terminated: Optional[torch.Tensor] = None,
+        action_masks: Optional[torch.Tensor] = None,
     ):
         """Add one step of data. All tensors shape [n_envs].
 
         `done` is the episode-end flag (terminated | truncated) used for
         reward/length accounting. `terminated` is the true terminal flag used
         for the GAE bootstrap mask; if None it defaults to `done`.
+        `action_masks` is [n_envs, n_actions] — 1.0=available, 0.0=blocked.
         """
         if self.pos >= self.n_steps:
             raise RuntimeError("Buffer full, call reset() first")
@@ -75,6 +79,8 @@ class RolloutBuffer:
         self.values[start:end] = value
         self.dones[start:end] = done
         self.terminated[start:end] = done if terminated is None else terminated
+        if action_masks is not None:
+            self.action_masks[start:end] = action_masks
         self.pos += 1
         if self.pos == self.n_steps:
             self.full = True
@@ -94,6 +100,7 @@ class RolloutBuffer:
         last_gae = torch.zeros(self.n_envs, dtype=torch.float32, device=self.device)
 
         next_adv = torch.zeros(self.n_envs, dtype=torch.float32, device=self.device)
+
         for t in range(self.n_steps - 1, -1, -1):
             start = t * self.n_envs
             end = start + self.n_envs
@@ -140,6 +147,7 @@ class RolloutBuffer:
                 "advantages": self.advantages[idx],
                 "returns": self.returns[idx],
                 "dones": self.dones[idx],
+                "action_masks": self.action_masks[idx],
             }
 
     def clear_gpu_memory(self):
@@ -186,18 +194,20 @@ class _TensorRolloutBuffer(RolloutBuffer):
         self.values = torch.empty(total, dtype=torch.float32, device=device)
         self.dones = torch.empty(total, dtype=torch.bool, device=device)
         self.terminated = torch.empty(total, dtype=torch.bool, device=device)
+        self.action_masks = torch.empty(total, n_actions, dtype=torch.float32, device=device)
         self.advantages = torch.empty(total, dtype=torch.float32, device=device)
         self.returns = torch.empty(total, dtype=torch.float32, device=device)
         self.pos = 0
         self.full = False
 
-    def add(self, obs, action, reward, log_prob, value, done, terminated=None, flat=None):
+    def add(self, obs, action, reward, log_prob, value, done, terminated=None, flat=None, action_masks=None):
         """Add one step of data. All tensors shape [n_envs].
 
         `flat` is the flat observation tensor (shape [n_envs, flat_dim]) stored
         only when the buffer was created with `flat_dim > 0` (hybrid mode).
+        `action_masks` is [n_envs, n_actions] — 1.0=available, 0.0=blocked.
         """
-        super().add(obs, action, reward, log_prob, value, done, terminated)
+        super().add(obs, action, reward, log_prob, value, done, terminated, action_masks)
         if self.flat_obs is not None:
             if flat is None:
                 raise RuntimeError("flat observation required but not provided (hybrid buffer)")
@@ -220,6 +230,7 @@ class _TensorRolloutBuffer(RolloutBuffer):
                 "advantages": self.advantages[idx],
                 "returns": self.returns[idx],
                 "dones": self.dones[idx],
+                "action_masks": self.action_masks[idx],
             }
             if self.flat_obs is not None:
                 batch["flat"] = self.flat_obs[idx]

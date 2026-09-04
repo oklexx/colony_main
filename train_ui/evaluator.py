@@ -132,10 +132,12 @@ def run_eval(
     map_size: int = 280,
     mode: str = "auto",
     minimap_radius: int = 14,
+    log_path: str | Path | None = None,
 ) -> Dict[str, float]:
     """Run the trained policy in the colony env and return mean stats.
 
     mode: "auto" (detect from checkpoint), "flat" (209-dim MLP), "minimap" (CNN).
+    log_path: if set, writes a per-step observation log to this file.
     Returns dict: days, people, bases, episodes, avg_return (all non-negative).
     """
     import torch
@@ -153,7 +155,22 @@ def run_eval(
     use_minimap = isinstance(policy, ActorCriticCNN)
     is_hybrid = isinstance(policy, ActorCriticHybrid)
 
-    env = CppColonyEnv(map_size=map_size)
+    # Read reward config from model's meta.json to match training parameters
+    reward_cfg = None
+    model_dir = model_path.parent
+    for meta_name in ("best_model.meta.json", "meta.json"):
+        meta_path = model_dir / meta_name
+        if meta_path.exists():
+            try:
+                import json as _json
+                meta = _json.loads(meta_path.read_text(encoding="utf-8"))
+                reward_cfg = meta.get("config", {}).get("reward")
+                if reward_cfg:
+                    break
+            except (Exception,):
+                pass
+
+    env = CppColonyEnv(map_size=map_size, reward_config=reward_cfg)
     if normalization_path is not None and not use_minimap and not is_hybrid:
         norm_path = Path(normalization_path)
         if not norm_path.exists():
@@ -169,36 +186,75 @@ def run_eval(
             env.normalizer.load(str(norm_path))
             env.normalizer.set_update(False)
     mm_wrap = MinimapSingleEnvWrapper(env) if (use_minimap or is_hybrid) else None
+
+    action_names = env._action_names if hasattr(env, "_action_names") else [str(i) for i in range(env.action_space.n)]
+
     days_list: list[int] = []
     people_list: list[int] = []
     bases_list: list[int] = []
     returns: list[float] = []
 
+    log_file = None
+    if log_path:
+        log_path = Path(log_path)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_file = open(log_path, "w", encoding="utf-8")
+        log_file.write(f"EVAL LOG | model={model_path} | episodes={episodes} | seed={seed}\n")
+        log_file.write(f"reward_config={reward_cfg}\n")
+        log_file.write(f"action_names={action_names}\n")
+        log_file.write("=" * 120 + "\n")
+
     try:
         for ep in range(episodes):
             obs, _info = env.reset(seed=seed + ep)
             total_reward = 0.0
-            for _ in range(max_days):
+            if log_file:
+                log_file.write(f"\nEPISODE {ep} | seed={seed + ep}\n")
+                log_file.write("-" * 120 + "\n")
+            for step in range(max_days):
                 with torch.no_grad():
                     if is_hybrid:
                         flat_t = torch.from_numpy(np.asarray(obs, dtype=np.float32)).to(dev).reshape(1, -1)
                         mm = mm_wrap.minimap_obs()
                         mm_t = torch.from_numpy(np.ascontiguousarray(mm, dtype=np.float32)).to(dev).reshape(1, *mm.shape)
                         logits, _values = policy(flat_t, mm_t)
-                        action = int(logits.argmax(dim=-1).item())
                     elif use_minimap:
                         mm = mm_wrap.minimap_obs()
                         obs_t = torch.from_numpy(np.ascontiguousarray(mm, dtype=np.float32)).to(dev).reshape(1, *mm.shape)
                         logits, _values = policy(obs_t)
-                        action = int(logits.argmax(dim=-1).item())
                     else:
                         obs_t = torch.from_numpy(np.asarray(obs, dtype=np.float32)).to(dev)
                         obs_t = obs_t.reshape(1, -1)
                         logits, _values = policy(obs_t)
-                        action = int(logits.argmax(dim=-1).item())
+
+                    # Apply action masking (match training behavior)
+                    if hasattr(env, "action_mask"):
+                        mask = env.action_mask()
+                        mask_t = torch.from_numpy(mask).to(dev).reshape(1, -1)
+                        logits = logits.masked_fill(mask_t == 0, float("-inf"))
+
+                    action = int(logits.argmax(dim=-1).item())
+
+                if log_file:
+                    probs = torch.softmax(logits, dim=-1).squeeze(0)
+                    top3_idx = torch.topk(probs, min(3, probs.numel())).indices.tolist()
+                    top3 = ", ".join(f"{action_names[i]}={probs[i].item():.3f}" for i in top3_idx)
+                    action_name = action_names[action] if action < len(action_names) else str(action)
+                    log_file.write(f"  step={step:4d} | action={action} ({action_name}) | top3=[{top3}]\n")
+
                 obs, reward, terminated, truncated, info = env.step(action)
                 total_reward += float(reward)
+
+                if log_file:
+                    log_file.write(
+                        f"           | reward={reward:+.4f} | days={info.get('days',0)} | "
+                        f"people={info.get('people',0)} | money={info.get('money',0)} | "
+                        f"bases={info.get('bases',0)} | ep_return={info.get('ep_return',0):.1f}\n"
+                    )
+
                 if terminated or truncated:
+                    if log_file:
+                        log_file.write(f"  *** EPISODE END | terminated={terminated} truncated={truncated} | total_reward={total_reward:.1f} ***\n")
                     break
             days_list.append(int(info.get("days", 0)))
             people_list.append(int(info.get("people", 0)))
@@ -206,6 +262,13 @@ def run_eval(
             returns.append(total_reward)
     finally:
         env.close()
+        if log_file:
+            log_file.write("\n" + "=" * 120 + "\n")
+            log_file.write(f"SUMMARY | days={sum(days_list)/max(len(days_list),1):.0f} | "
+                          f"people={sum(people_list)/max(len(people_list),1):.0f} | "
+                          f"bases={sum(bases_list)/max(len(bases_list),1):.0f} | "
+                          f"avg_return={sum(returns)/max(len(returns),1):.1f}\n")
+            log_file.close()
 
     n = max(len(days_list), 1)
     return {

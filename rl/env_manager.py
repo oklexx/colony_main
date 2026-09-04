@@ -191,12 +191,19 @@ class EnvManager:
 
     def collect_step(self, obs) -> tuple:
         """One full step: policy → env step → buffer add. Returns (new_obs, infos)."""
+        # Get action masks for current obs (computed after last reset/step)
+        action_masks_np = getattr(self.env, "action_masks", None)
+        if action_masks_np is not None:
+            action_masks = torch.from_numpy(action_masks_np).to(self.device)
+        else:
+            action_masks = None
+
         if self.obs_mode == "hybrid":
             flat, minimap = obs
             self._last_flat = flat
-            policy_out = self.ppo.collect_step(flat, minimap)
+            policy_out = self.ppo.collect_step(flat, minimap, action_masks=action_masks)
         else:
-            policy_out = self.ppo.collect_step(obs)
+            policy_out = self.ppo.collect_step(obs, action_masks=action_masks)
         action_gpu = policy_out["action"]
         action_np = action_gpu.cpu().numpy().astype(np.int32)
 
@@ -218,6 +225,7 @@ class EnvManager:
                 done=dones,
                 terminated=terminated,
                 flat=flat,
+                action_masks=action_masks,
             )
         else:
             self.buffer.add(
@@ -228,6 +236,7 @@ class EnvManager:
                 value=policy_out["value"],
                 done=dones,
                 terminated=terminated,
+                action_masks=action_masks,
             )
 
         return new_obs, infos
@@ -250,6 +259,104 @@ class EnvManager:
             except Exception:
                 pass
         return stats
+
+    def get_allowed_buildings_for_stage(self, stage_id: int) -> List[str]:
+        """Get list of building names allowed in current curriculum stage.
+        
+        Args:
+            stage_id: Curriculum stage (0=unlock all, 1-3=limited set)
+            
+        Returns:
+            List of building names available in this stage
+        """
+        # Default curriculum schedule - each stage unlocks specific buildings
+        curriculum_schedule = {
+            0: ["INITIALIZE", "MOVE_RIGHT", "MOVE_LEFT", "MOVE_UP", "MOVE_DOWN",
+                "BUILD_HOUSE", "BUILD_FURNITURE", "GATHER_WOOD", "GATHER_STONE", 
+                "GATHER_IRON", "PRESERVE", "WAIT"],  # All buildings
+            1: ["INITIALIZE", "MOVE_RIGHT", "MOVE_LEFT", "MOVE_UP", "MOVE_DOWN",
+                "BUILD_HOUSE", "PRESERVE", "WAIT"],  # Basic structures only
+            2: ["INITIALIZE", "MOVE_RIGHT", "MOVE_LEFT", "MOVE_UP", "MOVE_DOWN",
+                "BUILD_HOUSE", "GATHER_WOOD", "GATHER_STONE", "PRESERVE", "WAIT"],  # + gathering
+            3: ["INITIALIZE", "MOVE_RIGHT", "MOVE_LEFT", "MOVE_UP", "MOVE_DOWN",
+                "BUILD_HOUSE", "BUILD_FURNITURE", "GATHER_WOOD", "GATHER_STONE", 
+                "GATHER_IRON", "PRESERVE", "WAIT"]  # All again for fine-tuning
+        }
+        
+        return curriculum_schedule.get(stage_id, ["INITIALIZE", "MOVE_RIGHT", "BUILD_HOUSE", "PRESERVE", "WAIT"])
+
+    def get_curriculum_progress(self, current_step: int) -> Dict[str, Any]:
+        """Calculate progress in current curriculum stage.
+        
+        Args:
+            current_step: Current training step
+            
+        Returns:
+            Dict with:
+            - stage: Current stage (0-3)
+            - progress_percent: 0.0-1.0 progress to next stage transition
+            - available_actions: First 5 building names for display
+            - next_stage_at_step: Step when next stage begins or None
+            - upcoming_stages: List of upcoming stages with thresholds
+        """
+        schedule = getattr(self.cfg, "curriculum_schedule", [])
+        if not schedule or len(schedule) < 2:
+            # Default schedule: 3 stages at 100k, 500k, 1M steps
+            default_schedule = [
+                (100000, 1),
+                (500000, 2),
+                (1000000, 3)
+            ]
+            # Convert to step->stage format
+            schedule = [(t, s+1) for t, s in enumerate(default_schedule)]
+        
+        current_stage = self.cfg.curriculum_stage
+        
+        # Find current stage boundaries
+        prev_threshold = 0
+        for threshold, stage in schedule:
+            if threshold > current_step:
+                break
+            prev_threshold = threshold
+        
+        # Find next transition
+        next_threshold = None
+        next_stage = None
+        for threshold, stage in schedule:
+            if threshold > current_step and stage > current_stage:
+                next_threshold = threshold
+                next_stage = stage
+                break
+        
+        # Calculate progress percent to next transition
+        stage_length = next_threshold - prev_threshold if next_threshold else max(100000, 1000000)
+        steps_in_stage = current_step - prev_threshold
+        progress_percent = min(1.0, max(0.0, steps_in_stage / stage_length))
+        
+        # Get available actions (first 5)
+        all_actions = self.get_allowed_buildings_for_stage(current_stage)
+        available_actions = " | ".join(all_actions[:5])
+        
+        # Calculate upcoming stages
+        upcoming_stages = []
+        for threshold, stage in schedule:
+            if stage > current_stage and (next_threshold is None or threshold > next_threshold):
+                upcoming_stages.append({
+                    "stage": stage,
+                    "at_step": threshold
+                })
+        
+        # Limit to 3 upcoming stages
+        upcoming_stages = upcoming_stages[:3]
+        
+        return {
+            "stage": current_stage,
+            "progress_percent": float(progress_percent),
+            "available_actions": available_actions,
+            "next_stage_at_step": int(next_threshold) if next_threshold else None,
+            "upcoming_stages": upcoming_stages,
+            "current_schedule": schedule,
+        }
 
     def set_curriculum_stage(self, stage: int):
         """Switch curriculum stage on the C++ env (1-3, 0=all buildings)."""
