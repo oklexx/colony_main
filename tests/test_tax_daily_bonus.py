@@ -19,26 +19,26 @@ def test_tax_daily_bonus_in_reward_config():
 
     rc = RewardConfig()
     assert hasattr(rc, "tax_daily_bonus")
-    assert rc.tax_daily_bonus == 0.77
+    assert rc.tax_daily_bonus == 0.3
     assert not hasattr(rc, "tax_bonus"), "tax_bonus should be removed"
 
     # Test serialization
     d = rc.to_dict()
     assert "tax_daily_bonus" in d
-    assert d["tax_daily_bonus"] == 0.77
+    assert d["tax_daily_bonus"] == 0.3
     assert "tax_bonus" not in d, "tax_bonus should not be in dict"
 
     # Test deserialization
     rc2 = RewardConfig.from_dict(d)
-    assert rc2.tax_daily_bonus == 0.77
+    assert rc2.tax_daily_bonus == 0.3
 
 
 def test_tax_daily_bonus_default():
-    """Verify default value is 0.77 (≈ 250/365 ≈ 0.685, rounded up)."""
+    """Verify default value is 0.3."""
     from rl.config import RewardConfig
 
     rc = RewardConfig()
-    assert rc.tax_daily_bonus == 0.77
+    assert rc.tax_daily_bonus == 0.3
 
 
 @pytest.mark.skipif(not ENV_OK, reason="colony_cpp not available")

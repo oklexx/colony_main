@@ -83,6 +83,7 @@ py::dict env_step_to_dict(const ColonyEnvCpp::StepOut& s) {
     d["tax_grace_expired"] = s.tax_grace_expired;
     d["ep_return"] = s.ep_return;
     d["steps"] = s.steps;
+    d["metrics"] = s.metrics;
     return d;
 }
 
@@ -315,8 +316,39 @@ PYBIND11_MODULE(colony_cpp, m) {
         .def_readwrite("tax_daily_bonus", &RewardConfig::tax_daily_bonus)
         .def_readwrite("survival_bonus", &RewardConfig::survival_bonus)
         .def_readwrite("game_over_penalty", &RewardConfig::game_over_penalty)
+        .def_readwrite("diversity_bonus", &RewardConfig::diversity_bonus)
+        .def_readwrite("error_penalty", &RewardConfig::error_penalty)
+        .def_readwrite("preserve_penalty", &RewardConfig::preserve_penalty)
+        .def_readwrite("demolish_penalty", &RewardConfig::demolish_penalty)
+        .def_readwrite("manual_tax_penalty", &RewardConfig::manual_tax_penalty)
+        .def_readwrite("build_cost_penalty", &RewardConfig::build_cost_penalty)
+        .def_readwrite("idle_build_penalty", &RewardConfig::idle_build_penalty)
+        .def_readwrite("idle_build_threshold_days", &RewardConfig::idle_build_threshold_days)
+        .def_readwrite("survival_coeff", &RewardConfig::survival_coeff)
+        .def_readwrite("milestone_base_bonus", &RewardConfig::milestone_base_bonus)
+        .def_readwrite("milestone_people_bonus", &RewardConfig::milestone_people_bonus)
+        .def_readwrite("milestone_day_bonus", &RewardConfig::milestone_day_bonus)
+        .def_readwrite("milestone_year_bonus", &RewardConfig::milestone_year_bonus)
+        .def_readwrite("proximity_bonus", &RewardConfig::proximity_bonus)
+        .def_readwrite("clip_reward_min", &RewardConfig::clip_reward_min)
+        .def_readwrite("clip_reward_max", &RewardConfig::clip_reward_max)
         .def_readwrite("disable_net_worth", &RewardConfig::disable_net_worth)
-        .def_readwrite("disable_daily_income", &RewardConfig::disable_daily_income);
+        .def_readwrite("disable_daily_income", &RewardConfig::disable_daily_income)
+        .def_readwrite("disable_provider_bonus", &RewardConfig::disable_provider_bonus);
+
+    py::class_<ColonyEnvCpp::EpisodeMetrics>(m, "EpisodeMetrics")
+        .def_readonly("total_reward", &ColonyEnvCpp::EpisodeMetrics::total_reward)
+        .def_readonly("days_survived", &ColonyEnvCpp::EpisodeMetrics::days_survived)
+        .def_readonly("total_builds", &ColonyEnvCpp::EpisodeMetrics::total_builds)
+        .def_readonly("unique_build_types", &ColonyEnvCpp::EpisodeMetrics::unique_build_types)
+        .def_readonly("chains_activated", &ColonyEnvCpp::EpisodeMetrics::chains_activated)
+        .def_readonly("max_chain_depth", &ColonyEnvCpp::EpisodeMetrics::max_chain_depth)
+        .def_readonly("reached_resources", &ColonyEnvCpp::EpisodeMetrics::reached_resources)
+        .def_readonly("deaths", &ColonyEnvCpp::EpisodeMetrics::deaths)
+        .def_readonly("births", &ColonyEnvCpp::EpisodeMetrics::births)
+        .def_readonly("base_count_peak", &ColonyEnvCpp::EpisodeMetrics::base_count_peak)
+        .def_readonly("net_worth", &ColonyEnvCpp::EpisodeMetrics::net_worth)
+        .def_readonly("population_peak", &ColonyEnvCpp::EpisodeMetrics::population_peak);
 
     py::class_<ColonyEnvCpp>(m, "ColonyEnvCpp")
         .def(py::init<const std::vector<BaseData>&, const std::vector<BaseEvent>&,
@@ -327,6 +359,9 @@ PYBIND11_MODULE(colony_cpp, m) {
              py::arg("unlock_ids") = std::vector<std::string>(),
              py::arg("reward") = RewardConfig())
         .def("reset", &ColonyEnvCpp::reset)
+        .def("set_step_log", &ColonyEnvCpp::set_step_log, py::arg("path"))
+        .def("dump_obs", &ColonyEnvCpp::dump_obs)
+        .def("action_mask", [](ColonyEnvCpp& env) { return env.action_mask(); })
         .def("step", [](ColonyEnvCpp& env, int action) {
             return env_step_to_dict(env.step(action));
         })
@@ -446,12 +481,21 @@ PYBIND11_MODULE(colony_cpp, m) {
         .def("mean_net_worth", &ColonyVecEnvCpp::mean_net_worth)
         .def("set_curriculum_stage", &ColonyVecEnvCpp::set_curriculum_stage, py::arg("stage"))
         .def("set_rewards", &ColonyVecEnvCpp::set_rewards, py::arg("cfg"))
+        .def("set_step_log", &ColonyVecEnvCpp::set_step_log, py::arg("env_idx"), py::arg("path"))
+        .def("clear_step_log", &ColonyVecEnvCpp::clear_step_log, py::arg("env_idx"))
+        .def("dump_obs", &ColonyVecEnvCpp::dump_obs, py::arg("env_idx"))
         .def("minimap_batch", [](const ColonyVecEnvCpp& v) {
             const int R = v.minimap_radius();
             const int N = 2 * R + 1;
             std::vector<float> mm = v.minimap_batch();
             py::array_t<float> arr({(int)v.n_envs(), 8, N, N});
             std::memcpy(arr.mutable_data(), mm.data(), mm.size() * sizeof(float));
+            return arr;
+        })
+        .def("action_masks_batch", [](ColonyVecEnvCpp& v) {
+            std::vector<float> masks = v.action_masks_batch();
+            py::array_t<float> arr({(int)v.n_envs(), v.n_actions()});
+            std::memcpy(arr.mutable_data(), masks.data(), masks.size() * sizeof(float));
             return arr;
         })
         .def("minimap_radius", &ColonyVecEnvCpp::minimap_radius)

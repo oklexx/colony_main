@@ -47,6 +47,13 @@ public:
          bool no_city_game_over = GAME_OVER_NO_CITY,
          int64_t no_people_days = GAME_OVER_NO_PEOPLE_DAYS);
 
+    Game(const std::shared_ptr<const std::vector<BaseData>>& base_data,
+         const std::shared_ptr<const std::vector<BaseEvent>>& events_data,
+         int64_t seed, int map_size,
+         const std::string& difficulty = DIFFICULTY_NORMAL,
+         bool no_city_game_over = GAME_OVER_NO_CITY,
+         int64_t no_people_days = GAME_OVER_NO_PEOPLE_DAYS);
+
     // статические данные (владение копией)
     const std::vector<BaseData>& base_data() const { return *base_data_; }
     const std::vector<BaseEvent>& events_data() const { return *events_data_; }
@@ -80,6 +87,9 @@ public:
     const Base* base_in_box(int x, int y) const;
     Base* base_in_box(int x, int y);
     void refresh_occupied();
+    // Клетка допустима для строительства: примыкает (4-связность) к зданию
+    // (не дороге) или соединена с колонией цепочкой дорог.
+    bool cell_connected(int x, int y) const;
     bool is_good(int x, int y) const { return good_lots[(size_t)y * map_size_ + x] != 0; }
     int64_t now_home_places() const;
     int64_t now_need_workers() const;
@@ -148,6 +158,11 @@ public:
     int64_t take_uid() { return next_uid_++; }
     const std::vector<int32_t>& base_index_map() const { return base_index_map_; }
 
+    // ---- milestones ----
+    double check_milestones(double milestone_base, double milestone_people,
+                            double milestone_day, double milestone_year);
+    void reset_milestones();
+
 private:
     void delete_base(Base& b);
     Base* find_slowest(int64_t more_than);
@@ -190,6 +205,12 @@ private:
         cached_home_places_ = -1;
         cached_need_workers_ = -1;
     }
+
+    // ---- milestone tracking ----
+    int last_base_milestone_ = 0;
+    int last_people_milestone_ = 0;
+    int64_t last_day_milestone_ = 0;
+    bool year_bonus_given_ = false;
 };
 
 }  // namespace colony

@@ -73,6 +73,8 @@ def test_training_with_eval_integration(tmp_path):
         map_size=100,
         model_dir=str(tmp_path),
         log_dir=str(tmp_path / "logs"),
+        eval_min_bases=1,
+        eval_min_return=-10000.0,
     )
 
     device = torch.device("cpu")

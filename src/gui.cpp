@@ -443,9 +443,10 @@ static int ai_read_action() {
     int action = -1;
     f >> action;
     f.close();
-    // Clear the file so next read gets the new action
-    std::ofstream out(ai_actions_path, std::ios::trunc);
-    out.close();
+    // Delete the file so Python knows the action was consumed.
+    // Using remove() avoids the race condition with truncation:
+    // Python may write a new action between f.close() and an ofstream open.
+    std::filesystem::remove(ai_actions_path);
     return action;
 }
 
@@ -491,9 +492,8 @@ static void ai_reset_env(ColonyEnvCpp& env) {
                   (float)env.game().earth.init_sel_y * TILE};
     cam.zoom = 1.0f;
     // Clear action file so Python knows to send a new one
-    std::ofstream out(ai_actions_path, std::ios::trunc);
-    out.close();
-    // Write fresh state so Python's hash gate unblocks and sends a new action
+    std::filesystem::remove(ai_actions_path);
+    // Write fresh state so Python sends a new action
     ai_write_state(env.game(), env.obs(), -1, false);
 }
 
@@ -611,6 +611,8 @@ static void draw_season() {
     const char* txt = dlg_season == 0 ? "Наступило лето" : dlg_season == 1 ? "Наступила осень"
                    : dlg_season == 2 ? "Наступила зима" : "Наступила весна";
     text(txt, x + 20, y + 118, 18, WHITE);
+    // Auto-close after ~2 seconds in headless AI mode (no user to click ОК)
+    if (headless_ai && g_dlg_age > 120) { cur_dlg = DLG_NONE; return; }
     if (btn(x + (w - 80)/2, y + h - 36, 80, 28, "ОК")) cur_dlg = DLG_NONE;
 }
 
@@ -780,6 +782,7 @@ int main(int argc, char* argv[]) {
     int64_t seed = 42;
     int map_size = 280;
     int curriculum_stage = 0;
+    std::string reward_config_path;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         if (a == "--seed" && i+1 < argc) seed = std::stoll(argv[++i]);
@@ -788,11 +791,38 @@ int main(int argc, char* argv[]) {
         else if (a == "--headless-ai") headless_ai = true;
         else if (a == "--actions-file" && i+1 < argc) ai_actions_path = argv[++i];
         else if (a == "--state-file" && i+1 < argc) ai_state_path = argv[++i];
+        else if (a == "--reward-config" && i+1 < argc) reward_config_path = argv[++i];
     }
 
     auto bd = load_base_data("configs/bases.json");
     auto ed = load_events("configs/events.json");
-    ColonyEnvCpp env(bd, ed, seed, map_size, curriculum_stage);
+
+    // Load reward config from JSON file if provided
+    colony::RewardConfig rc;
+    if (!reward_config_path.empty()) {
+        std::ifstream rf(reward_config_path);
+        if (rf.is_open()) {
+            nlohmann::json rj;
+            rf >> rj;
+            if (rj.contains("idle_build_penalty")) rc.idle_build_penalty = rj["idle_build_penalty"].get<double>();
+            if (rj.contains("idle_build_threshold_days")) rc.idle_build_threshold_days = rj["idle_build_threshold_days"].get<int>();
+            if (rj.contains("error_penalty")) rc.error_penalty = rj["error_penalty"].get<double>();
+            if (rj.contains("proximity_bonus")) rc.proximity_bonus = rj["proximity_bonus"].get<double>();
+            if (rj.contains("build_bonus")) rc.build_bonus = rj["build_bonus"].get<double>();
+            if (rj.contains("novelty")) rc.novelty = rj["novelty"].get<double>();
+            if (rj.contains("chain_bonus")) rc.chain_bonus = rj["chain_bonus"].get<double>();
+            if (rj.contains("chain_daily")) rc.chain_daily = rj["chain_daily"].get<double>();
+            if (rj.contains("daily_income")) rc.daily_income = rj["daily_income"].get<double>();
+            if (rj.contains("survival_bonus")) rc.survival_bonus = rj["survival_bonus"].get<double>();
+            if (rj.contains("game_over_penalty")) rc.game_over_penalty = rj["game_over_penalty"].get<double>();
+            if (rj.contains("build_cost_penalty")) rc.build_cost_penalty = rj["build_cost_penalty"].get<double>();
+            if (rj.contains("disable_net_worth")) rc.disable_net_worth = rj["disable_net_worth"].get<bool>();
+            if (rj.contains("disable_daily_income")) rc.disable_daily_income = rj["disable_daily_income"].get<bool>();
+            if (rj.contains("disable_provider_bonus")) rc.disable_provider_bonus = rj["disable_provider_bonus"].get<bool>();
+        }
+    }
+
+    ColonyEnvCpp env(bd, ed, seed, map_size, curriculum_stage, {}, rc);
     env.reset(seed);
     const Game& g = env.game();
     prev_season = g.season;

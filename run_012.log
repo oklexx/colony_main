@@ -1,0 +1,48 @@
+[Config] CUDA: NVIDIA GeForce RTX 5080
+[Config] VRAM: 17.1 GB
+[Config] bf16: True
+[Config] steps=10,485,760 envs=1024 n_steps=2048 batch=32768 epochs=10
+[Config] lr=0.0003 gamma=0.995 gae=0.98
+[Config] AMP=True (bfloat16) compile=False
+[Config] device=cuda
+[Config] model_dir=C:\Users\oklex\colony_runs\models\run_012
+[Env] Created in 2.6s (obs=244, actions=45)
+[Save] Normalization: C:\Users\oklex\colony_runs\models\run_012\normalization.json
+[Trainer] Starting: total=10,485,760 steps, n_envs=1024, n_steps=2048, batch=32768, epochs=10, device=cuda
+[Trainer] AMP=True (bfloat16), compile=False
+[Trainer] curriculum_stage=0, schedule=[]
+[Step 2,097,152/10,485,760] FPS=23,893 | episodes=5972 best_score=0.0 best_reward=3.24 | p_loss=0.0032 v_loss=88.1081 ent=2.6265 KL=0.01165 | GPU_mem=2440MB
+[Save] C:\Users\oklex\colony_runs\models\run_012\checkpoint_2097152_steps.pt
+[Save] C:\Users\oklex\colony_runs\models\run_012\checkpoint_2097152_steps.norm.json
+[Eval @ 2,097,152] days=1000.0 people=50.0 bases=1.0 return=-4165.2 score=413.00 thresholds=FAIL
+[Step 4,194,304/10,485,760] FPS=24,951 | episodes=12123 best_score=0.0 best_reward=4.41 | p_loss=-0.0003 v_loss=3.2209 ent=2.6247 KL=0.00723 | GPU_mem=2440MB
+[Save] C:\Users\oklex\colony_runs\models\run_012\checkpoint_4194304_steps.pt
+[Save] C:\Users\oklex\colony_runs\models\run_012\checkpoint_4194304_steps.norm.json
+[Eval @ 4,194,304] days=1000.0 people=50.0 bases=1.0 return=-4165.2 score=413.00 thresholds=FAIL
+[Step 6,291,456/10,485,760] FPS=25,111 | episodes=18579 best_score=0.0 best_reward=4.41 | p_loss=-0.0011 v_loss=0.8397 ent=2.6200 KL=0.00860 | GPU_mem=2440MB
+[Save] C:\Users\oklex\colony_runs\models\run_012\checkpoint_6291456_steps.pt
+[Save] C:\Users\oklex\colony_runs\models\run_012\checkpoint_6291456_steps.norm.json
+[Eval @ 6,291,456] days=1000.0 people=50.0 bases=1.0 return=-4165.2 score=413.00 thresholds=FAIL
+[Step 8,388,608/10,485,760] FPS=25,069 | episodes=24743 best_score=0.0 best_reward=4.41 | p_loss=-0.0015 v_loss=0.3786 ent=2.6137 KL=0.00789 | GPU_mem=2440MB
+[Save] C:\Users\oklex\colony_runs\models\run_012\checkpoint_8388608_steps.pt
+[Save] C:\Users\oklex\colony_runs\models\run_012\checkpoint_8388608_steps.norm.json
+[Eval @ 8,388,608] days=1000.0 people=50.0 bases=1.0 return=-4165.2 score=413.00 thresholds=FAIL
+[Step 10,485,760/10,485,760] FPS=24,912 | episodes=30902 best_score=0.0 best_reward=4.41 | p_loss=-0.0021 v_loss=0.2240 ent=2.6059 KL=0.00740 | GPU_mem=2440MB
+[Save] C:\Users\oklex\colony_runs\models\run_012\checkpoint_10485760_steps.pt
+[Save] C:\Users\oklex\colony_runs\models\run_012\checkpoint_10485760_steps.norm.json
+[Eval @ 10,485,760] days=1000.0 people=50.0 bases=1.0 return=-4165.2 score=413.00 thresholds=FAIL
+[Save] Final model: C:\Users\oklex\colony_runs\models\run_012\final_model.pt
+[Save] Normalization: C:\Users\oklex\colony_runs\models\run_012\final_model.norm.json
+[Done] 10,485,760 steps in 424.0s (24,731 FPS), best_reward=4.41, episodes=30902
+
+============================================================
+Training complete: 10,485,760 steps
+Total time: 425.3s
+Average FPS: 24,653
+Episodes completed: 30902
+Best reward: 4.41
+Final policy_loss: -0.0021
+Final value_loss: 0.2240
+Final entropy: 2.6059
+Final approx_kl: 0.00740
+============================================================

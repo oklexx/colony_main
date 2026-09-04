@@ -114,7 +114,17 @@ class CppColonyEnv(gym.Env):
         rc = colony_cpp.RewardConfig()
         _REWARD_KEYS = ("build_bonus", "chain_bonus", "chain_daily",
                         "novelty", "daily_income", "sale_bonus", "tax_daily_bonus",
-                        "survival_bonus", "game_over_penalty")
+                        "survival_bonus", "game_over_penalty", "diversity_bonus",
+                        "error_penalty", "preserve_penalty", "demolish_penalty",
+                        "manual_tax_penalty",
+                        "build_cost_penalty",
+                        "idle_build_penalty", "idle_build_threshold_days",
+                        "milestone_base_bonus", "milestone_people_bonus",
+                        "milestone_day_bonus", "milestone_year_bonus",
+                        "proximity_bonus",
+                        "clip_reward_min", "clip_reward_max",
+                        "disable_net_worth", "disable_daily_income",
+                        "disable_provider_bonus")
         if reward_config:
             for k in _REWARD_KEYS:
                 if k in reward_config:
@@ -206,9 +216,16 @@ class CppColonyEnv(gym.Env):
             return np.zeros((400, 400, 3), dtype=np.uint8)
         return None
     
+    def set_step_log(self, path: str):
+        self.cpp_env.set_step_log(path)
+
+    def action_mask(self) -> np.ndarray:
+        """Return boolean mask of available actions [n_actions]."""
+        return np.asarray(self.cpp_env.action_mask(), dtype=bool)
+
     def close(self):
         pass
-    
+
     @property
     def unwrapped(self):
         return self

@@ -76,6 +76,8 @@ class ParameterRow(QWidget):
             self.spin = QSpinBox()
             self.spin.setRange(int(spec.min), int(spec.max))
             self.spin.setSingleStep(int(spec.step) or 1)
+            self.spin.setFixedHeight(24)
+            self.spin.setStyleSheet("font-size:11px; padding:3px; min-height:24px;")
         else:
             self.spin = QDoubleSpinBox()
             self.spin.setRange(spec.min, spec.max)
@@ -86,6 +88,8 @@ class ParameterRow(QWidget):
                 decimals = 6
             self.spin.setDecimals(decimals)
             self.spin.setSingleStep(spec.step)
+            self.spin.setFixedHeight(24)
+            self.spin.setStyleSheet("font-size:11px; padding:3px; min-height:24px;")
 
         self.spin.setObjectName(f"spin_{spec.key}")
         self.spin.setToolTip(spec.tooltip)
@@ -137,7 +141,7 @@ class MainWindow(QMainWindow):
     def __init__(self, config: Optional[Dict[str, Any]] = None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Сахалинская колония — обучение моделей")
-        self.setMinimumSize(980, 600)
+        self.setMinimumSize(1400, 700)
         self.setObjectName("main_window")
 
         self.config = config or {}
@@ -178,11 +182,169 @@ class MainWindow(QMainWindow):
         right.setSpacing(2)
 
         root.addLayout(left, 1)
-        root.addLayout(right, 3)
+        root.addLayout(right, 5)  # Increased from 3 to give more space to right panel (curriculum + params)
 
         self._build_left(left)
         self._build_right(right)
         self._build_menubar()
+        
+        # ── Learning Metrics Panel (separate 300px panel on far right) ──
+        metrics_outer_panel = QWidget()
+        metrics_outer_layout = QVBoxLayout(metrics_outer_panel)
+        metrics_outer_layout.setContentsMargins(10, 10, 10, 10)
+        metrics_outer_layout.setSpacing(0)
+        
+        # Main metrics container (fixed width 300px)
+        metrics_main_panel = QWidget()
+        metrics_main_panel.setFixedWidth(290)  # 300px minus margins
+        metrics_main_panel.setStyleSheet("""
+            QFrame {
+                background-color: #2a2a2a;
+                border: 2px solid #4a90d9;
+                border-radius: 8px;
+                padding: 10px;
+            }
+            QLabel, QSpinBox, QComboBox {
+                color: white !important;
+                background-color: #3a3a3a !important;
+                border: 1px solid #4a4a4a !important;
+                font-size: 9pt;
+            }
+            QListWidget {
+                background-color: #2a2a2a !important;
+                color: white !important;
+                border: 1px solid #4a4a4a !important;
+            }
+        """)
+        
+        metrics_container = QVBoxLayout(metrics_main_panel)
+        metrics_container.setContentsMargins(0, 0, 0, 0)
+        metrics_container.setSpacing(10)
+        
+        # Title
+        self._metrics_title = QLabel("📈 Learning Metrics")
+        self._metrics_title.setStyleSheet("""
+            font-size: 16pt;
+            font-weight: bold;
+            color: #1976D2;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #BBDEFB;
+        """)
+        metrics_container.addWidget(self._metrics_title)
+        
+        # Metrics grid
+        metrics_grid = QGridLayout()
+        metrics_grid.setSpacing(10)
+        
+        self._episodes_label = QLabel("Episodes: 0")
+        self._steps_label = QLabel("Step: 0")
+        self._total_reward_label = QLabel("Total Reward: 0.0")
+        self._avg_reward_label = QLabel("Avg Reward: 0.0")
+        self._best_reward_label = QLabel("Best Reward: 0.0")
+        
+        self._episodes_label.setStyleSheet("""
+            font-size: 13pt;
+            font-weight: bold;
+            color: #424242;
+            padding: 8px 12px;
+            background-color: white;
+            border-radius: 4px;
+        """)
+        self._steps_label.setStyleSheet(self._episodes_label.styleSheet())
+        self._total_reward_label.setStyleSheet("""
+            font-size: 13pt;
+            font-weight: bold;
+            color: #2E7D32;
+            padding: 8px 12px;
+            background-color: #E8F5E9;
+            border-radius: 4px;
+        """)
+        self._avg_reward_label.setStyleSheet("""
+            font-size: 13pt;
+            font-weight: bold;
+            color: #1565C0;
+            padding: 8px 12px;
+            background-color: #E3F2FD;
+            border-radius: 4px;
+        """)
+        self._best_reward_label.setStyleSheet("""
+            font-size: 15pt;
+            font-weight: bold;
+            color: white;
+            padding: 10px 15px;
+            background-color: #4CAF50;
+            border-radius: 6px;
+        """)
+        
+        metrics_grid.addWidget(self._episodes_label, 0, 0)
+        metrics_grid.addWidget(self._steps_label, 0, 1)
+        metrics_grid.addWidget(self._total_reward_label, 1, 0)
+        metrics_grid.addWidget(self._avg_reward_label, 1, 1)
+        metrics_grid.addWidget(self._best_reward_label, 2, 0, 1, 2)
+        
+        metrics_container.addLayout(metrics_grid)
+        metrics_outer_layout.addWidget(metrics_main_panel, 1)
+
+        # Add Learning Metrics Panel to right side (next to main UI)
+        root.addWidget(metrics_outer_panel)
+
+        # ── New Widgets Panel (KL Status + Curriculum + Action Loop + Returns + Quick Actions) ──
+        new_widgets_outer_panel = QWidget()
+        new_widgets_outer_layout = QVBoxLayout(new_widgets_outer_panel)
+        new_widgets_outer_layout.setContentsMargins(10, 10, 10, 10)
+        new_widgets_outer_layout.setSpacing(0)
+        
+        # Main widgets container (fixed width matching Learning Metrics)
+        new_widgets_main_panel = QWidget()
+        new_widgets_main_panel.setFixedWidth(290)  # Same as learning metrics panel
+        new_widgets_main_panel.setStyleSheet("""
+            QFrame {
+                background-color: #2a2a2a;
+                border: 2px solid #4a90d9;
+                border-radius: 8px;
+                padding: 10px;
+            }
+            QLabel, QSpinBox, QComboBox {
+                color: white !important;
+                background-color: #3a3a3a !important;
+                border: 1px solid #4a4a4a !important;
+                font-size: 9pt;
+            }
+            QListWidget, QPushButton {
+                background-color: #3a3a3a !important;
+                color: white !important;
+                border: 1px solid #4a4a4a !important;
+            }
+        """)
+        
+        new_widgets_container = QVBoxLayout(new_widgets_main_panel)
+        new_widgets_container.setContentsMargins(5, 5, 5, 5)
+        new_widgets_container.setSpacing(2)
+        
+        # KL Status Widget
+        self.kl_status_widget = KLStatusWidget()
+        new_widgets_container.addWidget(self.kl_status_widget, 1)
+        
+        # Curriculum Progress Widget
+        self.curriculum_progress_widget = CurriculumProgressWidget()
+        new_widgets_container.addWidget(self.curriculum_progress_widget, 0)
+        
+        # Action Loop Widget
+        self.action_loop_widget = ActionLoopWidget()
+        new_widgets_container.addWidget(self.action_loop_widget, 0)
+        
+        # Return Statistics Widget
+        self.return_statistics_widget = ReturnStatisticsWidget()
+        new_widgets_container.addWidget(self.return_statistics_widget, 1)
+        
+        # Quick Actions Widget
+        self.quick_actions_widget = QuickActionsWidget()
+        new_widgets_container.addWidget(self.quick_actions_widget, 0)
+
+        new_widgets_outer_layout.addWidget(new_widgets_main_panel, 1)
+
+        # Add to main window central widget (as separate panel on far right, next to learning metrics)
+        root.addWidget(new_widgets_outer_panel)
 
     # ── LEFT COLUMN ──
 
@@ -204,7 +366,8 @@ class MainWindow(QMainWindow):
         self.name_edit = QLineEdit()
         self.name_edit.setPlaceholderText("run_001")
         self.name_edit.setFixedWidth(140)
-        self.name_edit.setStyleSheet(STYLE_SMALL)
+        self.name_edit.setFixedHeight(24)
+        self.name_edit.setStyleSheet("font-size:11px; padding:3px; min-height:24px;")
         n_row.addWidget(self.name_edit, 1)
         n_row.addStretch(1)
         layout.addLayout(n_row)
@@ -378,11 +541,12 @@ class MainWindow(QMainWindow):
         watch_lay.addWidget(QLabel("Stage:"))
         self.stage_combo = QComboBox()
         self.stage_combo.addItems([
-            "0 — все здания", "1 — базовые",
-            "2 — +средние", "3 — полные"])
+            "0 — откл.", "1 — быстрый",
+            "2 — стандартный", "3 — медленный"])
         self.stage_combo.setCurrentIndex(2)
-        self.stage_combo.setFixedWidth(110)
-        self.stage_combo.setStyleSheet(STYLE_SMALL)
+        self.stage_combo.setFixedWidth(140)
+        self.stage_combo.setFixedHeight(28)
+        self.stage_combo.setStyleSheet("font-size:12px; padding:5px; min-height:28px;")
         watch_lay.addWidget(self.stage_combo)
 
         self.watch_stage_info_label = QLabel(
@@ -401,7 +565,7 @@ class MainWindow(QMainWindow):
         rw_box.setContentsMargins(0, 0, 0, 0)
         rw_box.addWidget(QLabel("Награды"), 0)
         rw_v = QVBoxLayout()
-        rw_v.setSpacing(2)
+        rw_v.setSpacing(8)  # Increased spacing between reward parameters to prevent overlap
         self.reward_rows: Dict[str, ParameterRow] = {}
         for spec in REWARD_SPECS:
             row = ParameterRow(spec)
@@ -488,53 +652,15 @@ class MainWindow(QMainWindow):
         self.console.setLineWrapMode(QPlainTextEdit.NoWrap)
         self.console.setStyleSheet(
             "font-family:'Consolas','Courier New',monospace; font-size:10px;")
-        self.console.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.console.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)  # Fixed height to leave room for other widgets
         self.console.verticalScrollBar().rangeChanged.connect(self._on_scroll_range)
         self.console.verticalScrollBar().valueChanged.connect(self._on_scroll_value)
         layout.addWidget(self.console, 1)
 
-        # ── NEW WIDGETS PANEL (UI Improvements) ──
-        new_panel = QWidget()
-        new_panel.setStyleSheet("""
-            QFrame {
-                background-color: #2a2a2a;
-                border: 2px solid #4a90d9;
-                border-radius: 8px;
-                padding: 8px;
-                margin: 5px;
-            }
-            QLabel { color: #ffffff; font-size: 9px; }
-            QProgressBar { 
-                background-color: #3a3a3a;
-                border: 1px solid #4a4a4a;
-                border-radius: 3px;
-                text-align: center;
-            }
-        """)
-        new_layout = QVBoxLayout(new_panel)
-        new_layout.setSpacing(2)
-        
-        # KL Status Widget
-        self.kl_status_widget = KLStatusWidget()
-        new_layout.addWidget(self.kl_status_widget, 1)
-        
-        # Curriculum Progress Widget
-        self.curriculum_progress_widget = CurriculumProgressWidget()
-        new_layout.addWidget(self.curriculum_progress_widget, 0)
-        
-        # Action Loop Widget
-        self.action_loop_widget = ActionLoopWidget()
-        new_layout.addWidget(self.action_loop_widget, 0)
-        
-        # Return Statistics Widget
-        self.return_statistics_widget = ReturnStatisticsWidget()
-        new_layout.addWidget(self.return_statistics_widget, 1)
-        
-        # Quick Actions Widget
-        self.quick_actions_widget = QuickActionsWidget()
-        new_layout.addWidget(self.quick_actions_widget, 0)
+        # ── NEW WIDGETS PANEL (removed - moved to separate panel on right) ──
+        pass
 
-        layout.insertWidget(1, new_panel)  # Insert below parameter panel
+        # layout.insertWidget(2, None)  # Remove old insertion
 
     # ── menubar ──
 
@@ -955,13 +1081,16 @@ class MainWindow(QMainWindow):
             tempfile.gettempdir(),
             f"colony_ui_{int(time.time() * 1000)}.jsonl")
         import sys as _sys, subprocess as _sp
+        print(f"[UI] Starting worker: {_sys.executable} worker.py --config {tmp.name} --name {cfg['name']}", file=_sys.stderr)
         proc = _sp.Popen(
             [_sys.executable, "-u",
              str(Path(__file__).resolve().parent / "worker.py"),
              "--config", tmp.name, "--name", cfg["name"],
              "--output", msg_file],
             cwd=str(Path(__file__).resolve().parent.parent),
-            creationflags=getattr(_sp, "CREATE_NO_WINDOW", 0))
+            creationflags=getattr(_sp, "CREATE_NO_WINDOW", 0),
+            stdout=_sp.PIPE,
+            stderr=_sp.PIPE)
         self._train_pid = proc.pid
         self._msg_file = msg_file
         self._msg_offset = 0

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <fstream>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -18,17 +19,45 @@ namespace colony {
 
 // Коэффициенты наград (аналог env-переменных COLONY_* в rl/env.py).
 struct RewardConfig {
-    double build_bonus = 5.0;       // бонус за постройку × year_production_value
-    double chain_bonus = 0.5;       // бонус за первую цепочку потребления
-    double chain_daily = 2.0;       // ежедневный бонус за активную цепочку
-    double novelty = 20.0;          // бонус за первый запуск нового типа здания
-    double daily_income = 0.1;      // коэффициент ежедневного дохода
-    double sale_bonus = 0.1;        // бонус за продажу ресурсов
-    double tax_daily_bonus = 0.77;  // ежедневный бонус при отсутствии налогового срока
-    double survival_bonus = 0.0;      // + per surviving step
-    double game_over_penalty = 20.0;  // - on game over (was hardcoded 20)
-    bool disable_net_worth = false;     // отключить компонент чистой стоимости
-    bool disable_daily_income = false;  // отключить ежедневный доход
+    // --- base bonuses ---
+    double build_bonus = 1.0;       // base multiplier: reward = build_bonus + log2(1 + ypv/1000)
+    double chain_bonus = 0.25;      // chain multiplier: reward = chain_bonus * log2(1 + ypv/1000) per consumer
+    double chain_daily = 0.5;       // daily bonus for active chain
+    double novelty = 5.0;           // bonus for first working of new building type
+    double daily_income = 0.5;      // income multiplier: reward = daily_income * log1p(daily_total / 100)
+    double sale_bonus = 0.2;        // sale multiplier: reward = sale_bonus * log1p(sale_value / 100)
+    double tax_daily_bonus = 0.77;  // daily bonus when no tax due
+    double survival_bonus = 0.1;    // + per survival step
+    double game_over_penalty = 10.0; // - on game over
+    double diversity_bonus = 2.0;    // bonus for each unique building type built (after first)
+
+    // --- penalties for errors / special actions ---
+    double error_penalty = -5.0;      // penalty for failed action (increased to discourage spam)
+    double preserve_penalty = -8.0;   // cost of preserve/unpreserve (increased to prevent PRESERVE loops)
+    double demolish_penalty = -3.0;   // penalty for successful DEMOLISH (new: discourage destroying buildings)
+    double manual_tax_penalty = -0.5; // cost of manual tax payment
+    double build_cost_penalty = 0.0001; // fraction of build cost (subtraction)
+    double idle_build_penalty = -5.0;     // penalty for long period without builds
+    int idle_build_threshold_days = 10;   // threshold in days without builds (reduced from 30)
+    double survival_coeff = 0.001;        // net_worth change multiplier (was hardcoded 0.005, too aggressive)
+
+    // ─── milestone-бонусы ───
+    double milestone_base_bonus = 10.0;    // за каждые 5 баз (increased from 3.0)
+    double milestone_people_bonus = 2.0;  // за каждые 50 человек
+    double milestone_day_bonus = 2.0;     // за каждые 100 дней
+    double milestone_year_bonus = 5.0;    // за первый год (365 дней)
+
+    // ─── пространственные бонусы ───
+    double proximity_bonus = 0.5;  // бонус за строительство рядом с ресурсом
+
+    // ─── клиппинг сырой награды ───
+    double clip_reward_min = -10.0;
+    double clip_reward_max = 10.0;
+
+    // ─── флаги ───
+    bool disable_net_worth = false;
+    bool disable_daily_income = false;
+    bool disable_provider_bonus = false;
 };
 
 // RL-среда: точная копия ColonyEnv из rl/env.py (награды и наблюдения).
@@ -69,6 +98,21 @@ public:
     void set_minimap_radius(int r) { minimap_radius_ = r; }
     std::vector<float> minimap() const;
 
+    struct EpisodeMetrics {
+        int64_t total_reward = 0;
+        int64_t days_survived = 0;
+        int64_t total_builds = 0;
+        int64_t unique_build_types = 0;
+        int64_t chains_activated = 0;
+        int64_t max_chain_depth = 0;
+        int64_t reached_resources = 0;
+        int64_t deaths = 0;
+        int64_t births = 0;
+        int64_t base_count_peak = 0;
+        int64_t net_worth = 0;
+        int64_t population_peak = 0;
+    };
+
     struct StepOut {
         std::vector<float> obs;
         double rew = 0.0;
@@ -78,6 +122,7 @@ public:
         bool tax_grace_expired = false;
         double ep_return = 0.0;
         int64_t steps = 0;
+        EpisodeMetrics metrics;
     };
     StepOut step(int action);
 
@@ -87,7 +132,9 @@ public:
     int n_build() const { return n_build_; }
     int n_bases() const { return (int)game_.bases.size(); }
     int n_actions() const { return A_BUILD0 + n_build_ + N_MANAGERS; }
-    int obs_size() const { return 27 + n_build_ + 7 + 9 + 4 * n_build_; }
+    int obs_size() const { return 27 + n_build_ + 7 + 9 + 4 * n_build_ + 9 + n_build_; }
+    // Action mask: 1.0 = available, 0.0 = blocked. Size = n_actions().
+    std::vector<float> action_mask();
     const std::vector<std::string>& build_ids() const { return build_ids_; }
     const std::vector<const BaseData*>& build_data() const { return build_data_; }
     const Game& game() const { return game_; }
@@ -97,6 +144,7 @@ public:
     int64_t steps() const { return steps_; }
     double ep_return() const { return ep_return_; }
     double last_reward() const { return last_reward_; }
+    EpisodeMetrics metrics() const { return episode_metrics_; }
 
     struct Stats { int64_t days, people, bases, money; };
     Stats stats() const {
@@ -109,6 +157,9 @@ public:
     std::optional<std::pair<int, int>> find_lot(int need_earth, bool no_near_base);
     bool lot_ok(int x, int y, int need_earth, bool no_near_base) const;
     double debug_net_worth() const { return net_worth(game_); }
+    std::string dump_obs() const;
+    void set_step_log(const std::string& path);
+    bool step_log_enabled() const { return step_log_.is_open(); }
 
 private:
     double net_worth() const;
@@ -159,11 +210,15 @@ private:
     double last_chain_daily_ = 0.0;
     int64_t tax_due_days_ = 0;
     int tax_grace_days_ = 0;
+    int64_t days_since_last_build_ = 0;
+    bool has_ever_built_ = false;
 
     std::unordered_set<int64_t> produced_;      // uid построек, получивших бонус (аналог _produced по id() в референсе)
     std::unordered_set<int64_t> building_before_;
     std::unordered_set<std::pair<std::string, int>, ChainKeyHash> chain_done_;
     std::unordered_set<std::string> first_working_;
+    EpisodeMetrics episode_metrics_;
+    std::unordered_set<std::string> unique_build_ids_;
     mutable std::pair<int, int> cell_cache_;
     mutable std::vector<float> obs_buf_;
 
@@ -171,6 +226,10 @@ private:
     mutable double cached_net_worth_ = 0.0;
     mutable bool net_worth_valid_ = false;
     void invalidate_net_worth() { net_worth_valid_ = false; }
+
+    // Step log
+    std::string step_log_path_;
+    std::ofstream step_log_;
 };
 
 // Batched vectorized environment — N ColonyEnvCpp instances in one process.
@@ -205,6 +264,8 @@ public:
     int minimap_channels() const { return 8; }
     void set_minimap_radius(int r) { minimap_radius_ = r; for (auto& e : envs_) e.set_minimap_radius(r); }
     std::vector<float> minimap_batch() const;
+    // Action masks for all envs: [n_envs * n_actions]
+    std::vector<float> action_masks_batch() const;
 
     void save_normalization(const std::string& path);
     void load_normalization(const std::string& path);
@@ -227,6 +288,16 @@ public:
     void set_rewards(const RewardConfig& cfg) {
         cfg_ = cfg;
         for (auto& env : envs_) env.set_rewards(cfg);
+    }
+    void set_step_log(int env_idx, const std::string& path) {
+        if (env_idx >= 0 && env_idx < n_envs_) envs_[env_idx].set_step_log(path);
+    }
+    void clear_step_log(int env_idx) {
+        if (env_idx >= 0 && env_idx < n_envs_) envs_[env_idx].set_step_log("");
+    }
+    std::string dump_obs(int env_idx) const {
+        if (env_idx >= 0 && env_idx < n_envs_) return envs_[env_idx].dump_obs();
+        return "";
     }
 
 private:

@@ -34,22 +34,26 @@ public:
         for (int j = 0; j < sz; ++j) {
             double batch_mean = 0.0;
             double batch_var = 0.0;
+            int valid = 0;
             for (int i = 0; i < n_rows; ++i) {
                 double val = (double)data[i * row_stride + j];
+                if (!std::isfinite(val)) continue;
                 batch_mean += val;
                 batch_var += val * val;
+                valid++;
             }
-            batch_mean /= (double)n_rows;
-            if (n_rows > 1) {
-                batch_var = batch_var / (double)n_rows - batch_mean * batch_mean;
+            if (valid == 0) continue;
+            batch_mean /= (double)valid;
+            if (valid > 1) {
+                batch_var = batch_var / (double)valid - batch_mean * batch_mean;
             } else {
                 batch_var = 0.0;
             }
 
             double delta = batch_mean - mean_[j];
-            double new_mean = mean_[j] + delta * ((double)n_rows / new_count);
-            double m2 = var_[j] * old_count + batch_var * (double)n_rows
-                        + delta * delta * old_count * (double)n_rows / new_count;
+            double new_mean = mean_[j] + delta * ((double)valid / new_count);
+            double m2 = var_[j] * old_count + batch_var * (double)valid
+                        + delta * delta * old_count * (double)valid / new_count;
             mean_[j] = new_mean;
             var_[j] = m2 / new_count;
         }
@@ -58,6 +62,7 @@ public:
 
     // Update with a single scalar value (for reward stats).
     void update_scalar(double val) {
+        if (!std::isfinite(val)) return;  // skip NaN/Inf
         double old_count = count_;
         count_ += 1.0;
         double delta = val - mean_[0];
@@ -75,7 +80,9 @@ public:
         for (int i = 0; i < n_rows; ++i) {
             for (int j = 0; j < sz; ++j) {
                 double v = (double)obs[i * row_stride + j];
-                v = (v - mean_[j]) / std::sqrt(var_[j] + eps);
+                double denominator = std::sqrt(std::abs(var_[j]) + eps);
+                v = (v - mean_[j]) / denominator;
+                if (!std::isfinite(v)) v = 0.0;
                 if (v > clip_val) v = clip_val;
                 if (v < -clip_val) v = -clip_val;
                 obs[i * row_stride + j] = (float)v;
@@ -86,7 +93,9 @@ public:
     // Normalize a single reward.
     double normalize_reward(double rew, double clip_val = 10.0) const {
         double eps = 1e-8;
-        double v = rew / std::sqrt(var_[0] + eps);
+        double denominator = std::sqrt(std::abs(var_[0]) + eps);
+        double v = rew / denominator;
+        if (!std::isfinite(v)) v = 0.0;
         if (v > clip_val) v = clip_val;
         if (v < -clip_val) v = -clip_val;
         return v;

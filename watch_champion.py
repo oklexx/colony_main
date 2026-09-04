@@ -60,7 +60,15 @@ def read_stage_from_meta(model_dir):
 
 
 def write_action(action_file: Path, action: int) -> None:
-    """Write action int to the IPC file."""
+    """Write action int to the IPC file.
+
+    Waits for C++ to delete the file (consumed previous action) before writing.
+    This prevents overwriting an unread action.
+    """
+    import time as _time
+    deadline = _time.monotonic() + 2.0
+    while action_file.exists() and _time.monotonic() < deadline:
+        _time.sleep(0.005)
     action_file.write_text(str(action), encoding="utf-8")
 
 
@@ -84,6 +92,7 @@ def launch_visual_watch(
     seed: int,
     map_size: int,
     curriculum_stage: int | None = None,
+    reward_config_path: str | None = None,
 ) -> "subprocess.Popen":
     """Launch the GUI exe in headless-ai mode."""
     import subprocess
@@ -97,6 +106,8 @@ def launch_visual_watch(
     ]
     if curriculum_stage is not None:
         args.extend(["--stage", str(curriculum_stage)])
+    if reward_config_path:
+        args.extend(["--reward-config", reward_config_path])
     workdir = str(PROJECT_ROOT)
     return subprocess.Popen(args, cwd=workdir)
 
@@ -118,6 +129,9 @@ def main():
     parser.add_argument("--device", type=str, default="cpu")
     parser.add_argument("--log-file", type=str, default=None,
                         help="Also write output to this file (for UI capture)")
+    parser.add_argument("--step-log", type=str, default=None,
+                        help="C++ step-log file: per-step reward breakdown + state (err/tax/build/"
+                             "div/prox/nov/mile/surv/idle/...) for debugging model behavior")
     parser.add_argument("--curriculum-stage", type=int, default=None,
                         help="Override curriculum stage (0=all buildings, 1-3). "
                              "If not set, reads from best_model.meta.json")
@@ -142,26 +156,39 @@ def main():
 
     model_dir = Path(args.model_dir).expanduser()
     model_path = model_dir / args.model_file
+    # Fallback: if requested model doesn't exist, try final_model.pt then checkpoint_*.pt
+    if not model_path.exists():
+        fallback = model_dir / "final_model.pt"
+        if fallback.exists():
+            model_path = fallback
+        else:
+            checkpoints = sorted(model_dir.glob("checkpoint_*_steps.pt"))
+            if checkpoints:
+                model_path = checkpoints[-1]
     norm_path = model_dir / "normalization.json"
     if not norm_path.exists():
         norm_path = model_path.with_suffix(".norm.json")
     if not norm_path.exists():
-        # Look up the matching checkpoint norm by total_timesteps from best_model.meta.json
-        meta_path = model_dir / "best_model.meta.json"
-        if meta_path.exists():
-            import json as _json
-            try:
-                meta = _json.loads(meta_path.read_text(encoding="utf-8"))
-                ts = meta.get("total_timesteps")
-                if ts:
-                    candidate = model_dir / f"checkpoint_{ts}_steps.norm.json"
-                    if candidate.exists():
-                        norm_path = candidate
-            except (json.JSONDecodeError, OSError):
-                pass
+        # Look up the matching checkpoint norm by total_timesteps from meta.json
+        for meta_name in ("best_model.meta.json", "meta.json"):
+            meta_path = model_dir / meta_name
+            if meta_path.exists():
+                import json as _json
+                try:
+                    meta = _json.loads(meta_path.read_text(encoding="utf-8"))
+                    ts = meta.get("total_timesteps") or meta.get("steps")
+                    if ts:
+                        candidate = model_dir / f"checkpoint_{ts}_steps.norm.json"
+                        if candidate.exists():
+                            norm_path = candidate
+                            break
+                except (json.JSONDecodeError, OSError):
+                    pass
 
     if not model_path.exists():
         print(f"ERROR: model not found: {model_path}")
+        print(f"  Looked in: {model_dir}")
+        print(f"  Files: {[f.name for f in model_dir.iterdir() if f.is_file()]}")
         sys.exit(1)
 
     dev = torch.device(args.device if torch.cuda.is_available() and args.device == "cuda" else "cpu")
@@ -176,7 +203,21 @@ def main():
         print(f"Model: CNN minimap")
 
     print(f"Creating env (map_size={args.map_size})")
-    env = CppColonyEnv(map_size=args.map_size)
+    # Read reward config from model's meta.json to match training parameters
+    reward_cfg = None
+    for meta_name in ("best_model.meta.json", "meta.json"):
+        meta_path = model_dir / meta_name
+        if meta_path.exists():
+            try:
+                import json as _json
+                meta = _json.loads(meta_path.read_text(encoding="utf-8"))
+                reward_cfg = meta.get("config", {}).get("reward")
+                if reward_cfg:
+                    print(f"Loaded reward config from {meta_name}")
+                    break
+            except (Exception,):
+                pass
+    env = CppColonyEnv(map_size=args.map_size, reward_config=reward_cfg)
     if norm_path.exists():
         env.normalizer.load(str(norm_path))
         env.normalizer.set_update(False)
@@ -194,6 +235,10 @@ def main():
         print("Curriculum stage: not set (all buildings)")
 
     action_names = env._action_names
+
+    if args.step_log:
+        env.set_step_log(args.step_log)
+        print(f"Step log (per-step reward breakdown) -> {args.step_log}")
 
     if not args.visual:
         for ep in range(args.episodes):
@@ -287,6 +332,14 @@ def main():
         actions_file = tmp_dir / "actions.txt"
         state_file = tmp_dir / "state.json"
 
+        # Write reward config to temp file for GUI
+        reward_cfg_path = None
+        if reward_cfg:
+            import json as _json
+            rc_file = tmp_dir / "reward_config.json"
+            rc_file.write_text(_json.dumps(reward_cfg), encoding="utf-8")
+            reward_cfg_path = str(rc_file)
+
         print(f"Launching visual watch: {exe_path}")
         proc = launch_visual_watch(
             model_dir=model_dir,
@@ -296,43 +349,76 @@ def main():
             seed=args.seed,
             map_size=args.map_size,
             curriculum_stage=stage,
+            reward_config_path=reward_cfg_path,
         )
 
-        # Clean up IPC files
         for f in (actions_file, state_file):
             if f.exists():
                 f.unlink()
 
-        # Seed initial action so C++ can step and write the first state.json
-        # (breaks the startup deadlock: Python writes action → C++ reads, steps, writes state)
         write_action(actions_file, 0)  # 0 = DAY
 
         speed = args.speed if args.speed > 0 else 1.0
         print(f"Visual watch running. Speed: {speed} steps/s. Close GUI window to stop.")
 
-        last_state_hash = None
+        def _restart_gui():
+            """Kill old process, clean IPC, launch fresh, seed action."""
+            if proc.poll() is None:
+                proc.kill()
+            for f in (actions_file, state_file):
+                if f.exists():
+                    f.unlink()
+            p = launch_visual_watch(
+                model_dir=model_dir,
+                exe_path=exe_path,
+                actions_file=actions_file,
+                state_file=state_file,
+                seed=args.seed,
+                map_size=args.map_size,
+                curriculum_stage=stage,
+                reward_config_path=reward_cfg_path,
+            )
+            write_action(actions_file, 0)
+            return p
+
         try:
-            while proc.poll() is None:
+            step_count = 0
+            episode = 0
+            total_episodes = max(1, args.episodes)
+            while episode < total_episodes:
+                # Restart if process died
+                if proc.poll() is not None:
+                    print("  [GUI process exited, restarting...]")
+                    proc = _restart_gui()
+                    time.sleep(0.5)
+                    continue
+
                 state = read_state(state_file)
                 if state is None:
                     time.sleep(0.05)
                     continue
 
                 if state.get("terminated"):
-                    print(f"Episode terminated at day {state.get('day')}")
-                    break
-
-                # Only compute action if state changed (new obs from C++)
-                state_hash = hash(tuple(state.get("obs", [])))
-                if state_hash == last_state_hash:
-                    time.sleep(0.05)
+                    episode += 1
+                    print(f"  [Game Over at day {state.get('day')}] "
+                          f"episode {episode}/{total_episodes}")
+                    if episode >= total_episodes:
+                        break
+                    # Wait for C++ auto-reset, then force restart if needed
+                    time.sleep(1.0)
+                    if proc.poll() is not None:
+                        proc = _restart_gui()
+                    time.sleep(0.5)
                     continue
-                last_state_hash = state_hash
 
-                # Compute action from policy using obs from state
+                step_count += 1
+                day = state.get("day", "?")
+                if step_count <= 5 or step_count % 50 == 0:
+                    print(f"  step {step_count}  day {day}  "
+                          f"action_history={state.get('action')}")
+
                 obs = state.get("obs", [])
                 if obs:
-                    import numpy as np
                     obs_arr = np.array(obs, dtype=np.float32)
                     obs_arr = env.normalizer.normalize(obs_arr)
                     with torch.no_grad():
@@ -348,11 +434,12 @@ def main():
             pass
         finally:
             if proc.poll() is None:
-                proc.terminate()
-                proc.wait(timeout=5)
+                proc.kill()
             for f in (actions_file, state_file):
                 if f.exists():
                     f.unlink()
+            if reward_cfg_path and Path(reward_cfg_path).exists():
+                Path(reward_cfg_path).unlink()
             env.close()
             print("Visual watch stopped.")
         return

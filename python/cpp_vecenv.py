@@ -53,11 +53,25 @@ class CppVecEnv(VecEnv):
         rc = colony_cpp.RewardConfig()
         _REWARD_KEYS = ("build_bonus", "chain_bonus", "chain_daily",
                         "novelty", "daily_income", "sale_bonus", "tax_daily_bonus",
-                        "survival_bonus", "game_over_penalty")
+                        "survival_bonus", "game_over_penalty", "diversity_bonus",
+                        "error_penalty", "preserve_penalty", "demolish_penalty",
+                        "manual_tax_penalty",
+                        "build_cost_penalty", "idle_build_penalty", "idle_build_threshold_days",
+                        "survival_coeff",
+                        "milestone_base_bonus", "milestone_people_bonus",
+                        "milestone_day_bonus", "milestone_year_bonus",
+                        "proximity_bonus",
+                        "clip_reward_min", "clip_reward_max",
+                        "disable_net_worth", "disable_daily_income",
+                        "disable_provider_bonus")
+        _INT_KEYS = {"idle_build_threshold_days"}
         if reward_config:
             for k in _REWARD_KEYS:
                 if k in reward_config:
-                    setattr(rc, k, reward_config[k])
+                    v = reward_config[k]
+                    if k in _INT_KEYS:
+                        v = int(v)
+                    setattr(rc, k, v)
         rc.disable_net_worth = disable_net_worth
         rc.disable_daily_income = disable_daily_income
 
@@ -98,12 +112,18 @@ class CppVecEnv(VecEnv):
         )
         action_space = gym.spaces.Discrete(n_actions)
 
+        # Action masks: [n_envs, n_actions] float32 (1.0=available, 0.0=blocked)
+        self._action_masks = np.ones((n_envs, n_actions), dtype=np.float32)
+
         # Init SB3 VecEnv (sets self.num_envs, self.observation_space, self.action_space)
         super().__init__(n_envs, observation_space, action_space)
 
     def reset(self):
         seeds = [self._seed + i * 10000 for i in range(self.num_envs)]
         self.cpp_vec.reset_batch(seeds)
+        self._action_masks = np.asarray(
+            self.cpp_vec.action_masks_batch(), dtype=np.float32
+        )
         self.reset_infos = [{} for _ in range(self.num_envs)]
         self._reset_seeds()
         self._reset_options()
@@ -119,6 +139,11 @@ class CppVecEnv(VecEnv):
         terminateds = np.array(result.terminateds, dtype=bool)
         trunceds = np.array(result.trunceds, dtype=bool)
         dones = terminateds | trunceds
+
+        # Update action masks after step
+        self._action_masks = np.asarray(
+            self.cpp_vec.action_masks_batch(), dtype=np.float32
+        )
 
         infos = []
         for i in range(self.num_envs):
@@ -136,6 +161,11 @@ class CppVecEnv(VecEnv):
         # `dones` so the RL layer can bootstrap GAE correctly on truncation.
         self._last_terminateds = terminateds
         return obs, rewards, dones, infos
+
+    @property
+    def action_masks(self) -> np.ndarray:
+        """Return current action masks [n_envs, n_actions]."""
+        return self._action_masks
 
     def close(self) -> None:
         pass
@@ -169,6 +199,10 @@ class CppVecEnv(VecEnv):
     def _reshape_obs(self, raw) -> np.ndarray:
         arr = np.asarray(raw, dtype=np.float32)
         return arr.reshape(self.num_envs, -1)
+
+    def dump_obs(self, env_idx: int = 0) -> str:
+        """Return a human-readable observation dump for one sub-env."""
+        return self.cpp_vec.dump_obs(env_idx)
 
     def get_images(self):
         return [None] * self.num_envs

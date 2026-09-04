@@ -66,6 +66,8 @@ def parse_args():
     p.add_argument("--reward-config", type=str, default="", help="Path to reward JSON")
     p.add_argument("--disable-net-worth", action="store_true")
     p.add_argument("--disable-daily-income", action="store_true")
+    p.add_argument("--log-actions", action="store_true",
+                   help="Log every step (action, reward, building info) to log_dir/name/actions.log")
     p.add_argument("--curriculum-schedule", type=str, default=None,
                    help="Stage schedule as 'timesteps:stage,timesteps:stage,...' e.g. '200000:1,400000:2,500000:3'")
     return p.parse_args()
@@ -161,12 +163,42 @@ def main():
     log_dir = Path(cfg.log_dir) / args.name
     log_dir.mkdir(parents=True, exist_ok=True)
 
+    # Action logger
+    action_logger = None
+    if args.log_actions:
+        action_log_path = log_dir / "actions.log"
+        action_logger = open(action_log_path, "a", buffering=1)
+        print(f"[Log] Actions logging -> {action_log_path}")
+
     writer = None
     try:
         from torch.utils.tensorboard import SummaryWriter
         writer = SummaryWriter(str(log_dir))
     except ImportError:
         pass
+
+    # Wrap collect_step to log actions
+    if action_logger:
+        _orig_collect = em.collect_step
+        _step_counter = [0]
+
+        def _collect_with_log(obs):
+            new_obs, infos = _orig_collect(obs)
+            _step_counter[0] += 1
+            # Get last actions from env
+            try:
+                last_actions = em.env._last_actions
+            except AttributeError:
+                last_actions = None
+            for i in range(em.n_envs):
+                a = int(last_actions[i]) if last_actions is not None else -1
+                info_str = infos[i] if i < len(infos) and infos[i] else "{}"
+                action_logger.write(
+                    f"step={_step_counter[0]} env={i} action={a} {info_str}\n"
+                )
+            return new_obs, infos
+
+        em.collect_step = _collect_with_log
 
     def progress_cb(metrics):
         if writer:
@@ -200,6 +232,8 @@ def main():
 
     if writer:
         writer.close()
+    if action_logger:
+        action_logger.close()
     em.close()
 
     print(f"\n{'=' * 60}")

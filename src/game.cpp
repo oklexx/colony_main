@@ -71,11 +71,19 @@ Game::Game(const std::vector<BaseData>& base_data,
            const std::vector<BaseEvent>& events_data, int64_t seed,
            int map_size, const std::string& difficulty,
            bool no_city_game_over, int64_t no_people_days)
+    : Game(std::make_shared<const std::vector<BaseData>>(base_data),
+           std::make_shared<const std::vector<BaseEvent>>(events_data),
+           seed, map_size, difficulty, no_city_game_over, no_people_days) {}
+
+Game::Game(const std::shared_ptr<const std::vector<BaseData>>& base_data,
+           const std::shared_ptr<const std::vector<BaseEvent>>& events_data,
+           int64_t seed, int map_size, const std::string& difficulty,
+           bool no_city_game_over, int64_t no_people_days)
     : earth(seed, map_size),
       rng(seed),
       rng_np(seed),
-       base_data_(std::make_shared<const std::vector<BaseData>>(base_data)),
-       events_data_(std::make_shared<const std::vector<BaseEvent>>(events_data)),
+       base_data_(base_data),
+       events_data_(events_data),
       map_size_(map_size),
       difficulty_(difficulty),
       no_city_game_over_(no_city_game_over),
@@ -204,6 +212,48 @@ const Base* Game::base_in_box(int x, int y) const {
 void Game::refresh_occupied() {
     std::fill(occupied.begin(), occupied.end(), 0);
     for (const Base& b : bases) occupied[(size_t)b.y * map_size_ + b.x] = 1;
+}
+
+bool Game::cell_connected(int x, int y) const {
+    if (bases.empty() || !earth.in_bounds(x, y)) return false;
+    if (base_in_box(x, y)) return false;
+    const int ms = map_size_;
+    const int dx4[4] = {1, -1, 0, 0};
+    const int dy4[4] = {0, 0, 1, -1};
+    for (int i = 0; i < 4; i++) {
+        const Base* nb = base_in_box(x + dx4[i], y + dy4[i]);
+        if (nb != nullptr && nb->data->id != ROAD_ID) return true;
+    }
+    std::vector<char> visited((size_t)ms * ms, 0);
+    std::vector<std::pair<int, int>> q;
+    for (int i = 0; i < 4; i++) {
+        int nx = x + dx4[i], ny = y + dy4[i];
+        if (!earth.in_bounds(nx, ny)) continue;
+        size_t nidx = (size_t)ny * ms + nx;
+        if (visited[nidx]) continue;
+        if (base_index_map_[nidx] >= 0 && bases[base_index_map_[nidx]].data->id == ROAD_ID) {
+            visited[nidx] = 1;
+            q.push_back({nx, ny});
+        }
+    }
+    while (!q.empty()) {
+        auto [cx, cy] = q.front();
+        q.erase(q.begin());
+        for (int i = 0; i < 4; i++) {
+            int nx = cx + dx4[i], ny = cy + dy4[i];
+            if (!earth.in_bounds(nx, ny)) continue;
+            size_t nidx = (size_t)ny * ms + nx;
+            if (visited[nidx]) continue;
+            int32_t bidx = base_index_map_[nidx];
+            if (bidx >= 0) {
+                visited[nidx] = 1;
+                const Base& nb = bases[bidx];
+                if (nb.data->id == ROAD_ID) q.push_back({nx, ny});
+                else return true;
+            }
+        }
+    }
+    return false;
 }
 
 int64_t Game::now_home_places() const {
@@ -466,6 +516,8 @@ std::pair<bool, std::string> Game::build(const std::string& data_id, int x, int 
     const BaseData* d = find_data(data_id);
     if (d == nullptr) throw std::runtime_error("unknown base id: " + data_id);
     if (money < d->price) return {false, "Недостаточно денег."};
+    if (!cell_connected(x, y))
+        return {false, "Здание должно примыкать к другой постройке или быть связано с ней дорогой."};
     save_undo();
     money -= d->price;
     bases.emplace_back(d, x, y, false);
@@ -686,5 +738,46 @@ Game Game::snapshot() const { return *this; }
 
 Base* Game::find_slowest_base() { return find_slowest(-1); }
 const Base* Game::find_slowest_base() const { return find_slowest(-1); }
+
+void Game::reset_milestones() {
+    last_base_milestone_ = 0;
+    last_people_milestone_ = 0;
+    last_day_milestone_ = 0;
+    year_bonus_given_ = false;
+}
+
+double Game::check_milestones(double milestone_base, double milestone_people,
+                              double milestone_day, double milestone_year) {
+    double bonus = 0.0;
+    int nbases = (int)bases.size();
+    int64_t peop = people;
+    int64_t d = days_alive;
+
+    // Базовые milestone: каждые 5 баз
+    if (nbases >= last_base_milestone_ + 5) {
+        bonus += milestone_base;
+        last_base_milestone_ = (nbases / 5) * 5;
+    }
+
+    // Людские milestone: каждые 50 человек
+    if (peop >= last_people_milestone_ + 50) {
+        bonus += milestone_people;
+        last_people_milestone_ = (int)((peop / 50) * 50);
+    }
+
+    // Дневной milestone: каждые 100 дней
+    if (d > 0 && d % 100 == 0 && d > last_day_milestone_) {
+        bonus += milestone_day;
+        last_day_milestone_ = d;
+    }
+
+    // Годовой milestone: первый год (365 дней)
+    if (d >= 365 && !year_bonus_given_) {
+        bonus += milestone_year;
+        year_bonus_given_ = true;
+    }
+
+    return bonus;
+}
 
 }  // namespace colony

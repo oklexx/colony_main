@@ -79,16 +79,21 @@ class CurriculumProgressWidget(QWidget):
         self._upcoming_list.setMaximumHeight(80)
         self._upcoming_list.setStyleSheet("""
             QListWidget {
-                border: 1px solid #ccc;
+                border: 1px solid #4a4a4a;
                 border-radius: 4px;
-                background-color: white;
+                background-color: #2a2a2a;
+                color: white;
                 font-size: 9pt;
             }
             QListWidget::item {
                 padding: 5px;
+                background-color: #333;
+                color: white;
+                border-radius: 2px;
             }
             QListWidget::item:selected {
-                background-color: #e3f2fd;
+                background-color: #4a90d9;
+                color: white;
             }
         """)
         layout.addWidget(self._upcoming_list)
