@@ -36,12 +36,12 @@ class TrainingDashboardWidget(QWidget):
         self._action_plot_widget = None
         self._action_bar = None
 
-        self._setup_ui()
-        self._setup_plots()
-
         self._scroll_timer = QTimer()
         self._scroll_timer.timeout.connect(self._scroll_view)
         self._scroll_timer.setInterval(5000)
+
+        self._setup_ui()
+        self._setup_plots()
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -107,16 +107,30 @@ class TrainingDashboardWidget(QWidget):
         if self._kl_plot_widget is None:
             return
 
-        self._kl_curve = self._kl_plot_widget.plot(pen='b', symbol='o', symbolSize=3)
-        self._target_line = pg.InfiniteLine(pos=0.05, angle=90, pen='r', movable=False)
+        self._kl_curve = self._kl_plot_widget.plot(pen=pg.mkPen('cyan', width=2), symbol='o', symbolSize=3)
+        self._target_line = pg.InfiniteLine(pos=0.05, angle=90, pen=pg.mkPen('r', width=1, style=Qt.DashLine), movable=False)
         self._kl_plot_widget.addItem(self._target_line)
+        self._kl_plot_widget.showAxis('bottom')
+        self._kl_plot_widget.showAxis('left')
+        self._kl_plot_widget.setLabel('left', 'KL', units='')
+        self._kl_plot_widget.setLabel('bottom', 'Time', units='s')
 
-        self._entropy_curve = self._entropy_plot_widget.plot(pen='g', symbol='o', symbolSize=3)
+        self._entropy_curve = self._entropy_plot_widget.plot(pen=pg.mkPen('lime', width=2), symbol='o', symbolSize=3)
+        self._entropy_plot_widget.showAxis('bottom')
+        self._entropy_plot_widget.showAxis('left')
+        self._entropy_plot_widget.setLabel('left', 'Entropy', units='')
+        self._entropy_plot_widget.setLabel('bottom', 'Time', units='s')
 
-        self._action_bar = pg.BarGraphItem(x=[0], height=[0], width=0.8, brush='b')
+        self._action_bar = pg.BarGraphItem(x=[0], height=[0], width=0.8, brush='cyan')
         self._action_plot_widget.addItem(self._action_bar)
         self._action_plot_widget.setYRange(0, 100)
         self._action_plot_widget.setXRange(-0.5, 9.5)
+        self._action_plot_widget.showAxis('bottom')
+        self._action_plot_widget.showAxis('left')
+        self._action_plot_widget.setLabel('left', '%', units='')
+        self._action_plot_widget.setLabel('bottom', 'Action', units='')
+
+        self._scroll_timer.start()
 
     def update_data(self, kl: float = None, entropy: float = None,
                     top_actions: dict = None):
@@ -156,5 +170,17 @@ class TrainingDashboardWidget(QWidget):
         now = time.time()
         if self._kl_plot_widget is not None and self._kl_buffer:
             self._kl_plot_widget.setXRange(now - 60, now, padding=0)
+            if len(self._kl_buffer) >= 2:
+                vals = [v for _, v in self._kl_buffer[-60:]]
+                lo = min(vals)
+                hi = max(vals)
+                margin = max((hi - lo) * 0.2, 0.001)
+                self._kl_plot_widget.setYRange(lo - margin, hi + margin, padding=0)
         if self._entropy_plot_widget is not None and self._entropy_buffer:
             self._entropy_plot_widget.setXRange(now - 60, now, padding=0)
+            if len(self._entropy_buffer) >= 2:
+                vals = [v for _, v in self._entropy_buffer[-60:]]
+                lo = min(vals)
+                hi = max(vals)
+                margin = max((hi - lo) * 0.2, 0.001)
+                self._entropy_plot_widget.setYRange(lo - margin, hi + margin, padding=0)

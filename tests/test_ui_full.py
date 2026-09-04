@@ -40,7 +40,7 @@ class TestMainWindowCreation:
 
     def test_minimum_size(self, main_window):
         assert main_window.minimumWidth() == 1400
-        assert main_window.minimumHeight() == 700
+        assert main_window.minimumHeight() == 950
 
 
 class TestLeftColumn:

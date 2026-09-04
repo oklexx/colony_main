@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog,
     QFrame, QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
     QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QProgressBar,
-    QPushButton, QSpinBox, QSplitter, QTableWidget, QTableWidgetItem,
+    QPushButton, QScrollArea, QSpinBox, QSplitter, QTableWidget, QTableWidgetItem,
     QVBoxLayout, QWidget, QSizePolicy, QListWidget,
 )
 
@@ -142,7 +142,7 @@ class MainWindow(QMainWindow):
     def __init__(self, config: Optional[Dict[str, Any]] = None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Сахалинская колония — обучение моделей")
-        self.setMinimumSize(1400, 700)
+        self.setMinimumSize(1400, 950)
         self.setObjectName("main_window")
 
         self.config = config or {}
@@ -274,7 +274,12 @@ class MainWindow(QMainWindow):
         self.quick_actions_widget.cmd_resume_training.connect(self._on_quick_resume)
         self.quick_actions_widget.cmd_stop_training.connect(self._on_quick_stop)
 
-        root.addWidget(right_panel)
+        scroll = QScrollArea()
+        scroll.setWidget(right_panel)
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { background-color: #1e1e1e; border: none; }")
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        root.addWidget(scroll)
 
     # ── LEFT COLUMN ──
 
@@ -1204,8 +1209,8 @@ class MainWindow(QMainWindow):
                 episode_count=m.n_episodes_for_stats,
             )
 
-        # Dashboard Widget (update every 100 steps)
-        if self.dashboard is not None and m.done % 100 == 0:
+        # Dashboard Widget (update every callback)
+        if self.dashboard is not None:
             top_actions = getattr(m, 'top_actions', {})
             self.dashboard.update_data(
                 kl=float(m.kl) if m.kl is not None else None,

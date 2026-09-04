@@ -36,6 +36,20 @@ class TrainMetrics:
     eval_score: float = 0.0
     best_score: float = 0.0
     ent_coef: float = 0.005
+    avg_return: float = 0.0
+    median_return: float = 0.0
+    max_return: float = 0.0
+    min_return: float = 0.0
+    n_episodes_for_stats: int = 0
+    top_actions: Dict[str, float] = field(default_factory=dict)
+    loop_detected: bool = False
+    loop_action_name: Optional[str] = None
+    envs_with_loops: int = 0
+    curriculum_stage: int = 0
+    curriculum_progress_percent: float = 0.0
+    curriculum_available_actions: str = ""
+    curriculum_next_at_step: Optional[int] = None
+    curriculum_upcoming_stages: List = field(default_factory=list)
 
 
 class AsyncTrainer:
@@ -523,6 +537,22 @@ class AsyncTrainer:
                     if stage > self._curriculum_stage:
                         upcoming_stages.append({"stage": stage, "at_step": threshold})
                 upcoming_stages = upcoming_stages[:3]
+
+            # Populate metrics with all computed data
+            self.metrics.avg_return = avg_return
+            self.metrics.median_return = median_return
+            self.metrics.max_return = max_return
+            self.metrics.min_return = min_return
+            self.metrics.n_episodes_for_stats = n_episodes_for_stats
+            self.metrics.top_actions = top_actions
+            self.metrics.loop_detected = envs_with_loops > 0
+            self.metrics.loop_action_name = None
+            self.metrics.envs_with_loops = envs_with_loops
+            self.metrics.curriculum_stage = self._curriculum_stage
+            self.metrics.curriculum_progress_percent = 0.0
+            self.metrics.curriculum_available_actions = available_actions
+            self.metrics.curriculum_next_at_step = curriculum_next_at_step
+            self.metrics.curriculum_upcoming_stages = upcoming_stages
 
             self._log(
                 f"[Step {total_done:,}/{total:,}] "
