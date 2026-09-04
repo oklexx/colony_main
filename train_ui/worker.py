@@ -1,3 +1,4 @@
+import queue as _queue
 #!/usr/bin/env python3
 """Worker process for train_ui: runs training or eval in a separate process.
 
@@ -123,7 +124,7 @@ def _watch_stdin(stop_event: threading.Event, command_queue: Optional[queue.Queu
 
 def run_train(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_event: threading.Event,
               resume_model: str = "", command_queue: Optional[queue.Queue] = None) -> int:
-    import builtins
+    _orig_import_builtins
     import queue
     _orig_print = builtins.print
 
