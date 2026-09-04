@@ -66,7 +66,8 @@ class TrainingDashboardWidget(QWidget):
         self._kl_plot_widget.setMouseEnabled(x=False, y=False)
         self._kl_plot_widget.hideAxis('bottom')
         self._kl_plot_widget.hideAxis('left')
-        self._kl_plot_widget.setMinimumHeight(60)
+        self._kl_plot_widget.setMinimumHeight(50)
+        self._kl_plot_widget.setMaximumHeight(80)
         kl_layout.addWidget(self._kl_plot_widget)
         splitter.addWidget(kl_frame)
 
@@ -82,7 +83,8 @@ class TrainingDashboardWidget(QWidget):
         self._entropy_plot_widget.setMouseEnabled(x=False, y=False)
         self._entropy_plot_widget.hideAxis('bottom')
         self._entropy_plot_widget.hideAxis('left')
-        self._entropy_plot_widget.setMinimumHeight(60)
+        self._entropy_plot_widget.setMinimumHeight(50)
+        self._entropy_plot_widget.setMaximumHeight(80)
         ent_layout.addWidget(self._entropy_plot_widget)
         splitter.addWidget(ent_frame)
 
@@ -97,7 +99,8 @@ class TrainingDashboardWidget(QWidget):
         self._action_plot_widget = pg.PlotWidget(background='#1e1e1e', showGrid=(True, True, '#333'))
         self._action_plot_widget.setLabel('left', '%', units='')
         self._action_plot_widget.setLabel('bottom', '', units='')
-        self._action_plot_widget.setMinimumHeight(60)
+        self._action_plot_widget.setMinimumHeight(50)
+        self._action_plot_widget.setMaximumHeight(80)
         act_layout.addWidget(self._action_plot_widget)
         splitter.addWidget(act_frame)
 

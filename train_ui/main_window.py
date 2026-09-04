@@ -185,7 +185,7 @@ class MainWindow(QMainWindow):
         right.setSpacing(2)
 
         root.addLayout(left, 1)
-        root.addLayout(right, 5)  # Increased from 3 to give more space to right panel (curriculum + params)
+        root.addLayout(right, 4)
 
         self._build_left(left)
         self._build_right(right)
@@ -236,8 +236,8 @@ class MainWindow(QMainWindow):
         widgets_frame = QFrame()
         widgets_frame.setStyleSheet("QFrame { background-color: #252525; border: 1px solid #3a3a3a; border-radius: 6px; }")
         widgets_layout = QVBoxLayout(widgets_frame)
-        widgets_layout.setContentsMargins(4, 4, 4, 4)
-        widgets_layout.setSpacing(2)
+        widgets_layout.setContentsMargins(2, 2, 2, 2)
+        widgets_layout.setSpacing(0)
         self.kl_status_widget = KLStatusWidget()
         widgets_layout.addWidget(self.kl_status_widget)
         self.curriculum_progress_widget = CurriculumProgressWidget()
@@ -252,8 +252,8 @@ class MainWindow(QMainWindow):
         qa_frame = QFrame()
         qa_frame.setStyleSheet("QFrame { background-color: #252525; border: 1px solid #3a3a3a; border-radius: 6px; }")
         qa_layout = QVBoxLayout(qa_frame)
-        qa_layout.setContentsMargins(4, 4, 4, 4)
-        qa_layout.setSpacing(2)
+        qa_layout.setContentsMargins(2, 2, 2, 2)
+        qa_layout.setSpacing(0)
         self.quick_actions_widget = QuickActionsWidget()
         qa_layout.addWidget(self.quick_actions_widget)
         right_outer.addWidget(qa_frame)
@@ -262,11 +262,12 @@ class MainWindow(QMainWindow):
         dash_frame = QFrame()
         dash_frame.setStyleSheet("QFrame { background-color: #252525; border: 1px solid #3a3a3a; border-radius: 6px; }")
         dash_layout = QVBoxLayout(dash_frame)
-        dash_layout.setContentsMargins(4, 4, 4, 4)
-        dash_layout.setSpacing(2)
+        dash_layout.setContentsMargins(2, 2, 2, 2)
+        dash_layout.setSpacing(1)
         self.dashboard = TrainingDashboardWidget()
         dash_layout.addWidget(self.dashboard)
-        right_outer.addWidget(dash_frame, 1)
+        dash_frame.setMaximumHeight(220)
+        right_outer.addWidget(dash_frame)
 
         # Connect QuickActionsWidget signals
         self.quick_actions_widget.cmd_boost_entropy.connect(self._on_quick_boost_entropy)
@@ -279,7 +280,8 @@ class MainWindow(QMainWindow):
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("QScrollArea { background-color: #1e1e1e; border: none; }")
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        root.addWidget(scroll)
+        scroll.setMaximumWidth(600)
+        root.addWidget(scroll, 1)
 
     # ── LEFT COLUMN ──
 

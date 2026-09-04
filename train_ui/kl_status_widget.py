@@ -24,11 +24,11 @@ class KLStatusWidget(QWidget):
     
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 4, 6, 4)
-        layout.setSpacing(2)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(1)
 
         title = QLabel("KL Divergence")
-        title.setStyleSheet("font-size: 10pt; font-weight: bold; color: #4a90d9; padding: 2px; background: transparent;")
+        title.setStyleSheet("font-size: 9pt; font-weight: bold; color: #4a90d9; padding: 0px; background: transparent;")
         layout.addWidget(title)
 
         self._status_label = QLabel("OPTIMAL")
@@ -37,31 +37,22 @@ class KLStatusWidget(QWidget):
             background-color: #2e7d32;
             color: white;
             font-weight: bold;
-            border-radius: 4px;
-            padding: 3px 10px;
-            font-size: 10pt;
+            border-radius: 3px;
+            padding: 2px 8px;
+            font-size: 9pt;
+            max-height: 18px;
         """)
         layout.addWidget(self._status_label)
-
-        bar_container = QFrame()
-        bar_container.setFixedHeight(16)
-        bar_container.setStyleSheet("background: transparent; border: none;")
-        bar_layout = QHBoxLayout(bar_container)
-        bar_layout.setContentsMargins(0, 0, 0, 0)
-        bar_layout.addStretch()
 
         self._progress_bar = QProgressBar(self)
         self._progress_bar.setValue(50)
         self._progress_bar.setTextVisible(False)
         self._progress_bar.setRange(0, 100)
-        self._progress_bar.setFixedHeight(8)
-        bar_layout.addWidget(self._progress_bar)
-        bar_layout.addStretch()
-
-        layout.addWidget(bar_container)
+        self._progress_bar.setFixedHeight(6)
+        layout.addWidget(self._progress_bar)
 
         self._info_label = QLabel("KL: 0.025 | ent_coef: 0.005")
-        self._info_label.setStyleSheet("font-size: 9pt; color: #888; padding: 1px; background: transparent;")
+        self._info_label.setStyleSheet("font-size: 8pt; color: #888; padding: 0px; background: transparent;")
         layout.addWidget(self._info_label)
     
     def update(self, kl: float, ent_coef: float = None):
@@ -78,16 +69,16 @@ class KLStatusWidget(QWidget):
     def _update_status(self, kl: float):
         if kl < self.kl_low:
             self._status_label.setText("LOW")
-            self._status_label.setStyleSheet("background-color: #e65100; color: white; font-weight: bold; border-radius: 4px; padding: 3px 10px; font-size: 10pt;")
+            self._status_label.setStyleSheet("background-color: #e65100; color: white; font-weight: bold; border-radius: 3px; padding: 2px 8px; font-size: 9pt; max-height: 18px;")
         elif kl < self.kl_optimal:
             self._status_label.setText("OK")
-            self._status_label.setStyleSheet("background-color: #2e7d32; color: white; font-weight: bold; border-radius: 4px; padding: 3px 10px; font-size: 10pt;")
+            self._status_label.setStyleSheet("background-color: #2e7d32; color: white; font-weight: bold; border-radius: 3px; padding: 2px 8px; font-size: 9pt; max-height: 18px;")
         elif kl < self.kl_high:
             self._status_label.setText("OPTIMAL")
-            self._status_label.setStyleSheet("background-color: #1565c0; color: white; font-weight: bold; border-radius: 4px; padding: 3px 10px; font-size: 10pt;")
+            self._status_label.setStyleSheet("background-color: #1565c0; color: white; font-weight: bold; border-radius: 3px; padding: 2px 8px; font-size: 9pt; max-height: 18px;")
         else:
             self._status_label.setText("HIGH")
-            self._status_label.setStyleSheet("background-color: #c62828; color: white; font-weight: bold; border-radius: 4px; padding: 3px 10px; font-size: 10pt;")
+            self._status_label.setStyleSheet("background-color: #c62828; color: white; font-weight: bold; border-radius: 3px; padding: 2px 8px; font-size: 9pt; max-height: 18px;")
     
     def _update_progress_bar(self, kl: float):
         min_kl = self.kl_low
