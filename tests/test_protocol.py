@@ -96,4 +96,7 @@ def test_encode_nan_sanitized():
 
 
 def test_encode_stop():
-    assert json.loads(P.encode_stop()) == {"cmd": "stop"}
+    d = json.loads(P.encode_stop())
+    assert d["type"] == "command"
+    assert d["cmd"] == "stop"
+    assert d["payload"]["final_save"] is True

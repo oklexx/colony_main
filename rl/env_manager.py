@@ -46,6 +46,7 @@ class EnvManager:
         self.n_envs = cfg.n_envs
         self.obs_size = self.env.observation_space.shape[0]
         self.n_actions = self.env.action_space.n
+        self.action_names = getattr(self.env, 'action_names', [])
 
         radius = cfg.minimap_radius
         if radius != 14:
@@ -262,28 +263,34 @@ class EnvManager:
 
     def get_allowed_buildings_for_stage(self, stage_id: int) -> List[str]:
         """Get list of building names allowed in current curriculum stage.
-        
+
         Args:
             stage_id: Curriculum stage (0=unlock all, 1-3=limited set)
-            
+
         Returns:
             List of building names available in this stage
         """
-        # Default curriculum schedule - each stage unlocks specific buildings
-        curriculum_schedule = {
-            0: ["INITIALIZE", "MOVE_RIGHT", "MOVE_LEFT", "MOVE_UP", "MOVE_DOWN",
-                "BUILD_HOUSE", "BUILD_FURNITURE", "GATHER_WOOD", "GATHER_STONE", 
-                "GATHER_IRON", "PRESERVE", "WAIT"],  # All buildings
-            1: ["INITIALIZE", "MOVE_RIGHT", "MOVE_LEFT", "MOVE_UP", "MOVE_DOWN",
-                "BUILD_HOUSE", "PRESERVE", "WAIT"],  # Basic structures only
-            2: ["INITIALIZE", "MOVE_RIGHT", "MOVE_LEFT", "MOVE_UP", "MOVE_DOWN",
-                "BUILD_HOUSE", "GATHER_WOOD", "GATHER_STONE", "PRESERVE", "WAIT"],  # + gathering
-            3: ["INITIALIZE", "MOVE_RIGHT", "MOVE_LEFT", "MOVE_UP", "MOVE_DOWN",
-                "BUILD_HOUSE", "BUILD_FURNITURE", "GATHER_WOOD", "GATHER_STONE", 
-                "GATHER_IRON", "PRESERVE", "WAIT"]  # All again for fine-tuning
+        stage_buildings = {
+            0: ["BUILD_HOUSE", "BUILD_FARM", "BUILD_ROAD", "BUILD_GARDEN",
+                "BUILD_SMALL_HOUSE", "BUILD_SAWMILL", "BUILD_WATER_CHANNEL",
+                "BUILD_COALMINE", "BUILD_IRONMINE", "BUILD_REFINERY",
+                "BUILD_GOLDMINE", "BUILD_POWER_STATION", "BUILD_HYDRO_STATION",
+                "IMPROVE_LAND", "REPAIR", "REPAIR_ALL", "DEMOLISH",
+                "PRESERVE", "UNPRESERVE", "SELL_SURPLUS", "BUY_FOOD",
+                "TAKE_LOAN", "REPAY_LOAN", "PAY_TAX", "DAY", "WEEK"],
+            1: ["BUILD_HOUSE", "BUILD_FARM", "BUILD_ROAD", "PRESERVE", "DAY", "WEEK"],
+            2: ["BUILD_HOUSE", "BUILD_FARM", "BUILD_ROAD", "BUILD_GARDEN",
+                "BUILD_SMALL_HOUSE", "BUILD_SAWMILL", "BUILD_WATER_CHANNEL",
+                "BUILD_COALMINE", "PRESERVE", "DAY", "WEEK"],
+            3: ["BUILD_HOUSE", "BUILD_FARM", "BUILD_ROAD", "BUILD_GARDEN",
+                "BUILD_SMALL_HOUSE", "BUILD_SAWMILL", "BUILD_WATER_CHANNEL",
+                "BUILD_COALMINE", "BUILD_IRONMINE", "BUILD_REFINERY",
+                "BUILD_GOLDMINE", "BUILD_POWER_STATION", "BUILD_HYDRO_STATION",
+                "IMPROVE_LAND", "REPAIR", "REPAIR_ALL", "DEMOLISH",
+                "PRESERVE", "UNPRESERVE", "SELL_SURPLUS", "BUY_FOOD",
+                "TAKE_LOAN", "REPAY_LOAN", "PAY_TAX", "DAY", "WEEK"],
         }
-        
-        return curriculum_schedule.get(stage_id, ["INITIALIZE", "MOVE_RIGHT", "BUILD_HOUSE", "PRESERVE", "WAIT"])
+        return stage_buildings.get(stage_id, stage_buildings[0])
 
     def get_curriculum_progress(self, current_step: int) -> Dict[str, Any]:
         """Calculate progress in current curriculum stage.

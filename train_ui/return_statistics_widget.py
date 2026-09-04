@@ -134,7 +134,6 @@ class ReturnStatisticsWidget(QWidget):
             style_max = "background-color: #ffcdd2;"
         
         self._max_label.setText(f"Maximum Return: {max_text}")
-        self._max_label.setStyleSheet("font-size: 11pt; padding: 5px;")
         self._max_label.setStyleSheet(f"""
             font-size: 11pt;
             padding: 5px;

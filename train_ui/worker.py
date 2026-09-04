@@ -1,3 +1,5 @@
+from __future__ import annotations
+import builtins
 import queue as _queue
 #!/usr/bin/env python3
 """Worker process for train_ui: runs training or eval in a separate process.
@@ -8,7 +10,6 @@ Usage:
   python train_ui/worker.py --config <config.json> --name <run_name> --output <msg.jsonl>
   python train_ui/worker.py --eval-model <model.pt> --output <msg.jsonl>
 """
-from __future__ import annotations
 
 import argparse
 import json
@@ -35,6 +36,8 @@ def _build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--eval-model", type=str, dest="eval_model", help="model path (eval mode)")
     p.add_argument("--name", type=str, default="", help="run name (train mode)")
     p.add_argument("--output", type=str, default="", help="path to JSONL message file")
+    p.add_argument("--command-file", type=str, default="", dest="command_file",
+                   help="path to JSONL command file (optional)")
     p.add_argument("--resume-model", type=str, default="", help="path to model .pt to load weights from (fine-tuning)")
     p.add_argument("--episodes", type=int, default=5)
     p.add_argument("--max-days", type=int, default=1000)
@@ -88,7 +91,7 @@ class MsgFile:
             os.fsync(self._fh.fileno())
 
 
-def _watch_stdin(stop_event: threading.Event, command_queue: Optional[queue.Queue] = None) -> None:
+def _watch_stdin(stop_event: threading.Event, command_queue: Optional[_queue.Queue] = None) -> None:
     """Watch stdin for commands and either set stop event or queue the command."""
     try:
         for line in sys.stdin:
@@ -98,19 +101,17 @@ def _watch_stdin(stop_event: threading.Event, command_queue: Optional[queue.Queu
             try:
                 d = json.loads(line)
             except json.JSONDecodeError as e:
-                # Log malformed JSON but continue processing
                 import logging
                 logging.getLogger("Worker").warning(f"Invalid JSON: {e}")
                 continue
-            
+
             cmd = d.get("cmd")
             payload = d.get("payload", {})
-            
+
             if command_queue is not None and cmd in ("pause", "resume", "boost_entropy", "reset_curriculum"):
-                # Queue the command for processing
                 try:
                     command_queue.put(("command", {"cmd": cmd, "payload": payload}), timeout=1)
-                except queue.Full:
+                except _queue.Full:
                     import logging
                     logging.getLogger("Worker").warning(f"Command queue full, dropping command: {cmd}")
                     continue
@@ -122,10 +123,48 @@ def _watch_stdin(stop_event: threading.Event, command_queue: Optional[queue.Queu
         logging.getLogger("Worker").error(f"Stdin error: {e}")
 
 
+def _watch_commands(command_file: str, stop_event: threading.Event,
+                    command_queue: Optional[_queue.Queue] = None) -> None:
+    """Watch a JSONL command file for commands from the UI."""
+    offset = 0
+    while not stop_event.is_set():
+        try:
+            size = os.path.getsize(command_file)
+        except OSError:
+            time.sleep(0.5)
+            continue
+        if size <= offset:
+            time.sleep(0.5)
+            continue
+        try:
+            with open(command_file, "r", encoding="utf-8") as f:
+                f.seek(offset)
+                data = f.read()
+                offset = f.tell()
+        except (OSError, UnicodeDecodeError):
+            time.sleep(0.5)
+            continue
+        for line in data.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                d = json.loads(line)
+                cmd = d.get("cmd")
+                payload = d.get("payload", {})
+                if cmd == "stop":
+                    stop_event.set()
+                    return
+                if command_queue is not None:
+                    command_queue.put(("command", {"cmd": cmd, "payload": payload}), timeout=1)
+            except (json.JSONDecodeError, _queue.Full, Exception):
+                pass
+        time.sleep(0.5)
+
+
 def run_train(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_event: threading.Event,
-              resume_model: str = "", command_queue: Optional[queue.Queue] = None) -> int:
-    _orig_import_builtins
-    import queue
+              resume_model: str = "", command_queue: Optional[_queue.Queue] = None) -> int:
+    # import queue already at top
     _orig_print = builtins.print
 
     def _print(*a, **kw):
@@ -149,7 +188,7 @@ def run_train(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_event: 
 
 
 def _run_train_inner(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_event: threading.Event,
-                      resume_model: str = "", command_queue: Optional[queue.Queue] = None) -> int:
+                      resume_model: str = "", command_queue: Optional[_queue.Queue] = None) -> int:
     import torch
     from rl.config import Config, RewardConfig
     from rl.env_manager import EnvManager
@@ -210,48 +249,40 @@ def _run_train_inner(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_
     def log(level: str, message: str) -> None:
         mf.write(P.LogMsg(level=level, message=message))
 
-
-def progress_cb(metrics, extra_data=None) -> None:
-    try:
-        top_actions = {}
-        if hasattr(metrics, 'top_actions'):
-            top_actions = {k: float(v) for k, v in metrics.top_actions.items()}
-        
-        loop_detected = False
-        loop_action_name = None
-        envs_with_loops = 0
-        
-        if hasattr(metrics, 'loop_detected'):
-            loop_detected = bool(metrics.loop_detected)
-            loop_action_name = str(metrics.loop_action_name) if metrics.loop_action_name is not None else None
-            envs_with_loops = int(metrics.envs_with_loops)
-        
-        curriculum_stage_active = 0
-        curriculum_next_at_step = None
-        
-        if hasattr(metrics, 'curriculum_stage_active'):
-            curriculum_stage_active = int(metrics.curriculum_stage_active)
-            curriculum_next_at_step = int(metrics.curriculum_next_at_step) if metrics.curriculum_next_at_step is not None else None
-        
-        mf.write(P.ProgressMsg(
-            done=metrics.total_timesteps,
-            total=cfg.total_timesteps,
-            fps=metrics.fps,
-            best_reward=metrics.best_reward if metrics.best_reward != float("-inf") else 0.0,
-            episodes=metrics.n_episodes,
-            policy_loss=metrics.policy_loss,
-            value_loss=metrics.value_loss,
-            entropy=metrics.entropy,
-            kl=metrics.approx_kl,
-            top_actions=top_actions,
-            loop_detected=loop_detected,
-            loop_action_name=loop_action_name,
-            envs_with_loops=envs_with_loops,
-            curriculum_stage_active=curriculum_stage_active,
-            curriculum_next_at_step=curriculum_next_at_step,
-        ))
-    except Exception as e:
-        pass
+    def progress_cb(metrics, extra_data=None) -> None:
+        try:
+            mf.write(P.ProgressMsg(
+                done=metrics.total_timesteps,
+                total=cfg.total_timesteps,
+                fps=float(getattr(metrics, 'fps', 0.0)),
+                best_reward=float(getattr(metrics, 'best_reward', 0.0)) if getattr(metrics, 'best_reward', float("-inf")) != float("-inf") else 0.0,
+                episodes=int(getattr(metrics, 'n_episodes', 0)),
+                policy_loss=float(getattr(metrics, 'policy_loss', 0.0)),
+                value_loss=float(getattr(metrics, 'value_loss', 0.0)),
+                entropy=float(getattr(metrics, 'entropy', 0.0)),
+                kl=float(getattr(metrics, 'approx_kl', 0.0)),
+                ent_coef=float(getattr(metrics, 'ent_coef', 0.005)),
+                top_actions={},
+                loop_detected=False,
+                loop_action_name=None,
+                envs_with_loops=0,
+                curriculum_stage_active=0,
+                curriculum_next_at_step=None,
+                curriculum_stage=0,
+                curriculum_progress_percent=0.0,
+                curriculum_available_actions="",
+                curriculum_upcoming_stages=[],
+                avg_return=0.0,
+                median_return=0.0,
+                max_return=0.0,
+                min_return=0.0,
+                n_episodes_for_stats=0,
+            ))
+        except Exception as e:
+            try:
+                mf.write(P.LogMsg(level="warn", message=f"[Worker] progress_cb error: {type(e).__name__}: {e}"))
+            except Exception:
+                pass
 
     log("info", f"[Worker] run={run_name} steps={cfg.total_timesteps:,} "
                 f"envs={cfg.n_envs} device={device}")
@@ -282,7 +313,7 @@ def progress_cb(metrics, extra_data=None) -> None:
         stop_check=lambda: stop_event.is_set(),
     )
 
-    metrics = trainer.train()
+    metrics = trainer.train(command_queue=command_queue)
     em.close()
 
     elapsed = time.perf_counter() - t0
@@ -343,18 +374,18 @@ def main() -> int:
         mf.open()
 
     stop_event = threading.Event()
-    
-    # Add command_queue parameter for dual-channel support
-    command_queue = None
-    if hasattr(args, 'command_queue') and args.command_queue:
-        import queue
-        try:
-            command_queue = queue.Queue(maxsize=100)
-        except Exception as e:
-            log("error", f"[Worker] Failed to create command_queue: {e}")
+
+    command_queue = _queue.Queue(maxsize=100)
 
     stdin_thread = threading.Thread(target=_watch_stdin, args=(stop_event, command_queue), daemon=True)
     stdin_thread.start()
+
+    # Start file-based command watcher if command file is provided
+    cmd_file = getattr(args, 'command_file', '')
+    if cmd_file:
+        cmd_thread = threading.Thread(
+            target=_watch_commands, args=(cmd_file, stop_event, command_queue), daemon=True)
+        cmd_thread.start()
 
     if mf:
         mf.write(P.ReadyMsg())
@@ -364,9 +395,9 @@ def main() -> int:
         if args.config:
             cfg_dict = _read_config(Path(args.config))
             run_name = args.name or cfg_dict.get("name", "") or f"run_{int(time.time())}"
-            command_queue_size = int(getattr(args, 'command_queue_size', 100)) if hasattr(args, 'command_queue_size') else 100
-            rc = run_train(cfg_dict, run_name, mf, stop_event, resume_model=args.resume_model, 
-                          command_queue=queue.Queue(maxsize=command_queue_size) if command_queue_size > 0 else None)
+            rc = run_train(cfg_dict, run_name, mf, stop_event,
+                           resume_model=args.resume_model,
+                           command_queue=command_queue)
         else:
             rc = run_eval(args.eval_model, args.episodes, args.max_days,
                           args.seed, args.device, mf,
@@ -389,3 +420,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+

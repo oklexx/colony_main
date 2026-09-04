@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 
 class MsgType(str, Enum):
@@ -13,6 +13,7 @@ class MsgType(str, Enum):
     SAVED = "saved"
     DONE = "done"
     ERROR = "error"
+    COMMAND = "command"
 
 
 @dataclass
@@ -54,12 +55,24 @@ class ProgressMsg:
     value_loss: float = 0.0
     entropy: float = 0.0
     kl: float = 0.0
+    ent_coef: float = 0.005
     top_actions: Dict[str, float] = field(default_factory=dict)
     loop_detected: bool = False
     loop_action_name: Optional[str] = None
     envs_with_loops: int = 0
     curriculum_stage_active: int = 0
     curriculum_next_at_step: Optional[int] = None
+    # Curriculum extended fields
+    curriculum_stage: int = 0
+    curriculum_progress_percent: float = 0.0
+    curriculum_available_actions: str = ""
+    curriculum_upcoming_stages: List[Dict[str, int]] = field(default_factory=list)
+    # Return statistics
+    avg_return: float = 0.0
+    median_return: float = 0.0
+    max_return: float = 0.0
+    min_return: float = 0.0
+    n_episodes_for_stats: int = 0
     type: MsgType = field(default=MsgType.PROGRESS, init=False)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -74,12 +87,26 @@ class ProgressMsg:
             "value_loss": _safe_float(self.value_loss),
             "entropy": _safe_float(self.entropy),
             "kl": _safe_float(self.kl),
+            "ent_coef": _safe_float(self.ent_coef),
             "top_actions": self.top_actions,
             "loop_detected": self.loop_detected,
             "loop_action_name": self.loop_action_name,
             "envs_with_loops": int(self.envs_with_loops),
             "curriculum_stage_active": int(self.curriculum_stage_active),
-            "curriculum_next_at_step": int(self.curriculum_next_at_step) if self.curriculum_next_at_step else None,
+            "curriculum_next_at_step": (
+                int(self.curriculum_next_at_step)
+                if self.curriculum_next_at_step is not None
+                else None
+            ),
+            "curriculum_stage": int(self.curriculum_stage),
+            "curriculum_progress_percent": _safe_float(self.curriculum_progress_percent),
+            "curriculum_available_actions": self.curriculum_available_actions,
+            "curriculum_upcoming_stages": self.curriculum_upcoming_stages,
+            "avg_return": _safe_float(self.avg_return),
+            "median_return": _safe_float(self.median_return),
+            "max_return": _safe_float(self.max_return),
+            "min_return": _safe_float(self.min_return),
+            "n_episodes_for_stats": int(self.n_episodes_for_stats),
         }
 
 
@@ -132,7 +159,7 @@ class CommandType(str, Enum):
 class CommandMsg:
     cmd: str
     payload: Optional[Dict[str, Any]] = None
-    type: MsgType = field(default=MsgType.LOG, init=False)  # Reuse LOG type for backward compatibility
+    type: MsgType = field(default=MsgType.COMMAND, init=False)
 
     def __post_init__(self):
         if self.payload is None:
@@ -189,6 +216,7 @@ _REQUIRED: Dict[MsgType, tuple] = {
     MsgType.SAVED: ("path",),
     MsgType.DONE: ("total", "time_s", "best_reward", "episodes"),
     MsgType.ERROR: ("message",),
+    MsgType.COMMAND: ("cmd",),
 }
 
 
@@ -218,8 +246,8 @@ def decode(line: str) -> Msg:
     except ValueError as e:
         raise ValueError(f"unknown message type: {t!r}") from e
     
-    # Handle command messages separately
-    if t == "command":
+    # Handle command messages
+    if mt is MsgType.COMMAND:
         return CommandMsg(
             cmd=d["cmd"],
             payload=d.get("payload", {}),
@@ -243,12 +271,22 @@ def decode(line: str) -> Msg:
             value_loss=d.get("value_loss", 0.0),
             entropy=d.get("entropy", 0.0),
             kl=d.get("kl", 0.0),
+            ent_coef=d.get("ent_coef", 0.005),
             top_actions={k: _safe_float(v) for k, v in d.get("top_actions", {}).items()},
             loop_detected=d.get("loop_detected", False),
             loop_action_name=d.get("loop_action_name"),
             envs_with_loops=d.get("envs_with_loops", 0),
             curriculum_stage_active=d.get("curriculum_stage_active", 0),
             curriculum_next_at_step=d.get("curriculum_next_at_step"),
+            curriculum_stage=d.get("curriculum_stage", 0),
+            curriculum_progress_percent=d.get("curriculum_progress_percent", 0.0),
+            curriculum_available_actions=d.get("curriculum_available_actions", ""),
+            curriculum_upcoming_stages=d.get("curriculum_upcoming_stages", []),
+            avg_return=d.get("avg_return", 0.0),
+            median_return=d.get("median_return", 0.0),
+            max_return=d.get("max_return", 0.0),
+            min_return=d.get("min_return", 0.0),
+            n_episodes_for_stats=d.get("n_episodes_for_stats", 0),
         )
     if mt is MsgType.SAVED:
         return SavedMsg(path=d["path"])

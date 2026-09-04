@@ -150,7 +150,7 @@ class CurriculumProgressWidget(QWidget):
                     border-radius: 4px;
                 }
                 QProgressBar::chunk {
-                    background-color: red;
+                    background-color: #2196F3;
                 }
             """)
         

@@ -29,6 +29,7 @@ from train_ui.curriculum_progress_widget import CurriculumProgressWidget
 from train_ui.action_loop_widget import ActionLoopWidget
 from train_ui.return_statistics_widget import ReturnStatisticsWidget
 from train_ui.quick_actions_widget import QuickActionsWidget
+from train_ui.dashboard_widget import TrainingDashboardWidget
 
 CONFIG_VERSION = 5
 
@@ -150,6 +151,7 @@ class MainWindow(QMainWindow):
         self._msg_file: Optional[str] = None
         self._msg_offset: int = 0
         self._msg_timer: Optional[QTimer] = None
+        self._cmd_file: Optional[str] = None
         self._eval_pid: Optional[int] = None
         self._eval_msg: Optional[str] = None
         self._eval_offset: int = 0
@@ -161,6 +163,7 @@ class MainWindow(QMainWindow):
         self._watch_start_time: float = 0
         self._auto_scroll = True
         self._reward_history: List[float] = []
+        self.dashboard: Optional[TrainingDashboardWidget] = None
 
         self._build_ui()
         self._restore_state()
@@ -340,6 +343,16 @@ class MainWindow(QMainWindow):
         # Quick Actions Widget
         self.quick_actions_widget = QuickActionsWidget()
         new_widgets_container.addWidget(self.quick_actions_widget, 0)
+
+        # Training Dashboard Widget
+        self.dashboard = TrainingDashboardWidget()
+        new_widgets_container.addWidget(self.dashboard, 1)
+
+        # Connect QuickActionsWidget signals to MainWindow handler
+        self.quick_actions_widget.cmd_boost_entropy.connect(self._on_quick_boost_entropy)
+        self.quick_actions_widget.cmd_pause_training.connect(self._on_quick_pause)
+        self.quick_actions_widget.cmd_resume_training.connect(self._on_quick_resume)
+        self.quick_actions_widget.cmd_stop_training.connect(self._on_quick_stop)
 
         new_widgets_outer_layout.addWidget(new_widgets_main_panel, 1)
 
@@ -840,8 +853,7 @@ class MainWindow(QMainWindow):
                         "bases": d.get("bases", 0),
                         "avg_return": d.get("avg_return", 0),
                     })
-                    self.log("info",
-                             f"Eval {m.name}: days={d.get('days', 0):.1f}")
+                    self.log("info", f"Eval {m.name}: days={d.get('days', 0):.1f}")
                     self._update_stats()
                     self._eval_done = True
             elif t == "log":
@@ -1008,6 +1020,36 @@ class MainWindow(QMainWindow):
         k.CloseHandle(h)
         return r != 0x0
 
+    def _send_command_to_worker(self, cmd: str, payload: dict = None):
+        if not self._cmd_file or not os.path.exists(self._cmd_file):
+            print("[UI] Cannot send command: no active training")
+            return
+        msg = P.encode_command(cmd, payload or {})
+        try:
+            with open(self._cmd_file, "a", encoding="utf-8") as f:
+                f.write(msg + "\n")
+                f.flush()
+                os.fsync(f.fileno())
+            print(f"[UI] Command sent: {cmd}")
+        except Exception as e:
+            print(f"[UI] Failed to send command: {e}")
+
+    def _on_quick_boost_entropy(self, multiplier_str: str, payload: dict):
+        try:
+            factor = float(multiplier_str)
+        except (ValueError, TypeError):
+            factor = 2.0
+        self._send_command_to_worker("boost_entropy", {"factor": factor})
+
+    def _on_quick_pause(self, paused: bool):
+        self._send_command_to_worker("pause_training", {"paused": paused})
+
+    def _on_quick_resume(self):
+        self._send_command_to_worker("resume_training", {})
+
+    def _on_quick_stop(self, final_save: bool):
+        self._send_command_to_worker("stop_training", {"final_save": final_save})
+
     # ────────────────────── training ──────────────────────
 
     def _on_param_changed(self):
@@ -1057,50 +1099,85 @@ class MainWindow(QMainWindow):
 
     def _start_training(self, resume_model: Optional[Path] = None):
         if self._train_pid:
-            self.log("warn", "Уже запущено")
+            self.log("warn", "[UI] Training already running (pid={})".format(self._train_pid))
             return
+
+        self.log("info", "[UI] Starting training session")
+
         self._randomize_seed()
         cfg = self._collect_config()
         if resume_model:
+            self.log("info", f"[UI] Resuming training from {resume_model}")
             cfg["name"] = cfg["name"] + "_ft"
+
         existing = self.registry.get(cfg["name"])
         if existing and not resume_model:
+            self.log("warn", f"[UI] Duplicate model detected: '{cfg['name']}'")
             ret = QMessageBox.question(
-                self, "Дубликат имени",
-                f"Модель «{cfg['name']}» уже существует.\nПерезаписать?",
+                self, "Duplicate name",
+                f"Model '{cfg['name']}' already exists.\nOverwrite?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No)
             if ret != QMessageBox.StandardButton.Yes:
                 return
+
         import tempfile
         tmp = tempfile.NamedTemporaryFile(
             "w", suffix=".json", delete=False, encoding="utf-8")
         json.dump(cfg, tmp, ensure_ascii=False)
         tmp.close()
+        self.log("info", f"[UI] Config written to: {tmp.name}")
+
         msg_file = os.path.join(
             tempfile.gettempdir(),
             f"colony_ui_{int(time.time() * 1000)}.jsonl")
+        self.log("info", f"[UI] Message queue: {msg_file}")
+
+        # Create command file for JSONL-based commands
+        cmd_file = os.path.join(
+            tempfile.gettempdir(),
+            f"colony_cmd_{int(time.time() * 1000)}.jsonl")
+        self._cmd_file = cmd_file
+        self.log("info", f"[UI] Command file: {cmd_file}")
+
         import sys as _sys, subprocess as _sp
-        print(f"[UI] Starting worker: {_sys.executable} worker.py --config {tmp.name} --name {cfg['name']}", file=_sys.stderr)
-        proc = _sp.Popen(
-            [_sys.executable, "-u",
-             str(Path(__file__).resolve().parent / "worker.py"),
-             "--config", tmp.name, "--name", cfg["name"],
-             "--output", msg_file],
-            cwd=str(Path(__file__).resolve().parent.parent),
-            creationflags=getattr(_sp, "CREATE_NO_WINDOW", 0),
-            stdout=_sp.PIPE,
-            stderr=_sp.PIPE)
-        self._train_pid = proc.pid
-        self._msg_file = msg_file
-        self._msg_offset = 0
-        self._msg_timer = QTimer(self)
-        self._msg_timer.timeout.connect(self._poll_training)
-        self._msg_timer.start(250)
-        self._set_training_ui(True)
-        self.progress_bar.setValue(0)
-        self.log("info",
-                 f"Запуск: {cfg['name']} steps={cfg['total_timesteps']:,}")
+
+        cmd = [_sys.executable, "-u"] + \
+               [str(Path(__file__).resolve().parent / "worker.py")] + \
+               ["--config", tmp.name, "--name", cfg["name"],
+                "--output", msg_file, "--command-file", cmd_file]
+
+        self.log("info", f"[UI] Worker command: {' '.join(cmd)}")
+
+        try:
+            proc = _sp.Popen(
+                cmd,
+                cwd=str(Path(__file__).resolve().parent.parent),
+                creationflags=getattr(_sp, "CREATE_NO_WINDOW", 0),
+                stdout=_sp.PIPE,
+                stderr=_sp.PIPE,
+                bufsize=1)
+            self._train_pid = proc.pid
+            self.log("info", f"[UI] Worker started: pid={self._train_pid}")
+
+            self._msg_file = msg_file
+            self._msg_offset = 0
+
+            if self._train_pid is not None:
+                self._msg_timer = QTimer(self)
+                self._msg_timer.timeout.connect(self._poll_training)
+                self._msg_timer.start(250)
+
+            self._set_training_ui(True)
+            self.progress_bar.setValue(0)
+        except Exception as e:
+            self.log("error", f"[UI] Failed to start worker: {type(e).__name__}: {e}")
+            try:
+                tmp.close()
+                os.unlink(tmp.name)
+            except OSError:
+                pass
+            raise
 
     def _poll_training(self):
         self._poll_messages()
@@ -1141,9 +1218,7 @@ class MainWindow(QMainWindow):
             elif isinstance(msg, P.SavedMsg):
                 self.log("info", f"Чекпоинт: {msg.path}")
             elif isinstance(msg, P.DoneMsg):
-                self.log("info",
-                         f"Завершено: {msg.total:,} шагов, "
-                         f"best={msg.best_reward:.2f}")
+                self.log("info", f"Завершено: {msg.total:,} шагов, best={msg.best_reward:.2f}")
             elif isinstance(msg, P.ErrorMsg):
                 self.log("error", msg.message)
 
@@ -1154,78 +1229,110 @@ class MainWindow(QMainWindow):
         fps = m.fps if m.fps > 0 else 0.0
         eta = ""
         if fps > 0 and m.done < m.total:
-            eta = f" ~{int((m.total - m.done) / fps // 60)}мин"
+            eta = f" ~{int((m.total - m.done) / fps // 60)}min"
         self.status_label.setText(
             f"FPS {fps:.0f} best {m.best_reward:.1f} ep{m.episodes}{eta}")
-        
-        # ── UPDATE NEW WIDGETS ──
+
         # KL Status Widget
         if m.kl is not None:
             self.kl_status_widget.update(
                 kl=float(m.kl),
-                ent_coef=m.ent_coef if hasattr(m, 'ent_coef') else 0.005
+                ent_coef=m.ent_coef
             )
-        
+
         # Curriculum Progress Widget
-        if hasattr(m, 'stage') and m.stage is not None:
-            stage_info = {
-                'stage': int(m.stage) if m.stage >= 0 else 0,
-                'progress_percent': getattr(m, 'progress_percent', 50.0),
-                'available_actions': getattr(m, 'available_actions', ''),
-                'next_stage_at_step': getattr(m, 'next_stage_at_step', None),
-                'upcoming_stages': getattr(m, 'upcoming_stages', []),
-            }
-            self.curriculum_progress_widget.update(stage_info)
-        
+        if hasattr(m, 'curriculum_stage') and m.curriculum_stage is not None:
+            self.curriculum_progress_widget.update({
+                'stage': int(m.curriculum_stage),
+                'progress_percent': m.curriculum_progress_percent,
+                'available_actions': m.curriculum_available_actions,
+                'next_stage_at_step': m.curriculum_next_at_step,
+                'upcoming_stages': m.curriculum_upcoming_stages,
+            })
+
         # Action Loop Widget
-        if hasattr(m, 'loop_detected') and m.loop_detected:
+        total_envs = 8
+        if hasattr(m, 'envs_with_loops') and m.envs_with_loops:
             self.action_loop_widget.set_loop_status(
                 loop_detected=True,
                 action_name=getattr(m, 'loop_action_name', 'UNKNOWN'),
                 consecutive_count=10,
                 threshold=3,
-                envs_with_loops=getattr(m, 'envs_with_loops', 0),
-                total_envs=8
+                envs_with_loops=m.envs_with_loops,
+                total_envs=total_envs,
             )
         else:
-            self.action_loop_widget.set_loop_status(
-                loop_detected=False
+            self.action_loop_widget.set_loop_status(loop_detected=False)
+
+        # Return Statistics Widget
+        if hasattr(m, 'avg_return') and m.n_episodes_for_stats > 0:
+            self.return_statistics_widget.update_statistics(
+                avg=m.avg_return,
+                median=m.median_return,
+                max_val=m.max_return,
+                min_val=m.min_return,
+                episode_count=m.n_episodes_for_stats,
             )
-        
-        # Return Statistics Widget (if returns data available)
-        if hasattr(m, 'returns') and m.returns:
-            self.return_statistics_widget.update_statistics(returns=list(m.returns))
-        
-        # Dashboard Widget (update every 100 steps to avoid overdraw)
-        if m.done % 100 == 0:
+
+        # Dashboard Widget (update every 100 steps)
+        if self.dashboard is not None and m.done % 100 == 0:
             top_actions = getattr(m, 'top_actions', {})
             self.dashboard.update_data(
-                kl=float(m.kl) if hasattr(m, 'kl') and m.kl is not None else None,
-                entropy=float(m.entropy) if hasattr(m, 'entropy') and m.entropy is not None else None,
-                top_actions=top_actions if isinstance(top_actions, dict) else {}
+                kl=float(m.kl) if m.kl is not None else None,
+                entropy=float(m.entropy) if m.entropy is not None else None,
+                top_actions=top_actions if isinstance(top_actions, dict) else {},
             )
 
     def _stop_training(self):
         if not self._train_pid:
+            self.log("warn", "[UI] Cannot stop: no training process (pid=None)")
             return
+        
+        self.log("info", f"[UI] Stopping training (pid={self._train_pid})")
+        
         try:
-            subprocess.run(["taskkill", "/F", "/PID", str(self._train_pid)],
-                           capture_output=True, timeout=10)
-        except Exception:
-            pass
+            result = subprocess.run(
+                ["taskkill", "/F", "/PID", str(self._train_pid)],
+                capture_output=True,
+                text=True,
+                timeout=10)
+            
+            if result.returncode == 0:
+                self.log("info", "[UI] Worker process terminated successfully")
+            else:
+                self.log("error", f"[UI] Failed to kill worker (exit code={result.returncode})")
+        except subprocess.TimeoutExpired:
+            self.log("error", "[UI] Timeout while stopping worker, force killing...")
+            try:
+                subprocess.run(["taskkill", "/T", "/F", "/PID", str(self._train_pid)],
+                               capture_output=True, timeout=5)
+                self.log("warn", "[UI] Force killed worker process")
+            except Exception as e:
+                self.log("error", f"[UI] Error forcing kill: {e}")
+        except Exception as e:
+            self.log("error", f"[UI] Error during stop: {type(e).__name__}: {e}")
+        
         self._cleanup_training()
         self._set_training_ui(False)
         self.status_label.setText("Остановлено")
 
     def _on_train_finished(self, code: int = 0):
+        self.log("info", f"[UI] Training finished (code={code})")
+        
         self._cleanup_training()
         self._set_training_ui(False)
+        
         if code == 0:
             self.progress_bar.setValue(1000)
             self.status_label.setText("Завершено")
+            self.log("info", "[UI] ✅ Training completed successfully")
         else:
-            self.log("error", f"Код {code}")
+            self.log("error", f"[UI] ❌ Training failed with exit code {code}")
+        
+        # Refresh model list to show new/updated models
         self.refresh_models()
+        
+        # Emit signal for external handlers
         self.train_finished.emit(code)
 
     def _cleanup_training(self):
@@ -1238,6 +1345,12 @@ class MainWindow(QMainWindow):
             except OSError:
                 pass
             self._msg_file = None
+        if self._cmd_file and os.path.exists(self._cmd_file):
+            try:
+                os.remove(self._cmd_file)
+            except OSError:
+                pass
+            self._cmd_file = None
         self._train_pid = None
 
     def _set_training_ui(self, running: bool):
@@ -1250,20 +1363,29 @@ class MainWindow(QMainWindow):
     # ────────────────────── params ──────────────────────
 
     def _reset_params(self):
+        log = self.log
+        
+        self.log("info", "[UI] Resetting parameters to defaults")
+        
         for k, r in self.param_rows.items():
             r.set_value(DEFAULT_PARAMS[k])
+        
         for k, r in self.reward_rows.items():
             r.set_value(DEFAULT_PARAMS[k])
-        self.log("info", "Сброшено")
+        
+        # Also reset curriculum and toggles
+        self._cur_clear()
+        self.stage_combo.setCurrentIndex(2)
+        
+        self.log("info", "[UI] ✅ All parameters reset to defaults")
 
     def _reset_to_defaults(self):
         self._reset_params()
-        self.stage_combo.setCurrentIndex(2)
         self.chk_amp.setChecked(False)
         self.chk_compile.setChecked(False)
-        self._cur_clear()
         self._load_data_to_table([[0, 1], [5_000_000, 2], [15_000_000, 3]])
-        self.log("info", "По умолчанию")
+        
+        self.log("info", "[UI] ✅ Restored default configuration")
 
     # ────────────────────── curriculum ──────────────────────
 
@@ -1440,3 +1562,4 @@ def load_config() -> Dict[str, Any]:
         return d if isinstance(d, dict) else {}
     except (OSError, json.JSONDecodeError):
         return {}
+

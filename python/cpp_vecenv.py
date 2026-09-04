@@ -118,6 +118,24 @@ class CppVecEnv(VecEnv):
         # Init SB3 VecEnv (sets self.num_envs, self.observation_space, self.action_space)
         super().__init__(n_envs, observation_space, action_space)
 
+        # Action names for display purposes
+        self._action_names: List[str] = [
+            "DAY", "WEEK",
+            "BUILD_HOUSE", "BUILD_FARM", "BUILD_ROAD", "BUILD_GARDEN",
+            "BUILD_SMALL_HOUSE", "BUILD_SAWMILL", "BUILD_WATER_CHANNEL",
+            "BUILD_COALMINE", "BUILD_IRONMINE", "BUILD_REFINERY",
+            "BUILD_GOLDMINE", "BUILD_POWER_STATION", "BUILD_HYDRO_STATION",
+            "IMPROVE_LAND", "REPAIR", "REPAIR_ALL", "DEMOLISH",
+            "PRESERVE", "UNPRESERVE", "SELL_SURPLUS", "BUY_FOOD",
+            "TAKE_LOAN", "REPAY_LOAN", "PAY_TAX",
+        ]
+        # Trim to actual n_actions if C++ has fewer
+        if n_actions < len(self._action_names):
+            self._action_names = self._action_names[:n_actions]
+        # Pad with generic names if C++ has more
+        while len(self._action_names) < n_actions:
+            self._action_names.append(f"ACTION_{len(self._action_names)}")
+
     def reset(self):
         seeds = [self._seed + i * 10000 for i in range(self.num_envs)]
         self.cpp_vec.reset_batch(seeds)
@@ -166,6 +184,11 @@ class CppVecEnv(VecEnv):
     def action_masks(self) -> np.ndarray:
         """Return current action masks [n_envs, n_actions]."""
         return self._action_masks
+
+    @property
+    def action_names(self) -> List[str]:
+        """Return list of action names matching action indices."""
+        return list(self._action_names)
 
     def close(self) -> None:
         pass

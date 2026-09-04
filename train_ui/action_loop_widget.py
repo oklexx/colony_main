@@ -30,16 +30,16 @@ class ActionLoopWidget(QWidget):
         layout.setContentsMargins(10, 10, 10, 10)
         
         # Alert label (hidden by default)
-        alert_frame = QFrame()
-        alert_frame.setVisible(False)
-        alert_frame.setStyleSheet("""
+        self._alert_frame = QFrame()
+        self._alert_frame.setVisible(False)
+        self._alert_frame.setStyleSheet("""
             background-color: rgba(255, 0, 0, 0.1);
             border: 2px solid red;
             border-radius: 8px;
             padding: 15px;
         """)
         
-        alert_layout = QVBoxLayout(alert_frame)
+        alert_layout = QVBoxLayout(self._alert_frame)
         
         # Alert icon/text
         self._alert_label = QLabel("⚠️ ACTION LOOP DETECTED")
@@ -68,7 +68,7 @@ class ActionLoopWidget(QWidget):
         """)
         alert_layout.addWidget(self._stats_label)
         
-        layout.addWidget(alert_frame)
+        layout.addWidget(self._alert_frame)
         
         # Hidden spacer (shown when no alert)
         self._alert_spacer = QLabel(" ")
@@ -151,7 +151,7 @@ class ActionLoopWidget(QWidget):
             # Color code based on severity
             pct = (envs_with_loops / max(total_envs, 1)) * 100
             if pct < 50:
-                alert_frame.setStyleSheet("""
+                self._alert_frame.setStyleSheet("""
                     background-color: rgba(255, 165, 0, 0.1);
                     border: 2px solid orange;
                     border-radius: 8px;
@@ -160,7 +160,7 @@ class ActionLoopWidget(QWidget):
                 self._alert_label.setStyleSheet("color: orange;")
                 self._action_name_label.setStyleSheet("color: #e65100;")
             else:
-                alert_frame.setStyleSheet("""
+                self._alert_frame.setStyleSheet("""
                     background-color: rgba(255, 0, 0, 0.1);
                     border: 2px solid red;
                     border-radius: 8px;
@@ -171,7 +171,7 @@ class ActionLoopWidget(QWidget):
             
             self._alert_spacer.setVisible(False)
         else:
-            alert_frame.setVisible(False)
+            self._alert_frame.setVisible(False)
             self._alert_spacer.setVisible(True)
         
         # Update statistics grid
@@ -182,21 +182,15 @@ class ActionLoopWidget(QWidget):
         self._stats_grid.setRowCount(5)
         
         rows_data = [
-            ("Envs in Loops", f"{self._envs_with_loops}", f"/ {self._stats_grid.columnCount() > 2 and True or ''}"),
+            ("Envs in Loops", f"{self._envs_with_loops}", ""),
             ("Loop Rate", f"{(self._envs_with_loops * 100 / max(8, self._envs_with_loops + (8-self._envs_with_loops))):.1f}%", "N/A"),
             ("Threshold", f"{self._consecutive_threshold}", ""),
             ("Status", "ACTIVE" if self._loop_detected else "NORMAL", ""),
             ("Action", self._loop_action_name or "N/A", "")
         ]
         
-        # Clear existing rows
-        for row in range(self._stats_grid.rowCount()):
-            for col in range(self._stats_grid.columnCount()):
-                item = self._stats_grid.item(row, col)
-                if item:
-                    self._stats_grid.removeItem(item)
+        self._stats_grid.clearContents()
         
-        # Add new rows
         for i, (metric, value, threshold) in enumerate(rows_data[:self._stats_grid.rowCount()]):
             self._stats_grid.setItem(i, 0, QTableWidgetItem(metric))
             self._stats_grid.setItem(i, 1, QTableWidgetItem(str(value)))
