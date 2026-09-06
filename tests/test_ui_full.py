@@ -169,13 +169,15 @@ class TestRightColumnWatchStage:
         assert main_window.stage_combo.isEnabled() is True
 
     def test_stage_combo_default(self, main_window):
-        assert main_window.stage_combo.currentIndex() == 2
+        assert main_window.stage_combo.currentIndex() == 0
 
 
 class TestParameterRows:
     def test_all_params_present(self, main_window):
-        assert len(main_window.param_rows) == len(PARAM_SPECS)
+        assert len(main_window.param_rows) == len(PARAM_SPECS) - 1  # n_layers is in NetArchWidget
         for spec in PARAM_SPECS:
+            if spec.key == "n_layers":
+                continue
             assert spec.key in main_window.param_rows
 
     def test_all_rewards_present(self, main_window):
@@ -245,7 +247,7 @@ class TestResetDefaults:
         assert main_window.param_rows["n_envs"].value() == 8
         assert main_window.chk_amp.isChecked() is False
         assert main_window.chk_compile.isChecked() is False
-        assert main_window.stage_combo.currentIndex() == 2
+        assert main_window.stage_combo.currentIndex() == 0
         assert main_window.curriculum_table.rowCount() == 3
 
 
@@ -263,6 +265,8 @@ class TestCollectConfig:
     def test_collect_config_has_all_params(self, main_window):
         cfg = main_window._collect_config()
         for spec in PARAM_SPECS:
+            if spec.key == "n_layers":
+                continue
             assert spec.key in cfg
         for spec in REWARD_SPECS:
             assert spec.key in cfg

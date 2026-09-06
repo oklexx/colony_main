@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import torch
 import torch.nn as nn
 from torch import distributions as D
@@ -16,19 +17,22 @@ class PPO:
         self,
         model: ActorCritic,
         buffer: RolloutBuffer,
-        lr: float = 3e-4,
-        gamma: float = 0.995,
-        gae_lambda: float = 0.98,
-        clip_range: float = 0.2,
-        ent_coef: float = 0.01,
-        vf_coef: float = 0.5,
-        max_grad_norm: float = 0.5,
-        n_epochs: int = 10,
-        batch_size: int = 8192,
+        lr: float,
+        gamma: float,
+        gae_lambda: float,
+        clip_range: float,
+        ent_coef: float,
+        vf_coef: float,
+        max_grad_norm: float,
+        n_epochs: int,
+        batch_size: int,
         use_amp: bool = True,
         amp_dtype: str = "bfloat16",
         torch_compile: bool = False,
         device: Optional[torch.device] = None,
+        lr_warmup_steps: int = 0,
+        lr_decay: bool = True,
+        total_training_steps: int = 0,
     ):
         self.model = model
         self.buffer = buffer
@@ -47,6 +51,16 @@ class PPO:
         self.amp_dtype = torch.bfloat16 if amp_dtype == "bfloat16" else torch.float16
         self.scaler = torch.amp.GradScaler(self.device.type, enabled=(amp_dtype == "float16"))
 
+        if use_amp:
+            if self.device.type == "cuda":
+                if amp_dtype == "bfloat16" and not torch.cuda.is_bf16_supported():
+                    print(f"[PPO WARNING] bfloat16 requested but GPU "
+                          f"({torch.cuda.get_device_name()}) does not support it. "
+                          f"AMP autocast may fall back to float32.")
+            else:
+                print(f"[PPO WARNING] AMP enabled but device={self.device.type}. "
+                      f"AMP only accelerates on CUDA GPUs.")
+
         from rl.actor_critic_hybrid import ActorCriticHybrid
         self.is_hybrid = isinstance(model, ActorCriticHybrid)
 
@@ -54,11 +68,36 @@ class PPO:
             model.params, lr=lr, eps=1e-5, weight_decay=0.0
         )
 
+        self._compiled = False
         if torch_compile:
-            self.model = torch.compile(model, mode="reduce-overhead")
-            self._compiled = True
+            if self.device.type == "cuda" and torch.cuda.is_available():
+                try:
+                    self.model = torch.compile(model, mode="reduce-overhead")
+                    self._compiled = True
+                except Exception as e:
+                    print(f"[PPO] torch.compile failed: {e}. Falling back to eager.")
+            else:
+                print("[PPO] torch.compile requires CUDA. Disabling.")
+
+        self.lr_warmup_steps = lr_warmup_steps
+        self.lr_decay = lr_decay
+        self._current_step = 0
+        self._total_training_steps = total_training_steps
+
+        if lr_warmup_steps > 0 or lr_decay:
+            from torch.optim.lr_scheduler import LambdaLR
+            def lr_lambda(step):
+                if step < lr_warmup_steps:
+                    return float(step) / max(1, lr_warmup_steps)
+                if lr_decay and total_training_steps > 0:
+                    progress = float(step - lr_warmup_steps) / max(
+                        1, total_training_steps - lr_warmup_steps)
+                    progress = min(progress, 1.0)
+                    return 0.1 + 0.5 * (1.0 + math.cos(math.pi * progress))
+                return 1.0
+            self.scheduler = LambdaLR(self.optimizer, lr_lambda)
         else:
-            self._compiled = False
+            self.scheduler = None
 
     def collect_step(
         self, flat, minimap=None, action_masks=None
@@ -71,10 +110,20 @@ class PPO:
         """
         self.model.eval()
         with torch.no_grad():
-            if self.is_hybrid:
-                logits, values = self.model(flat, minimap)
+            if self.use_amp:
+                with torch.autocast(
+                    device_type=self.device.type,
+                    dtype=self.amp_dtype,
+                ):
+                    if self.is_hybrid:
+                        logits, values = self.model(flat, minimap)
+                    else:
+                        logits, values = self.model(flat)
             else:
-                logits, values = self.model(flat)
+                if self.is_hybrid:
+                    logits, values = self.model(flat, minimap)
+                else:
+                    logits, values = self.model(flat)
             if action_masks is not None:
                 # Mask unavailable actions: set logits to -inf
                 logits = logits.masked_fill(action_masks == 0, float("-inf"))
@@ -99,6 +148,7 @@ class PPO:
         last_value: [n_envs] value of terminal state
         last_done:  [n_envs] whether terminal
         """
+        self.model.train()
         self.buffer.compute_gae(last_value, last_done)
 
         total_policy_loss = 0.0
@@ -151,13 +201,16 @@ class PPO:
                         torch.nn.utils.clip_grad_norm_(self.model.params, self.max_grad_norm)
                     self.optimizer.step()
 
+                if self.scheduler is not None:
+                    self.scheduler.step()
+                    self._current_step += 1
+
                 total_policy_loss += policy_loss.item()
                 total_value_loss += value_loss.item()
                 total_entropy += entropy.item()
                 total_kl += approx_kl.item()
                 n_batches += 1
 
-        self.model.train()
         self.buffer.reset()
 
         return {
@@ -211,7 +264,10 @@ class PPO:
         for k, v in model.state_dict().items():
             ck = k.replace("_orig_mod.", "") if k.startswith("_orig_mod.") else k
             clean_state[ck] = v
-        hidden_sizes = [m.out_features for m in model.trunk if isinstance(m, nn.Linear)]
+        if hasattr(model, "hidden_sizes"):
+            hidden_sizes = list(model.hidden_sizes)
+        else:
+            hidden_sizes = [m.out_features for m in model.trunk if isinstance(m, nn.Linear)]
         extra = {}
         if self.is_hybrid:
             extra["n_channels"] = model.n_channels

@@ -911,15 +911,19 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
 
     g.refresh_occupied();
 
-    // прожить день/неделю
+    // прожить день/неделю (PAY_TAX also advances 1 day to prevent spam)
     std::vector<DayResult> results;
     if (action == A_WEEK) {
         results = g.advance_week();
+    } else if (action == manager_base_ + 10) {
+        // PAY_TAX = advance 1 day + tax penalty (no no-op exploit)
+        auto r = g.advance_day();
+        if (r.ok) results.push_back(r.res);
     } else {
         auto r = g.advance_day();
         if (r.ok) results.push_back(r.res);
     }
-    if (results.empty() && (action == A_DAY || action == A_WEEK)) { rew += cfg_.error_penalty; c_error += cfg_.error_penalty; }
+    if (results.empty() && (action == A_DAY || action == A_WEEK || action == manager_base_ + 10)) { rew += cfg_.error_penalty; c_error += cfg_.error_penalty; }
     invalidate_net_worth();
 
     int64_t built_price = 0;
@@ -1101,10 +1105,8 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
 
     rew += cfg_.survival_bonus; c_survival += cfg_.survival_bonus;
     if (days_since_last_build_ >= cfg_.idle_build_threshold_days) {
-        // Only penalize DAY/WEEK actions — manager actions are intentional
-        if (action == A_DAY || action == A_WEEK) {
-            rew += cfg_.idle_build_penalty; c_idle += cfg_.idle_build_penalty;
-        }
+        // Penalize ALL actions when idle too long — prevents action-spam exploits
+        rew += cfg_.idle_build_penalty; c_idle += cfg_.idle_build_penalty;
         days_since_last_build_ = 0;
     }
 

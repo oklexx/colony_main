@@ -26,41 +26,43 @@ from rl.async_trainer import AsyncTrainer
 
 
 def parse_args():
+    from rl.config import Config as _DC
+    _d = _DC()  # canonical defaults
     p = argparse.ArgumentParser(description="Sakhalin Colony PPO Training")
-    p.add_argument("--steps", type=int, default=1_000_000, help="Total timesteps")
-    p.add_argument("--envs", type=int, default=8, help="Number of parallel envs")
-    p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--map-size", type=int, default=280)
-    p.add_argument("--n-steps", type=int, default=4096, help="Rollout length per env")
-    p.add_argument("--batch-size", type=int, default=8192)
-    p.add_argument("--n-epochs", type=int, default=10)
-    p.add_argument("--lr", type=float, default=3e-4)
-    p.add_argument("--gamma", type=float, default=0.995)
-    p.add_argument("--gae-lambda", type=float, default=0.98)
-    p.add_argument("--clip-range", type=float, default=0.2)
-    p.add_argument("--ent-coef", type=float, default=0.01)
-    p.add_argument("--vf-coef", type=float, default=0.5)
-    p.add_argument("--max-grad-norm", type=float, default=0.5)
-    p.add_argument("--net-arch", type=int, nargs="+", default=[256, 256])
-    p.add_argument("--obs-mode", type=str, default="flat", choices=["flat", "minimap", "hybrid"],
+    p.add_argument("--steps", type=int, default=_d.total_timesteps, help="Total timesteps")
+    p.add_argument("--envs", type=int, default=_d.n_envs, help="Number of parallel envs")
+    p.add_argument("--seed", type=int, default=_d.seed)
+    p.add_argument("--map-size", type=int, default=_d.map_size)
+    p.add_argument("--n-steps", type=int, default=_d.n_steps, help="Rollout length per env")
+    p.add_argument("--batch-size", type=int, default=_d.batch_size)
+    p.add_argument("--n-epochs", type=int, default=_d.n_epochs)
+    p.add_argument("--lr", type=float, default=_d.learning_rate)
+    p.add_argument("--gamma", type=float, default=_d.gamma)
+    p.add_argument("--gae-lambda", type=float, default=_d.gae_lambda)
+    p.add_argument("--clip-range", type=float, default=_d.clip_range)
+    p.add_argument("--ent-coef", type=float, default=_d.ent_coef)
+    p.add_argument("--vf-coef", type=float, default=_d.vf_coef)
+    p.add_argument("--max-grad-norm", type=float, default=_d.max_grad_norm)
+    p.add_argument("--net-arch", type=int, nargs="+", default=_d.net_arch)
+    p.add_argument("--obs-mode", type=str, default=_d.obs_mode, choices=["flat", "minimap", "hybrid"],
                    help="flat = 209-dim vector + MLP; minimap = 2D spatial tensor + CNN; hybrid = both")
-    p.add_argument("--minimap-radius", type=int, default=14,
+    p.add_argument("--minimap-radius", type=int, default=_d.minimap_radius,
                    help="Minimap radius R (grid = 2R+1). Default 14 -> 29x29")
-    p.add_argument("--device", type=str, default="cuda")
-    p.add_argument("--amp", type=str, default="bfloat16", choices=["bfloat16", "float16", "off"])
+    p.add_argument("--device", type=str, default=_d.device)
+    p.add_argument("--amp", type=str, default=_d.amp_dtype, choices=["bfloat16", "float16", "off"])
     p.add_argument("--compile", action="store_true", help="Enable torch.compile")
     p.add_argument("--async", action="store_true", dest="async_train", help="Async training")
-    p.add_argument("--queue-size", type=int, default=2)
-    p.add_argument("--cpp-threads", type=int, default=0)
-    p.add_argument("--torch-threads", type=int, default=0)
-    p.add_argument("--save-freq", type=int, default=500_000)
-    p.add_argument("--eval-freq", type=int, default=100_000)
-    p.add_argument("--eval-episodes", type=int, default=10)
+    p.add_argument("--queue-size", type=int, default=_d.queue_size)
+    p.add_argument("--cpp-threads", type=int, default=_d.cpp_threads)
+    p.add_argument("--torch-threads", type=int, default=_d.torch_threads)
+    p.add_argument("--save-freq", type=int, default=_d.save_freq)
+    p.add_argument("--eval-freq", type=int, default=_d.eval_freq)
+    p.add_argument("--eval-episodes", type=int, default=_d.eval_episodes)
     p.add_argument("--eval-seeds", type=int, nargs="+", default=None,
                    help="Seeds for eval rollouts (e.g. --eval-seeds 42 43 44)")
     p.add_argument("--eval-use-mean", action="store_true",
                    help="Use mean instead of median for multi-seed eval")
-    p.add_argument("--early-stopping-patience", type=int, default=0,
+    p.add_argument("--early-stopping-patience", type=int, default=_d.early_stopping_patience,
                    help="Stop after N evals without score improvement (0=disabled)")
     p.add_argument("--log-dir", type=str, default="")
     p.add_argument("--model-dir", type=str, default="")
@@ -158,10 +160,6 @@ def main():
     em = EnvManager(cfg, device)
     t_env = time.time() - t0
     print(f"[Env] Created in {t_env:.1f}s (obs={em.obs_size}, actions={em.n_actions})")
-
-    norm_path = Path(cfg.model_dir) / "normalization.json"
-    em.env.venv.save_normalization(str(norm_path))
-    print(f"[Save] Normalization: {norm_path}")
 
     log_dir = Path(cfg.log_dir) / args.name
     log_dir.mkdir(parents=True, exist_ok=True)

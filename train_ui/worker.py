@@ -194,13 +194,16 @@ def _run_train_inner(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_
     from rl.env_manager import EnvManager
     from rl.async_trainer import AsyncTrainer
 
+    from rl.config import Config as _DefaultCfg, RewardConfig
+    _dc = _DefaultCfg()  # canonical defaults
+
     reward = RewardConfig()
     if isinstance(cfg_dict.get("reward"), dict):
         reward = RewardConfig.from_dict(cfg_dict["reward"])
     else:
         reward = RewardConfig.from_dict(cfg_dict)
 
-    net_arch = cfg_dict.get("net_arch", [256, 256])
+    net_arch = cfg_dict.get("net_arch", _dc.net_arch)
     if isinstance(net_arch, int):
         net_arch = [net_arch, net_arch]
 
@@ -209,36 +212,36 @@ def _run_train_inner(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_
     log_dir = str(home / "colony_runs" / "logs" / run_name)
 
     cfg = Config(
-        map_size=int(cfg_dict.get("map_size", 280)),
-        n_envs=int(cfg_dict.get("n_envs", 8)),
-        seed=int(cfg_dict.get("seed", 42)),
-        learning_rate=float(cfg_dict.get("learning_rate", 3e-4)),
-        n_steps=int(cfg_dict.get("n_steps", 4096)),
-        batch_size=int(cfg_dict.get("batch_size", 8192)),
-        n_epochs=int(cfg_dict.get("n_epochs", 10)),
-        gamma=float(cfg_dict.get("gamma", 0.995)),
-        gae_lambda=float(cfg_dict.get("gae_lambda", 0.98)),
-        clip_range=float(cfg_dict.get("clip_range", 0.2)),
-        ent_coef=float(cfg_dict.get("ent_coef", 0.005)),
-        vf_coef=float(cfg_dict.get("vf_coef", 0.5)),
-        max_grad_norm=float(cfg_dict.get("max_grad_norm", 0.5)),
+        map_size=int(cfg_dict.get("map_size", _dc.map_size)),
+        n_envs=int(cfg_dict.get("n_envs", _dc.n_envs)),
+        seed=int(cfg_dict.get("seed", _dc.seed)),
+        learning_rate=float(cfg_dict.get("learning_rate", _dc.learning_rate)),
+        n_steps=int(cfg_dict.get("n_steps", _dc.n_steps)),
+        batch_size=int(cfg_dict.get("batch_size", _dc.batch_size)),
+        n_epochs=int(cfg_dict.get("n_epochs", _dc.n_epochs)),
+        gamma=float(cfg_dict.get("gamma", _dc.gamma)),
+        gae_lambda=float(cfg_dict.get("gae_lambda", _dc.gae_lambda)),
+        clip_range=float(cfg_dict.get("clip_range", _dc.clip_range)),
+        ent_coef=float(cfg_dict.get("ent_coef", _dc.ent_coef)),
+        vf_coef=float(cfg_dict.get("vf_coef", _dc.vf_coef)),
+        max_grad_norm=float(cfg_dict.get("max_grad_norm", _dc.max_grad_norm)),
         net_arch=[int(x) for x in net_arch],
-        total_timesteps=int(cfg_dict.get("total_timesteps", 1_000_000)),
-        save_freq=int(cfg_dict.get("save_freq", 500_000)),
-        eval_freq=int(cfg_dict.get("eval_freq", 100_000)),
-        eval_episodes=int(cfg_dict.get("eval_episodes", 10)),
-        device=str(cfg_dict.get("device", "cuda")),
-        use_amp=bool(cfg_dict.get("use_amp", True)),
-        amp_dtype=str(cfg_dict.get("amp_dtype", "bfloat16")),
-        torch_compile=bool(cfg_dict.get("torch_compile", False)),
-        obs_mode=str(cfg_dict.get("obs_mode", "flat")),
-        minimap_radius=int(cfg_dict.get("minimap_radius", 14)),
-        cpp_threads=int(cfg_dict.get("cpp_threads", 0)),
-        torch_threads=int(cfg_dict.get("torch_threads", 0)),
-        async_train=bool(cfg_dict.get("async_train", False)),
-        queue_size=int(cfg_dict.get("queue_size", 2)),
-        curriculum_stage=int(cfg_dict.get("curriculum_stage", 0)),
-        curriculum_schedule=cfg_dict.get("curriculum_schedule", []),
+        total_timesteps=int(cfg_dict.get("total_timesteps", _dc.total_timesteps)),
+        save_freq=int(cfg_dict.get("save_freq", _dc.save_freq)),
+        eval_freq=int(cfg_dict.get("eval_freq", _dc.eval_freq)),
+        eval_episodes=int(cfg_dict.get("eval_episodes", _dc.eval_episodes)),
+        device=str(cfg_dict.get("device", _dc.device)),
+        use_amp=bool(cfg_dict.get("use_amp", _dc.use_amp)),
+        amp_dtype=str(cfg_dict.get("amp_dtype", _dc.amp_dtype)),
+        torch_compile=bool(cfg_dict.get("torch_compile", _dc.torch_compile)),
+        obs_mode=str(cfg_dict.get("obs_mode", _dc.obs_mode)),
+        minimap_radius=int(cfg_dict.get("minimap_radius", _dc.minimap_radius)),
+        cpp_threads=int(cfg_dict.get("cpp_threads", _dc.cpp_threads)),
+        torch_threads=int(cfg_dict.get("torch_threads", _dc.torch_threads)),
+        async_train=bool(cfg_dict.get("async_train", _dc.async_train)),
+        queue_size=int(cfg_dict.get("queue_size", _dc.queue_size)),
+        curriculum_stage=int(cfg_dict.get("curriculum_stage", _dc.curriculum_stage)),
+        curriculum_schedule=cfg_dict.get("curriculum_schedule", _dc.curriculum_schedule),
         log_dir=log_dir,
         model_dir=model_dir,
         reward=reward,

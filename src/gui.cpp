@@ -456,8 +456,8 @@ static int ai_read_action() {
     return action;
 }
 
-static void ai_write_state(const Game& g, const std::vector<float>& obs, int action, bool terminated, const std::vector<float>& mask) {
-    // Write state JSON to file (includes obs and action_mask for Python policy)
+static void ai_write_state(const Game& g, const std::vector<float>& obs, int action, bool terminated, const std::vector<float>& mask, const std::vector<float>& minimap) {
+    // Write state JSON to file (includes obs, action_mask, and minimap for Python policy)
     std::ofstream f(ai_state_path);
     if (!f.is_open()) return;
     f << "{"
@@ -479,6 +479,12 @@ static void ai_write_state(const Game& g, const std::vector<float>& obs, int act
     for (size_t i = 0; i < mask.size(); i++) {
         f << mask[i];
         if (i + 1 < mask.size()) f << ",";
+    }
+    f << "],"
+      << "\"minimap\":[";
+    for (size_t i = 0; i < minimap.size(); i++) {
+        f << minimap[i];
+        if (i + 1 < minimap.size()) f << ",";
     }
     f << "]"
       << "}";
@@ -507,7 +513,7 @@ static void ai_reset_env(ColonyEnvCpp& env) {
     // Clear action file so Python knows to send a new one
     std::filesystem::remove(ai_actions_path);
     // Write fresh state so Python sends a new action
-    ai_write_state(env.game(), env.obs(), -1, false, env.action_mask());
+    ai_write_state(env.game(), env.obs(), -1, false, env.action_mask(), env.minimap());
 }
 
 static bool btn(int x, int y, int w, int h, const char* label, bool enabled = true) {
@@ -943,8 +949,8 @@ int main(int argc, char* argv[]) {
                         game_over = true;
                         ai_terminated = true;
                     }
-                    // Write state including obs and action_mask for Python policy
-                    ai_write_state(env.game(), out.obs, action, out.terminated, env.action_mask());
+                    // Write state including obs, action_mask, and minimap for Python policy
+                    ai_write_state(env.game(), out.obs, action, out.terminated, env.action_mask(), env.minimap());
                 } else {
                     // No action available yet - log once
                     if (!ai_debug_log) {

@@ -184,6 +184,15 @@ def main():
                             break
                 except (json.JSONDecodeError, OSError):
                     pass
+    # Fallback: try final_model.norm.json or latest checkpoint norm
+    if not norm_path.exists():
+        final_norm = model_dir / "final_model.norm.json"
+        if final_norm.exists():
+            norm_path = final_norm
+        else:
+            ckpt_norms = sorted(model_dir.glob("checkpoint_*_steps.norm.json"))
+            if ckpt_norms:
+                norm_path = ckpt_norms[-1]
 
     if not model_path.exists():
         print(f"ERROR: model not found: {model_path}")
@@ -221,9 +230,13 @@ def main():
     if norm_path.exists():
         env.normalizer.load(str(norm_path))
         env.normalizer.set_update(False)
-        print(f"Loaded normalization from {norm_path}")
+        print(f"Loaded normalization from {norm_path.name} (obs_size={env.normalizer._obs_size})")
+        if env.normalizer._obs_size != env.observation_space.shape[0]:
+            print(f"WARNING: normalizer obs_size={env.normalizer._obs_size} "
+                  f"!= env obs_size={env.observation_space.shape[0]}, normalization may be wrong")
     else:
-        print("WARNING: no normalization found, using raw observations")
+        print(f"WARNING: no normalization found in {model_dir}, using raw observations")
+        print(f"  Available files: {[f.name for f in model_dir.iterdir() if f.suffix in ('.json', '.pt')]}")
 
     stage = args.curriculum_stage
     if stage is None:
@@ -430,12 +443,23 @@ def main():
                           f"action_history={state.get('action')}")
 
                 obs = state.get("obs", [])
+                minimap_data = state.get("minimap", [])
                 if obs:
                     obs_arr = np.array(obs, dtype=np.float32)
                     obs_arr = env.normalizer.normalize(obs_arr)
                     with torch.no_grad():
-                        obs_t = torch.from_numpy(obs_arr).to(dev).reshape(1, -1)
-                        logits, _ = policy(obs_t)
+                        if is_hybrid and minimap_data:
+                            mm_arr = np.array(minimap_data, dtype=np.float32).reshape(1, 8, 29, 29)
+                            mm_t = torch.from_numpy(mm_arr).to(dev)
+                            obs_t = torch.from_numpy(obs_arr).to(dev).reshape(1, -1)
+                            logits, _ = policy(obs_t, mm_t)
+                        elif is_cnn and minimap_data:
+                            mm_arr = np.array(minimap_data, dtype=np.float32).reshape(1, 8, 29, 29)
+                            mm_t = torch.from_numpy(mm_arr).to(dev)
+                            logits, _ = policy(mm_t)
+                        else:
+                            obs_t = torch.from_numpy(obs_arr).to(dev).reshape(1, -1)
+                            logits, _ = policy(obs_t)
                         # Apply action masking from GUI env (match training behavior)
                         mask = state.get("action_mask", None)
                         if mask is not None:

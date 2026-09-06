@@ -35,6 +35,7 @@ events:
     found: "C:/Users/oklex/AppData/Roaming/Python/Python314/site-packages/cmake/data/share/cmake-4.4/Modules/CMakeCXXCompilerId.cpp.in"
     search_context:
       ENV{PATH}:
+        - "C:\\Program Files\\Eclipse Adoptium\\jdk-25.0.4.101-hotspot\\bin"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin\\x64"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin"
         - "C:\\Python314\\Scripts\\"
@@ -58,6 +59,8 @@ events:
         - "C:\\Users\\oklex\\.lmstudio\\bin"
         - "C:\\Users\\oklex\\AppData\\Roaming\\npm"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin"
+        - "C:\\maven\\apache-maven-3.9.16\\bin"
+        - "C:\\Program Files\\JetBrains\\IntelliJ IDEA 2026.2.2\\bin"
   -
     kind: "message-v1"
     backtrace:
@@ -73,8 +76,8 @@ events:
       
       The output was:
       0
-      ╨Т╨╡╤А╤Б╨╕╤П MSBuild 17.14.51+25f168cee ╨┤╨╗╤П .NET Framework
-      ╨б╨▒╨╛╤А╨║╨░ ╨╜╨░╤З╨░╤В╨░ 02.09.2026 22:34:48.
+      ╨Т╨╡╤А╤Б╨╕╤П MSBuild 18.9.1+a81b43525 ╨┤╨╗╤П .NET Framework
+      ╨б╨▒╨╛╤А╨║╨░ ╨╜╨░╤З╨░╤В╨░ 05.09.2026 1:19:41.
       
       ╨Я╤А╨╛╨╡╨║╤В "C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\4.4.2\\CompilerIdCXX\\CompilerIdCXX.vcxproj" ╨▓ ╤Г╨╖╨╗╨╡ 1 (╤Ж╨╡╨╗╨╡╨▓╤Л╨╡ ╨╛╨▒╤К╨╡╨║╤В╤Л ╨┐╨╛ ╤Г╨╝╨╛╨╗╤З╨░╨╜╨╕╤О).
       PrepareForBuild:
@@ -85,15 +88,15 @@ events:
         ╨б╨╛╨╖╨┤╨░╨╜╨╕╨╡ "Debug\\CompilerIdCXX.tlog\\unsuccessfulbuild", ╤В╨░╨║ ╨║╨░╨║ ╨▒╤Л╨╗╨╛ ╨╖╨░╨┤╨░╨╜╨╛ "AlwaysCreate".
         ╨Ю╨▒╤А╨░╤Й╨╡╨╜╨╕╨╡ ╨║ "Debug\\CompilerIdCXX.tlog\\unsuccessfulbuild".
       ClCompile:
-        C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\CL.exe /c /nologo /W0 /WX- /diagnostics:column /Od /D _MBCS /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"Debug\\\\" /Fd"Debug\\vc143.pdb" /external:W0 /Gd /TP /FC /errorReport:queue CMakeCXXCompilerId.cpp
+        C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.51.36231\\bin\\HostX64\\x64\\CL.exe /c /nologo /W0 /WX- /diagnostics:column /Od /D _MBCS /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"Debug\\\\" /Fd"Debug\\vc145.pdb" /external:W0 /Gd /TP /FC /errorReport:queue CMakeCXXCompilerId.cpp
         CMakeCXXCompilerId.cpp
       Link:
-        C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:".\\CompilerIdCXX.exe" /INCREMENTAL:NO /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /PDB:".\\CompilerIdCXX.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:".\\CompilerIdCXX.lib" /MACHINE:X64 Debug\\CMakeCXXCompilerId.obj
+        C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.51.36231\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:".\\CompilerIdCXX.exe" /INCREMENTAL:NO /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /PDB:".\\CompilerIdCXX.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:".\\CompilerIdCXX.lib" /MACHINE:X64 Debug\\CMakeCXXCompilerId.obj
         CompilerIdCXX.vcxproj -> C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\4.4.2\\CompilerIdCXX\\CompilerIdCXX.exe
       PostBuildEvent:
         for %%i in (cl.exe) do @echo CMAKE_CXX_COMPILER=%%~$PATH:i
         :VCEnd
-        CMAKE_CXX_COMPILER=C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe
+        CMAKE_CXX_COMPILER=C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.51.36231\\bin\\Hostx64\\x64\\cl.exe
       FinalizeBuildStatus:
         ╨д╨░╨╣╨╗ "Debug\\CompilerIdCXX.tlog\\unsuccessfulbuild" ╤Г╨┤╨░╨╗╤П╨╡╤В╤Б╤П.
         ╨Ю╨▒╤А╨░╤Й╨╡╨╜╨╕╨╡ ╨║ "Debug\\CompilerIdCXX.tlog\\CompilerIdCXX.lastbuildstate".
@@ -103,7 +106,7 @@ events:
           ╨Я╤А╨╡╨┤╤Г╨┐╤А╨╡╨╢╨┤╨╡╨╜╨╕╨╣: 0
           ╨Ю╤И╨╕╨▒╨╛╨║: 0
       
-      ╨Я╤А╨╛╤И╨╗╨╛ ╨▓╤А╨╡╨╝╨╡╨╜╨╕ 00:00:01.29
+      ╨Я╤А╨╛╤И╨╗╨╛ ╨▓╤А╨╡╨╝╨╡╨╜╨╕ 00:00:01.54
       
       
       Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "CompilerIdCXX.exe"
@@ -135,7 +138,8 @@ events:
     names:
       - "link"
     candidate_directories:
-      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/"
       - "C:/Python314/Scripts/"
@@ -153,15 +157,19 @@ events:
       - "C:/Program Files/NVIDIA Corporation/Nsight Compute 2025.3.0/"
       - "C:/Program Files/Git/cmd/"
       - "C:/Program Files/GitHub CLI/"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/"
       - "C:/Users/oklex/AppData/Local/Microsoft/WindowsApps/"
       - "C:/Users/oklex/AppData/Local/Programs/Microsoft VS Code/bin/"
       - "C:/Users/oklex/.lmstudio/bin/"
       - "C:/Users/oklex/AppData/Roaming/npm/"
+      - "C:/Maven/apache-maven-3.9.16/bin/"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/"
     searched_directories:
-      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/link.com"
-    found: "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/link.exe"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/link.com"
+    found: "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/link.exe"
     search_context:
       ENV{PATH}:
+        - "C:\\Program Files\\Eclipse Adoptium\\jdk-25.0.4.101-hotspot\\bin"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin\\x64"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin"
         - "C:\\Python314\\Scripts\\"
@@ -185,6 +193,8 @@ events:
         - "C:\\Users\\oklex\\.lmstudio\\bin"
         - "C:\\Users\\oklex\\AppData\\Roaming\\npm"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin"
+        - "C:\\maven\\apache-maven-3.9.16\\bin"
+        - "C:\\Program Files\\JetBrains\\IntelliJ IDEA 2026.2.2\\bin"
   -
     kind: "find-v1"
     backtrace:
@@ -207,7 +217,8 @@ events:
     names:
       - "lld-link"
     candidate_directories:
-      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/"
       - "C:/Python314/Scripts/"
@@ -225,14 +236,20 @@ events:
       - "C:/Program Files/NVIDIA Corporation/Nsight Compute 2025.3.0/"
       - "C:/Program Files/Git/cmd/"
       - "C:/Program Files/GitHub CLI/"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/"
       - "C:/Users/oklex/AppData/Local/Microsoft/WindowsApps/"
       - "C:/Users/oklex/AppData/Local/Programs/Microsoft VS Code/bin/"
       - "C:/Users/oklex/.lmstudio/bin/"
       - "C:/Users/oklex/AppData/Roaming/npm/"
+      - "C:/Maven/apache-maven-3.9.16/bin/"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/"
     searched_directories:
-      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/lld-link.com"
-      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/lld-link.exe"
-      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/lld-link"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/lld-link.com"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/lld-link.exe"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/lld-link"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/lld-link.com"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/lld-link.exe"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/lld-link"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/lld-link.com"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/lld-link.exe"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/lld-link"
@@ -284,6 +301,9 @@ events:
       - "C:/Program Files/GitHub CLI/lld-link.com"
       - "C:/Program Files/GitHub CLI/lld-link.exe"
       - "C:/Program Files/GitHub CLI/lld-link"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/lld-link.com"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/lld-link.exe"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/lld-link"
       - "C:/Users/oklex/AppData/Local/Microsoft/WindowsApps/lld-link.com"
       - "C:/Users/oklex/AppData/Local/Microsoft/WindowsApps/lld-link.exe"
       - "C:/Users/oklex/AppData/Local/Microsoft/WindowsApps/lld-link"
@@ -296,9 +316,16 @@ events:
       - "C:/Users/oklex/AppData/Roaming/npm/lld-link.com"
       - "C:/Users/oklex/AppData/Roaming/npm/lld-link.exe"
       - "C:/Users/oklex/AppData/Roaming/npm/lld-link"
+      - "C:/Maven/apache-maven-3.9.16/bin/lld-link.com"
+      - "C:/Maven/apache-maven-3.9.16/bin/lld-link.exe"
+      - "C:/Maven/apache-maven-3.9.16/bin/lld-link"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/lld-link.com"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/lld-link.exe"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/lld-link"
     found: false
     search_context:
       ENV{PATH}:
+        - "C:\\Program Files\\Eclipse Adoptium\\jdk-25.0.4.101-hotspot\\bin"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin\\x64"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin"
         - "C:\\Python314\\Scripts\\"
@@ -322,6 +349,8 @@ events:
         - "C:\\Users\\oklex\\.lmstudio\\bin"
         - "C:\\Users\\oklex\\AppData\\Roaming\\npm"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin"
+        - "C:\\maven\\apache-maven-3.9.16\\bin"
+        - "C:\\Program Files\\JetBrains\\IntelliJ IDEA 2026.2.2\\bin"
   -
     kind: "find-v1"
     backtrace:
@@ -342,7 +371,8 @@ events:
     names:
       - "link"
     candidate_directories:
-      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/"
       - "C:/Python314/Scripts/"
@@ -360,15 +390,19 @@ events:
       - "C:/Program Files/NVIDIA Corporation/Nsight Compute 2025.3.0/"
       - "C:/Program Files/Git/cmd/"
       - "C:/Program Files/GitHub CLI/"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/"
       - "C:/Users/oklex/AppData/Local/Microsoft/WindowsApps/"
       - "C:/Users/oklex/AppData/Local/Programs/Microsoft VS Code/bin/"
       - "C:/Users/oklex/.lmstudio/bin/"
       - "C:/Users/oklex/AppData/Roaming/npm/"
+      - "C:/Maven/apache-maven-3.9.16/bin/"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/"
     searched_directories:
-      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/link.com"
-    found: "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/link.exe"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/link.com"
+    found: "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/link.exe"
     search_context:
       ENV{PATH}:
+        - "C:\\Program Files\\Eclipse Adoptium\\jdk-25.0.4.101-hotspot\\bin"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin\\x64"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin"
         - "C:\\Python314\\Scripts\\"
@@ -392,6 +426,8 @@ events:
         - "C:\\Users\\oklex\\.lmstudio\\bin"
         - "C:\\Users\\oklex\\AppData\\Roaming\\npm"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin"
+        - "C:\\maven\\apache-maven-3.9.16\\bin"
+        - "C:\\Program Files\\JetBrains\\IntelliJ IDEA 2026.2.2\\bin"
   -
     kind: "find-v1"
     backtrace:
@@ -412,7 +448,8 @@ events:
     names:
       - "mt"
     candidate_directories:
-      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/"
       - "C:/Python314/Scripts/"
@@ -430,14 +467,20 @@ events:
       - "C:/Program Files/NVIDIA Corporation/Nsight Compute 2025.3.0/"
       - "C:/Program Files/Git/cmd/"
       - "C:/Program Files/GitHub CLI/"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/"
       - "C:/Users/oklex/AppData/Local/Microsoft/WindowsApps/"
       - "C:/Users/oklex/AppData/Local/Programs/Microsoft VS Code/bin/"
       - "C:/Users/oklex/.lmstudio/bin/"
       - "C:/Users/oklex/AppData/Roaming/npm/"
+      - "C:/Maven/apache-maven-3.9.16/bin/"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/"
     searched_directories:
-      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/mt.com"
-      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/mt.exe"
-      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/mt"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/mt.com"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/mt.exe"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/mt"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/mt.com"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/mt.exe"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/mt"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/mt.com"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/mt.exe"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/mt"
@@ -489,6 +532,9 @@ events:
       - "C:/Program Files/GitHub CLI/mt.com"
       - "C:/Program Files/GitHub CLI/mt.exe"
       - "C:/Program Files/GitHub CLI/mt"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/mt.com"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/mt.exe"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/mt"
       - "C:/Users/oklex/AppData/Local/Microsoft/WindowsApps/mt.com"
       - "C:/Users/oklex/AppData/Local/Microsoft/WindowsApps/mt.exe"
       - "C:/Users/oklex/AppData/Local/Microsoft/WindowsApps/mt"
@@ -501,9 +547,16 @@ events:
       - "C:/Users/oklex/AppData/Roaming/npm/mt.com"
       - "C:/Users/oklex/AppData/Roaming/npm/mt.exe"
       - "C:/Users/oklex/AppData/Roaming/npm/mt"
+      - "C:/Maven/apache-maven-3.9.16/bin/mt.com"
+      - "C:/Maven/apache-maven-3.9.16/bin/mt.exe"
+      - "C:/Maven/apache-maven-3.9.16/bin/mt"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/mt.com"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/mt.exe"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/mt"
     found: false
     search_context:
       ENV{PATH}:
+        - "C:\\Program Files\\Eclipse Adoptium\\jdk-25.0.4.101-hotspot\\bin"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin\\x64"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin"
         - "C:\\Python314\\Scripts\\"
@@ -527,6 +580,8 @@ events:
         - "C:\\Users\\oklex\\.lmstudio\\bin"
         - "C:\\Users\\oklex\\AppData\\Roaming\\npm"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin"
+        - "C:\\maven\\apache-maven-3.9.16\\bin"
+        - "C:\\Program Files\\JetBrains\\IntelliJ IDEA 2026.2.2\\bin"
   -
     kind: "find-v1"
     backtrace:
@@ -547,7 +602,8 @@ events:
     names:
       - "lib"
     candidate_directories:
-      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/"
       - "C:/Python314/Scripts/"
@@ -565,15 +621,19 @@ events:
       - "C:/Program Files/NVIDIA Corporation/Nsight Compute 2025.3.0/"
       - "C:/Program Files/Git/cmd/"
       - "C:/Program Files/GitHub CLI/"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/"
       - "C:/Users/oklex/AppData/Local/Microsoft/WindowsApps/"
       - "C:/Users/oklex/AppData/Local/Programs/Microsoft VS Code/bin/"
       - "C:/Users/oklex/.lmstudio/bin/"
       - "C:/Users/oklex/AppData/Roaming/npm/"
+      - "C:/Maven/apache-maven-3.9.16/bin/"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/"
     searched_directories:
-      - "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/lib.com"
-    found: "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/lib.exe"
+      - "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/lib.com"
+    found: "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.51.36231/bin/Hostx64/x64/lib.exe"
     search_context:
       ENV{PATH}:
+        - "C:\\Program Files\\Eclipse Adoptium\\jdk-25.0.4.101-hotspot\\bin"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin\\x64"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin"
         - "C:\\Python314\\Scripts\\"
@@ -597,6 +657,8 @@ events:
         - "C:\\Users\\oklex\\.lmstudio\\bin"
         - "C:\\Users\\oklex\\AppData\\Roaming\\npm"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin"
+        - "C:\\maven\\apache-maven-3.9.16\\bin"
+        - "C:\\Program Files\\JetBrains\\IntelliJ IDEA 2026.2.2\\bin"
   -
     kind: "find-v1"
     backtrace:
@@ -620,6 +682,7 @@ events:
     names:
       - "rc"
     candidate_directories:
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/"
       - "C:/Python314/Scripts/"
@@ -642,6 +705,8 @@ events:
       - "C:/Users/oklex/AppData/Local/Programs/Microsoft VS Code/bin/"
       - "C:/Users/oklex/.lmstudio/bin/"
       - "C:/Users/oklex/AppData/Roaming/npm/"
+      - "C:/Maven/apache-maven-3.9.16/bin/"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/"
       - "C:/Program Files/bin/"
       - "C:/Program Files/sbin/"
       - "C:/Program Files/"
@@ -655,6 +720,9 @@ events:
       - "C:/Program Files (x86)/colony_cpp/sbin/"
       - "C:/Program Files (x86)/colony_cpp/"
     searched_directories:
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/rc.com"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/rc.exe"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/rc"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/rc.com"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/rc.exe"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/rc"
@@ -721,6 +789,12 @@ events:
       - "C:/Users/oklex/AppData/Roaming/npm/rc.com"
       - "C:/Users/oklex/AppData/Roaming/npm/rc.exe"
       - "C:/Users/oklex/AppData/Roaming/npm/rc"
+      - "C:/Maven/apache-maven-3.9.16/bin/rc.com"
+      - "C:/Maven/apache-maven-3.9.16/bin/rc.exe"
+      - "C:/Maven/apache-maven-3.9.16/bin/rc"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/rc.com"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/rc.exe"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/rc"
       - "C:/Program Files/bin/rc.com"
       - "C:/Program Files/bin/rc.exe"
       - "C:/Program Files/bin/rc"
@@ -760,6 +834,7 @@ events:
     found: false
     search_context:
       ENV{PATH}:
+        - "C:\\Program Files\\Eclipse Adoptium\\jdk-25.0.4.101-hotspot\\bin"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin\\x64"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin"
         - "C:\\Python314\\Scripts\\"
@@ -783,6 +858,8 @@ events:
         - "C:\\Users\\oklex\\.lmstudio\\bin"
         - "C:\\Users\\oklex\\AppData\\Roaming\\npm"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin"
+        - "C:\\maven\\apache-maven-3.9.16\\bin"
+        - "C:\\Program Files\\JetBrains\\IntelliJ IDEA 2026.2.2\\bin"
       CMAKE_INSTALL_PREFIX: "C:/Program Files (x86)/colony_cpp"
       CMAKE_SYSTEM_PREFIX_PATH:
         - "C:/Program Files"
@@ -798,8 +875,8 @@ events:
     checks:
       - "Detecting CXX compiler ABI info"
     directories:
-      source: "C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-rgc2na"
-      binary: "C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-rgc2na"
+      source: "C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-we1wtq"
+      binary: "C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-we1wtq"
     cmakeVariables:
       CMAKE_CXX_FLAGS: "/DWIN32 /D_WINDOWS /EHsc"
       CMAKE_CXX_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
@@ -810,39 +887,39 @@ events:
       variable: "CMAKE_CXX_ABI_COMPILED"
       cached: false
       stdout: |
-        Change Dir: 'C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-rgc2na'
+        Change Dir: 'C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-we1wtq'
         
-        Run Build Command(s): "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_57981.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
-        ╨Т╨╡╤А╤Б╨╕╤П MSBuild 17.14.51+25f168cee ╨┤╨╗╤П .NET Framework
-        ╨б╨▒╨╛╤А╨║╨░ ╨╜╨░╤З╨░╤В╨░ 02.09.2026 22:34:50.
+        Run Build Command(s): "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_f0b26.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=18.0 /v:n
+        ╨Т╨╡╤А╤Б╨╕╤П MSBuild 18.9.1+a81b43525 ╨┤╨╗╤П .NET Framework
+        ╨б╨▒╨╛╤А╨║╨░ ╨╜╨░╤З╨░╤В╨░ 05.09.2026 1:19:43.
         
-        ╨Я╤А╨╛╨╡╨║╤В "C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-rgc2na\\cmTC_57981.vcxproj" ╨▓ ╤Г╨╖╨╗╨╡ 1 (╤Ж╨╡╨╗╨╡╨▓╤Л╨╡ ╨╛╨▒╤К╨╡╨║╤В╤Л ╨┐╨╛ ╤Г╨╝╨╛╨╗╤З╨░╨╜╨╕╤О).
+        ╨Я╤А╨╛╨╡╨║╤В "C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-we1wtq\\cmTC_f0b26.vcxproj" ╨▓ ╤Г╨╖╨╗╨╡ 1 (╤Ж╨╡╨╗╨╡╨▓╤Л╨╡ ╨╛╨▒╤К╨╡╨║╤В╤Л ╨┐╨╛ ╤Г╨╝╨╛╨╗╤З╨░╨╜╨╕╤О).
         PrepareForBuild:
           ╨б╤В╤А╤Г╨║╤В╤Г╤А╨╕╤А╨╛╨▓╨░╨╜╨╜╤Л╨╣ ╨▓╤Л╨▓╨╛╨┤ ╨▓╨║╨╗╤О╤З╨╡╨╜. ╨д╨╛╤А╨╝╨░╤В╨╕╤А╨╛╨▓╨░╨╜╨╕╨╡ ╨┤╨╕╨░╨│╨╜╨╛╤Б╤В╨╕╨║╨╕ ╨║╨╛╨╝╨┐╨╕╨╗╤П╤В╨╛╤А╨░ ╨▒╤Г╨┤╨╡╤В ╨╛╤В╤А╨░╨╢╨░╤В╤М ╨╕╨╡╤А╨░╤А╤Е╨╕╤О ╨╛╤И╨╕╨▒╨╛╨║. ╨Я╨╛╨┤╤А╨╛╨▒╨╜╨╡╨╡ ╤Б╨╝. https://aka.ms/cpp/structured-output.
-          ╨б╨╛╨╖╨┤╨░╨╜╨╕╨╡ ╨║╨░╤В╨░╨╗╨╛╨│╨░ "C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-rgc2na\\Debug\\".
-          ╨б╨╛╨╖╨┤╨░╨╜╨╕╨╡ ╨║╨░╤В╨░╨╗╨╛╨│╨░ "cmTC_57981.dir\\Debug\\cmTC_57981.tlog\\".
+          ╨б╨╛╨╖╨┤╨░╨╜╨╕╨╡ ╨║╨░╤В╨░╨╗╨╛╨│╨░ "C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-we1wtq\\Debug\\".
+          ╨б╨╛╨╖╨┤╨░╨╜╨╕╨╡ ╨║╨░╤В╨░╨╗╨╛╨│╨░ "cmTC_f0b26.dir\\Debug\\cmTC_f0b26.tlog\\".
         InitializeBuildStatus:
-          ╨б╨╛╨╖╨┤╨░╨╜╨╕╨╡ "cmTC_57981.dir\\Debug\\cmTC_57981.tlog\\unsuccessfulbuild", ╤В╨░╨║ ╨║╨░╨║ ╨▒╤Л╨╗╨╛ ╨╖╨░╨┤╨░╨╜╨╛ "AlwaysCreate".
-          ╨Ю╨▒╤А╨░╤Й╨╡╨╜╨╕╨╡ ╨║ "cmTC_57981.dir\\Debug\\cmTC_57981.tlog\\unsuccessfulbuild".
+          ╨б╨╛╨╖╨┤╨░╨╜╨╕╨╡ "cmTC_f0b26.dir\\Debug\\cmTC_f0b26.tlog\\unsuccessfulbuild", ╤В╨░╨║ ╨║╨░╨║ ╨▒╤Л╨╗╨╛ ╨╖╨░╨┤╨░╨╜╨╛ "AlwaysCreate".
+          ╨Ю╨▒╤А╨░╤Й╨╡╨╜╨╕╨╡ ╨║ "cmTC_f0b26.dir\\Debug\\cmTC_f0b26.tlog\\unsuccessfulbuild".
         ClCompile:
-          C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /Fo"cmTC_57981.dir\\Debug\\\\" /Fd"cmTC_57981.dir\\Debug\\vc143.pdb" /external:W1 /TP /errorReport:queue "C:\\Users\\oklex\\AppData\\Roaming\\Python\\Python314\\site-packages\\cmake\\data\\share\\cmake-4.4\\Modules\\CMakeCXXCompilerABI.cpp"
-          ╨Ю╨┐╤В╨╕╨╝╨╕╨╖╨╕╤А╤Г╤О╤Й╨╕╨╣ ╨║╨╛╨╝╨┐╨╕╨╗╤П╤В╨╛╤А Microsoft (R) C/C++ ╨▓╨╡╤А╤Б╨╕╨╕ 19.44.35228 ╨┤╨╗╤П x64
+          C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.51.36231\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /Fo"cmTC_f0b26.dir\\Debug\\\\" /Fd"cmTC_f0b26.dir\\Debug\\vc145.pdb" /external:W1 /TP /errorReport:queue "C:\\Users\\oklex\\AppData\\Roaming\\Python\\Python314\\site-packages\\cmake\\data\\share\\cmake-4.4\\Modules\\CMakeCXXCompilerABI.cpp"
+          Microsoft (R) C/C++ Optimizing Compiler Version 19.51.36256 for x64
           (C) ╨Ъ╨╛╤А╨┐╨╛╤А╨░╤Ж╨╕╤П ╨Ь╨░╨╣╨║╤А╨╛╤Б╨╛╤Д╤В (Microsoft Corporation).  ╨Т╤Б╨╡ ╨┐╤А╨░╨▓╨░ ╨╖╨░╤Й╨╕╤Й╨╡╨╜╤Л.
-          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /Fo"cmTC_57981.dir\\Debug\\\\" /Fd"cmTC_57981.dir\\Debug\\vc143.pdb" /external:W1 /TP /errorReport:queue "C:\\Users\\oklex\\AppData\\Roaming\\Python\\Python314\\site-packages\\cmake\\data\\share\\cmake-4.4\\Modules\\CMakeCXXCompilerABI.cpp"
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /Fo"cmTC_f0b26.dir\\Debug\\\\" /Fd"cmTC_f0b26.dir\\Debug\\vc145.pdb" /external:W1 /TP /errorReport:queue "C:\\Users\\oklex\\AppData\\Roaming\\Python\\Python314\\site-packages\\cmake\\data\\share\\cmake-4.4\\Modules\\CMakeCXXCompilerABI.cpp"
           CMakeCXXCompilerABI.cpp
         Link:
-          C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe /OUT:"C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-rgc2na\\Debug\\cmTC_57981.exe" /INCREMENTAL /ILK:"cmTC_57981.dir\\Debug\\cmTC_57981.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-rgc2na/Debug/cmTC_57981.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /IMPLIB:"C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-rgc2na/Debug/cmTC_57981.lib" /MACHINE:X64  /machine:x64 cmTC_57981.dir\\Debug\\CMakeCXXCompilerABI.obj
-          cmTC_57981.vcxproj -> C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-rgc2na\\Debug\\cmTC_57981.exe
+          C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.51.36231\\bin\\HostX64\\x64\\link.exe /OUT:"C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-we1wtq\\Debug\\cmTC_f0b26.exe" /INCREMENTAL /ILK:"cmTC_f0b26.dir\\Debug\\cmTC_f0b26.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-we1wtq/Debug/cmTC_f0b26.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /IMPLIB:"C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-we1wtq/Debug/cmTC_f0b26.lib" /MACHINE:X64  /machine:x64 cmTC_f0b26.dir\\Debug\\CMakeCXXCompilerABI.obj
+          cmTC_f0b26.vcxproj -> C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-we1wtq\\Debug\\cmTC_f0b26.exe
         FinalizeBuildStatus:
-          ╨д╨░╨╣╨╗ "cmTC_57981.dir\\Debug\\cmTC_57981.tlog\\unsuccessfulbuild" ╤Г╨┤╨░╨╗╤П╨╡╤В╤Б╤П.
-          ╨Ю╨▒╤А╨░╤Й╨╡╨╜╨╕╨╡ ╨║ "cmTC_57981.dir\\Debug\\cmTC_57981.tlog\\cmTC_57981.lastbuildstate".
-        ╨б╨▒╨╛╤А╨║╨░ ╨┐╤А╨╛╨╡╨║╤В╨░ "C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-rgc2na\\cmTC_57981.vcxproj" ╨╖╨░╨▓╨╡╤А╤И╨╡╨╜╨░ (╤Ж╨╡╨╗╨╡╨▓╤Л╨╡ ╨╛╨▒╤К╨╡╨║╤В╤Л ╨┐╨╛ ╤Г╨╝╨╛╨╗╤З╨░╨╜╨╕╤О).
+          ╨д╨░╨╣╨╗ "cmTC_f0b26.dir\\Debug\\cmTC_f0b26.tlog\\unsuccessfulbuild" ╤Г╨┤╨░╨╗╤П╨╡╤В╤Б╤П.
+          ╨Ю╨▒╤А╨░╤Й╨╡╨╜╨╕╨╡ ╨║ "cmTC_f0b26.dir\\Debug\\cmTC_f0b26.tlog\\cmTC_f0b26.lastbuildstate".
+        ╨б╨▒╨╛╤А╨║╨░ ╨┐╤А╨╛╨╡╨║╤В╨░ "C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-we1wtq\\cmTC_f0b26.vcxproj" ╨╖╨░╨▓╨╡╤А╤И╨╡╨╜╨░ (╤Ж╨╡╨╗╨╡╨▓╤Л╨╡ ╨╛╨▒╤К╨╡╨║╤В╤Л ╨┐╨╛ ╤Г╨╝╨╛╨╗╤З╨░╨╜╨╕╤О).
         
         ╨б╨▒╨╛╤А╨║╨░ ╤Г╤Б╨┐╨╡╤И╨╜╨╛ ╨╖╨░╨▓╨╡╤А╤И╨╡╨╜╨░.
             ╨Я╤А╨╡╨┤╤Г╨┐╤А╨╡╨╢╨┤╨╡╨╜╨╕╨╣: 0
             ╨Ю╤И╨╕╨▒╨╛╨║: 0
         
-        ╨Я╤А╨╛╤И╨╗╨╛ ╨▓╤А╨╡╨╝╨╡╨╜╨╕ 00:00:01.13
+        ╨Я╤А╨╛╤И╨╗╨╛ ╨▓╤А╨╡╨╝╨╡╨╜╨╕ 00:00:01.29
         
       exitCode: 0
   -
@@ -855,8 +932,8 @@ events:
       Parsed CXX implicit link information:
         link line regex: [^( *|.*[/\\])(ld[0-9]*(|\\.[a-rt-z][a-z]*|\\.s[a-np-z][a-z]*|\\.so[a-z]+)|link\\.exe|lld-link(\\.exe)?|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
         linker tool regex: [^[ 	]*(->|"|[0-9]+>[ 	-]*Build:[ 	0-9]+ ms[ 	]*)?[ 	]*(([^"]*[/\\])?(ld[0-9]*(|\\.[a-rt-z][a-z]*|\\.s[a-np-z][a-z]*|\\.so[a-z]+)|link\\.exe|lld-link(\\.exe)?))("|,| |$)]
-        link line: [  C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe /OUT:"C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-rgc2na\\Debug\\cmTC_57981.exe" /INCREMENTAL /ILK:"cmTC_57981.dir\\Debug\\cmTC_57981.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-rgc2na/Debug/cmTC_57981.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /IMPLIB:"C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-rgc2na/Debug/cmTC_57981.lib" /MACHINE:X64  /machine:x64 cmTC_57981.dir\\Debug\\CMakeCXXCompilerABI.obj] ==> linker [C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe]
-        linker tool for 'CXX': C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/HostX64/x64/link.exe 
+        link line: [  C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.51.36231\\bin\\HostX64\\x64\\link.exe /OUT:"C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-we1wtq\\Debug\\cmTC_f0b26.exe" /INCREMENTAL /ILK:"cmTC_f0b26.dir\\Debug\\cmTC_f0b26.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-we1wtq/Debug/cmTC_f0b26.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /IMPLIB:"C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-we1wtq/Debug/cmTC_f0b26.lib" /MACHINE:X64  /machine:x64 cmTC_f0b26.dir\\Debug\\CMakeCXXCompilerABI.obj] ==> linker [C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.51.36231\\bin\\HostX64\\x64\\link.exe]
+        linker tool for 'CXX': C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.51.36231/bin/HostX64/x64/link.exe 
         implicit libs: []
         implicit objs: []
         implicit dirs: []
@@ -871,8 +948,8 @@ events:
       - "C:/Users/oklex/AppData/Roaming/Python/Python314/site-packages/cmake/data/share/cmake-4.4/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
       - "CMakeLists.txt:2 (project)"
     message: |
-      Running the CXX compiler's linker: "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Tools/MSVC/14.44.35207/bin/HostX64/x64/link.exe" "-v"
-      Microsoft (R) Incremental Linker Version 14.44.35228.0
+      Running the CXX compiler's linker: "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/VC/Tools/MSVC/14.51.36231/bin/HostX64/x64/link.exe" "-v"
+      Microsoft (R) Incremental Linker Version 14.51.36256.0
       Copyright (C) Microsoft Corporation.  All rights reserved.
   -
     kind: "find-v1"
@@ -901,6 +978,7 @@ events:
       - "C:/Users/oklex/AppData/Roaming/Python/Python314/site-packages/pybind11/share/cmake/pybind11/bin/"
       - "C:/Users/oklex/AppData/Roaming/Python/Python314/site-packages/pybind11/share/cmake/pybind11/sbin/"
       - "C:/Users/oklex/AppData/Roaming/Python/Python314/site-packages/pybind11/share/cmake/pybind11/"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/"
       - "C:/Python314/Scripts/"
@@ -923,6 +1001,8 @@ events:
       - "C:/Users/oklex/AppData/Local/Programs/Microsoft VS Code/bin/"
       - "C:/Users/oklex/.lmstudio/bin/"
       - "C:/Users/oklex/AppData/Roaming/npm/"
+      - "C:/Maven/apache-maven-3.9.16/bin/"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/"
       - "C:/Program Files/bin/"
       - "C:/Program Files/sbin/"
       - "C:/Program Files/"
@@ -945,6 +1025,9 @@ events:
       - "C:/Users/oklex/AppData/Roaming/Python/Python314/site-packages/pybind11/share/cmake/pybind11/python3.9.com"
       - "C:/Users/oklex/AppData/Roaming/Python/Python314/site-packages/pybind11/share/cmake/pybind11/python3.9.exe"
       - "C:/Users/oklex/AppData/Roaming/Python/Python314/site-packages/pybind11/share/cmake/pybind11/python3.9"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/python3.9.com"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/python3.9.exe"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/python3.9"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/python3.9.com"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/python3.9.exe"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/python3.9"
@@ -1011,6 +1094,12 @@ events:
       - "C:/Users/oklex/AppData/Roaming/npm/python3.9.com"
       - "C:/Users/oklex/AppData/Roaming/npm/python3.9.exe"
       - "C:/Users/oklex/AppData/Roaming/npm/python3.9"
+      - "C:/Maven/apache-maven-3.9.16/bin/python3.9.com"
+      - "C:/Maven/apache-maven-3.9.16/bin/python3.9.exe"
+      - "C:/Maven/apache-maven-3.9.16/bin/python3.9"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/python3.9.com"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/python3.9.exe"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/python3.9"
       - "C:/Program Files/bin/python3.9.com"
       - "C:/Program Files/bin/python3.9.exe"
       - "C:/Program Files/bin/python3.9"
@@ -1056,6 +1145,9 @@ events:
       - "C:/Users/oklex/AppData/Roaming/Python/Python314/site-packages/pybind11/share/cmake/pybind11/python3.com"
       - "C:/Users/oklex/AppData/Roaming/Python/Python314/site-packages/pybind11/share/cmake/pybind11/python3.exe"
       - "C:/Users/oklex/AppData/Roaming/Python/Python314/site-packages/pybind11/share/cmake/pybind11/python3"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/python3.com"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/python3.exe"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/python3"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/python3.com"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/python3.exe"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/python3"
@@ -1122,6 +1214,12 @@ events:
       - "C:/Users/oklex/AppData/Roaming/npm/python3.com"
       - "C:/Users/oklex/AppData/Roaming/npm/python3.exe"
       - "C:/Users/oklex/AppData/Roaming/npm/python3"
+      - "C:/Maven/apache-maven-3.9.16/bin/python3.com"
+      - "C:/Maven/apache-maven-3.9.16/bin/python3.exe"
+      - "C:/Maven/apache-maven-3.9.16/bin/python3"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/python3.com"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/python3.exe"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/python3"
       - "C:/Program Files/bin/python3.com"
       - "C:/Program Files/bin/python3.exe"
       - "C:/Program Files/bin/python3"
@@ -1163,6 +1261,7 @@ events:
       CMAKE_PREFIX_PATH:
         - "C:\\Users\\oklex\\AppData\\Roaming\\Python\\Python314\\site-packages\\pybind11\\share\\cmake\\pybind11"
       ENV{PATH}:
+        - "C:\\Program Files\\Eclipse Adoptium\\jdk-25.0.4.101-hotspot\\bin"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin\\x64"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin"
         - "C:\\Python314\\Scripts\\"
@@ -1186,6 +1285,8 @@ events:
         - "C:\\Users\\oklex\\.lmstudio\\bin"
         - "C:\\Users\\oklex\\AppData\\Roaming\\npm"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin"
+        - "C:\\maven\\apache-maven-3.9.16\\bin"
+        - "C:\\Program Files\\JetBrains\\IntelliJ IDEA 2026.2.2\\bin"
       CMAKE_INSTALL_PREFIX: "C:/Program Files (x86)/colony_cpp"
       CMAKE_SYSTEM_PREFIX_PATH:
         - "C:/Program Files"
@@ -1219,6 +1320,7 @@ events:
       - "C:/Users/oklex/AppData/Roaming/Python/Python314/site-packages/pybind11/share/cmake/pybind11/bin/"
       - "C:/Users/oklex/AppData/Roaming/Python/Python314/site-packages/pybind11/share/cmake/pybind11/sbin/"
       - "C:/Users/oklex/AppData/Roaming/Python/Python314/site-packages/pybind11/share/cmake/pybind11/"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/"
       - "C:/Python314/Scripts/"
@@ -1241,6 +1343,8 @@ events:
       - "C:/Users/oklex/AppData/Local/Programs/Microsoft VS Code/bin/"
       - "C:/Users/oklex/.lmstudio/bin/"
       - "C:/Users/oklex/AppData/Roaming/npm/"
+      - "C:/Maven/apache-maven-3.9.16/bin/"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/"
       - "C:/Program Files/bin/"
       - "C:/Program Files/sbin/"
       - "C:/Program Files/"
@@ -1264,6 +1368,9 @@ events:
       - "C:/Users/oklex/AppData/Roaming/Python/Python314/site-packages/pybind11/share/cmake/pybind11/python3.15.com"
       - "C:/Users/oklex/AppData/Roaming/Python/Python314/site-packages/pybind11/share/cmake/pybind11/python3.15.exe"
       - "C:/Users/oklex/AppData/Roaming/Python/Python314/site-packages/pybind11/share/cmake/pybind11/python3.15"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/python3.15.com"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/python3.15.exe"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/python3.15"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/python3.15.com"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/python3.15.exe"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/python3.15"
@@ -1330,6 +1437,12 @@ events:
       - "C:/Users/oklex/AppData/Roaming/npm/python3.15.com"
       - "C:/Users/oklex/AppData/Roaming/npm/python3.15.exe"
       - "C:/Users/oklex/AppData/Roaming/npm/python3.15"
+      - "C:/Maven/apache-maven-3.9.16/bin/python3.15.com"
+      - "C:/Maven/apache-maven-3.9.16/bin/python3.15.exe"
+      - "C:/Maven/apache-maven-3.9.16/bin/python3.15"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/python3.15.com"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/python3.15.exe"
+      - "C:/Program Files/JetBrains/IntelliJ IDEA 2026.2.2/bin/python3.15"
       - "C:/Program Files/bin/python3.15.com"
       - "C:/Program Files/bin/python3.15.exe"
       - "C:/Program Files/bin/python3.15"
@@ -1378,6 +1491,9 @@ events:
       - "C:/Users/oklex/AppData/Roaming/Python/Python314/site-packages/pybind11/share/cmake/pybind11/python.com"
       - "C:/Users/oklex/AppData/Roaming/Python/Python314/site-packages/pybind11/share/cmake/pybind11/python.exe"
       - "C:/Users/oklex/AppData/Roaming/Python/Python314/site-packages/pybind11/share/cmake/pybind11/python"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/python.com"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/python.exe"
+      - "C:/Program Files/Eclipse Adoptium/jdk-25.0.4.101-hotspot/bin/python"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/python.com"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/python.exe"
       - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.0/bin/x64/python"
@@ -1393,6 +1509,7 @@ events:
       CMAKE_PREFIX_PATH:
         - "C:\\Users\\oklex\\AppData\\Roaming\\Python\\Python314\\site-packages\\pybind11\\share\\cmake\\pybind11"
       ENV{PATH}:
+        - "C:\\Program Files\\Eclipse Adoptium\\jdk-25.0.4.101-hotspot\\bin"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin\\x64"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin"
         - "C:\\Python314\\Scripts\\"
@@ -1416,6 +1533,8 @@ events:
         - "C:\\Users\\oklex\\.lmstudio\\bin"
         - "C:\\Users\\oklex\\AppData\\Roaming\\npm"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin"
+        - "C:\\maven\\apache-maven-3.9.16\\bin"
+        - "C:\\Program Files\\JetBrains\\IntelliJ IDEA 2026.2.2\\bin"
       CMAKE_INSTALL_PREFIX: "C:/Program Files (x86)/colony_cpp"
       CMAKE_SYSTEM_PREFIX_PATH:
         - "C:/Program Files"
@@ -1436,8 +1555,8 @@ events:
     checks:
       - "Performing Test HAS_MSVC_GL_LTCG"
     directories:
-      source: "C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-ujw0qz"
-      binary: "C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-ujw0qz"
+      source: "C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-1bh8sy"
+      binary: "C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-1bh8sy"
     cmakeVariables:
       CMAKE_CXX_FLAGS: "/DWIN32 /D_WINDOWS /EHsc"
       CMAKE_CXX_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
@@ -1448,47 +1567,47 @@ events:
       variable: "HAS_MSVC_GL_LTCG"
       cached: true
       stdout: |
-        Change Dir: 'C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-ujw0qz'
+        Change Dir: 'C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-1bh8sy'
         
-        Run Build Command(s): "C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_f6d44.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
-        ╨Т╨╡╤А╤Б╨╕╤П MSBuild 17.14.51+25f168cee ╨┤╨╗╤П .NET Framework
-        ╨б╨▒╨╛╤А╨║╨░ ╨╜╨░╤З╨░╤В╨░ 02.09.2026 22:34:51.
+        Run Build Command(s): "C:/Program Files (x86)/Microsoft Visual Studio/18/BuildTools/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_32731.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=18.0 /v:n
+        ╨Т╨╡╤А╤Б╨╕╤П MSBuild 18.9.1+a81b43525 ╨┤╨╗╤П .NET Framework
+        ╨б╨▒╨╛╤А╨║╨░ ╨╜╨░╤З╨░╤В╨░ 05.09.2026 1:19:45.
         
-        ╨Я╤А╨╛╨╡╨║╤В "C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-ujw0qz\\cmTC_f6d44.vcxproj" ╨▓ ╤Г╨╖╨╗╨╡ 1 (╤Ж╨╡╨╗╨╡╨▓╤Л╨╡ ╨╛╨▒╤К╨╡╨║╤В╤Л ╨┐╨╛ ╤Г╨╝╨╛╨╗╤З╨░╨╜╨╕╤О).
+        ╨Я╤А╨╛╨╡╨║╤В "C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-1bh8sy\\cmTC_32731.vcxproj" ╨▓ ╤Г╨╖╨╗╨╡ 1 (╤Ж╨╡╨╗╨╡╨▓╤Л╨╡ ╨╛╨▒╤К╨╡╨║╤В╤Л ╨┐╨╛ ╤Г╨╝╨╛╨╗╤З╨░╨╜╨╕╤О).
         PrepareForBuild:
           ╨б╤В╤А╤Г╨║╤В╤Г╤А╨╕╤А╨╛╨▓╨░╨╜╨╜╤Л╨╣ ╨▓╤Л╨▓╨╛╨┤ ╨▓╨║╨╗╤О╤З╨╡╨╜. ╨д╨╛╤А╨╝╨░╤В╨╕╤А╨╛╨▓╨░╨╜╨╕╨╡ ╨┤╨╕╨░╨│╨╜╨╛╤Б╤В╨╕╨║╨╕ ╨║╨╛╨╝╨┐╨╕╨╗╤П╤В╨╛╤А╨░ ╨▒╤Г╨┤╨╡╤В ╨╛╤В╤А╨░╨╢╨░╤В╤М ╨╕╨╡╤А╨░╤А╤Е╨╕╤О ╨╛╤И╨╕╨▒╨╛╨║. ╨Я╨╛╨┤╤А╨╛╨▒╨╜╨╡╨╡ ╤Б╨╝. https://aka.ms/cpp/structured-output.
-          ╨б╨╛╨╖╨┤╨░╨╜╨╕╨╡ ╨║╨░╤В╨░╨╗╨╛╨│╨░ "C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-ujw0qz\\Debug\\".
-          ╨б╨╛╨╖╨┤╨░╨╜╨╕╨╡ ╨║╨░╤В╨░╨╗╨╛╨│╨░ "cmTC_f6d44.dir\\Debug\\cmTC_f6d44.tlog\\".
+          ╨б╨╛╨╖╨┤╨░╨╜╨╕╨╡ ╨║╨░╤В╨░╨╗╨╛╨│╨░ "C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-1bh8sy\\Debug\\".
+          ╨б╨╛╨╖╨┤╨░╨╜╨╕╨╡ ╨║╨░╤В╨░╨╗╨╛╨│╨░ "cmTC_32731.dir\\Debug\\cmTC_32731.tlog\\".
         InitializeBuildStatus:
-          ╨б╨╛╨╖╨┤╨░╨╜╨╕╨╡ "cmTC_f6d44.dir\\Debug\\cmTC_f6d44.tlog\\unsuccessfulbuild", ╤В╨░╨║ ╨║╨░╨║ ╨▒╤Л╨╗╨╛ ╨╖╨░╨┤╨░╨╜╨╛ "AlwaysCreate".
-          ╨Ю╨▒╤А╨░╤Й╨╡╨╜╨╕╨╡ ╨║ "cmTC_f6d44.dir\\Debug\\cmTC_f6d44.tlog\\unsuccessfulbuild".
+          ╨б╨╛╨╖╨┤╨░╨╜╨╕╨╡ "cmTC_32731.dir\\Debug\\cmTC_32731.tlog\\unsuccessfulbuild", ╤В╨░╨║ ╨║╨░╨║ ╨▒╤Л╨╗╨╛ ╨╖╨░╨┤╨░╨╜╨╛ "AlwaysCreate".
+          ╨Ю╨▒╤А╨░╤Й╨╡╨╜╨╕╨╡ ╨║ "cmTC_32731.dir\\Debug\\cmTC_32731.tlog\\unsuccessfulbuild".
         ClCompile:
-          C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /GL /D _MBCS /D WIN32 /D _WINDOWS /D HAS_MSVC_GL_LTCG /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /std:c++17 /Fo"cmTC_f6d44.dir\\Debug\\\\" /Fd"cmTC_f6d44.dir\\Debug\\vc143.pdb" /external:W1 /TP /errorReport:queue "C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-ujw0qz\\src.cxx"
-          ╨Ю╨┐╤В╨╕╨╝╨╕╨╖╨╕╤А╤Г╤О╤Й╨╕╨╣ ╨║╨╛╨╝╨┐╨╕╨╗╤П╤В╨╛╤А Microsoft (R) C/C++ ╨▓╨╡╤А╤Б╨╕╨╕ 19.44.35228 ╨┤╨╗╤П x64
+          C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.51.36231\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /GL /D _MBCS /D WIN32 /D _WINDOWS /D HAS_MSVC_GL_LTCG /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /std:c++17 /Fo"cmTC_32731.dir\\Debug\\\\" /Fd"cmTC_32731.dir\\Debug\\vc145.pdb" /external:W1 /TP /errorReport:queue "C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-1bh8sy\\src.cxx"
+          Microsoft (R) C/C++ Optimizing Compiler Version 19.51.36256 for x64
           (C) ╨Ъ╨╛╤А╨┐╨╛╤А╨░╤Ж╨╕╤П ╨Ь╨░╨╣╨║╤А╨╛╤Б╨╛╤Д╤В (Microsoft Corporation).  ╨Т╤Б╨╡ ╨┐╤А╨░╨▓╨░ ╨╖╨░╤Й╨╕╤Й╨╡╨╜╤Л.
-          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /GL /D _MBCS /D WIN32 /D _WINDOWS /D HAS_MSVC_GL_LTCG /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /std:c++17 /Fo"cmTC_f6d44.dir\\Debug\\\\" /Fd"cmTC_f6d44.dir\\Debug\\vc143.pdb" /external:W1 /TP /errorReport:queue "C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-ujw0qz\\src.cxx"
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /GL /D _MBCS /D WIN32 /D _WINDOWS /D HAS_MSVC_GL_LTCG /D _MBCS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /std:c++17 /Fo"cmTC_32731.dir\\Debug\\\\" /Fd"cmTC_32731.dir\\Debug\\vc145.pdb" /external:W1 /TP /errorReport:queue "C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-1bh8sy\\src.cxx"
           src.cxx
         Link:
-          C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe /OUT:"C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-ujw0qz\\Debug\\cmTC_f6d44.exe" /INCREMENTAL /ILK:"cmTC_f6d44.dir\\Debug\\cmTC_f6d44.ilk" /NOLOGO "-LTCG" kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-ujw0qz/Debug/cmTC_f6d44.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /IMPLIB:"C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-ujw0qz/Debug/cmTC_f6d44.lib" /MACHINE:X64  /machine:x64 cmTC_f6d44.dir\\Debug\\src.obj
-        LINK : warning LNK4075: ╨╜╨╡ ╤Г╤З╨╕╤В╤Л╨▓╨░╨╡╤В╤Б╤П "/INCREMENTAL" ╨╕╨╖-╨╖╨░ ╤Б╨┐╨╡╤Ж╨╕╤Д╨╕╨║╨░╤Ж╨╕╨╕ "/LTCG" [C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-ujw0qz\\cmTC_f6d44.vcxproj]
+          C:\\Program Files (x86)\\Microsoft Visual Studio\\18\\BuildTools\\VC\\Tools\\MSVC\\14.51.36231\\bin\\HostX64\\x64\\link.exe /OUT:"C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-1bh8sy\\Debug\\cmTC_32731.exe" /INCREMENTAL /ILK:"cmTC_32731.dir\\Debug\\cmTC_32731.ilk" /NOLOGO "-LTCG" kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-1bh8sy/Debug/cmTC_32731.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /IMPLIB:"C:/Users/oklex/OneDrive/Documentos/sakhalin_colony_main/build/CMakeFiles/CMakeScratch/TryCompile-1bh8sy/Debug/cmTC_32731.lib" /MACHINE:X64  /machine:x64 cmTC_32731.dir\\Debug\\src.obj
+        LINK : warning LNK4075: ╨╜╨╡ ╤Г╤З╨╕╤В╤Л╨▓╨░╨╡╤В╤Б╤П "/INCREMENTAL" ╨╕╨╖-╨╖╨░ ╤Б╨┐╨╡╤Ж╨╕╤Д╨╕╨║╨░╤Ж╨╕╨╕ "/LTCG" [C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-1bh8sy\\cmTC_32731.vcxproj]
           ╨б╨╛╨╖╨┤╨░╨╜╨╕╨╡ ╨║╨╛╨┤╨░
           ╨б╨╛╨╖╨┤╨░╨╜╨╕╨╡ ╨║╨╛╨┤╨░ ╨╖╨░╨▓╨╡╤А╤И╨╡╨╜╨╛
-          cmTC_f6d44.vcxproj -> C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-ujw0qz\\Debug\\cmTC_f6d44.exe
+          cmTC_32731.vcxproj -> C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-1bh8sy\\Debug\\cmTC_32731.exe
         FinalizeBuildStatus:
-          ╨д╨░╨╣╨╗ "cmTC_f6d44.dir\\Debug\\cmTC_f6d44.tlog\\unsuccessfulbuild" ╤Г╨┤╨░╨╗╤П╨╡╤В╤Б╤П.
-          ╨Ю╨▒╤А╨░╤Й╨╡╨╜╨╕╨╡ ╨║ "cmTC_f6d44.dir\\Debug\\cmTC_f6d44.tlog\\cmTC_f6d44.lastbuildstate".
-        ╨б╨▒╨╛╤А╨║╨░ ╨┐╤А╨╛╨╡╨║╤В╨░ "C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-ujw0qz\\cmTC_f6d44.vcxproj" ╨╖╨░╨▓╨╡╤А╤И╨╡╨╜╨░ (╤Ж╨╡╨╗╨╡╨▓╤Л╨╡ ╨╛╨▒╤К╨╡╨║╤В╤Л ╨┐╨╛ ╤Г╨╝╨╛╨╗╤З╨░╨╜╨╕╤О).
+          ╨д╨░╨╣╨╗ "cmTC_32731.dir\\Debug\\cmTC_32731.tlog\\unsuccessfulbuild" ╤Г╨┤╨░╨╗╤П╨╡╤В╤Б╤П.
+          ╨Ю╨▒╤А╨░╤Й╨╡╨╜╨╕╨╡ ╨║ "cmTC_32731.dir\\Debug\\cmTC_32731.tlog\\cmTC_32731.lastbuildstate".
+        ╨б╨▒╨╛╤А╨║╨░ ╨┐╤А╨╛╨╡╨║╤В╨░ "C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-1bh8sy\\cmTC_32731.vcxproj" ╨╖╨░╨▓╨╡╤А╤И╨╡╨╜╨░ (╤Ж╨╡╨╗╨╡╨▓╤Л╨╡ ╨╛╨▒╤К╨╡╨║╤В╤Л ╨┐╨╛ ╤Г╨╝╨╛╨╗╤З╨░╨╜╨╕╤О).
         
         ╨б╨▒╨╛╤А╨║╨░ ╤Г╤Б╨┐╨╡╤И╨╜╨╛ ╨╖╨░╨▓╨╡╤А╤И╨╡╨╜╨░.
         
-        "C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-ujw0qz\\cmTC_f6d44.vcxproj" (╤Ж╨╡╨╗╨╡╨▓╨╛╨╣ ╨╛╨▒╤К╨╡╨║╤В ╨┐╨╛ ╤Г╨╝╨╛╨╗╤З╨░╨╜╨╕╤О) (1) ->
+        "C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-1bh8sy\\cmTC_32731.vcxproj" (╤Ж╨╡╨╗╨╡╨▓╨╛╨╣ ╨╛╨▒╤К╨╡╨║╤В ╨┐╨╛ ╤Г╨╝╨╛╨╗╤З╨░╨╜╨╕╤О) (1) ->
         (╨ж╨╡╨╗╨╡╨▓╨╛╨╣ ╨╛╨▒╤К╨╡╨║╤В Link) -> 
-          LINK : warning LNK4075: ╨╜╨╡ ╤Г╤З╨╕╤В╤Л╨▓╨░╨╡╤В╤Б╤П "/INCREMENTAL" ╨╕╨╖-╨╖╨░ ╤Б╨┐╨╡╤Ж╨╕╤Д╨╕╨║╨░╤Ж╨╕╨╕ "/LTCG" [C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-ujw0qz\\cmTC_f6d44.vcxproj]
+          LINK : warning LNK4075: ╨╜╨╡ ╤Г╤З╨╕╤В╤Л╨▓╨░╨╡╤В╤Б╤П "/INCREMENTAL" ╨╕╨╖-╨╖╨░ ╤Б╨┐╨╡╤Ж╨╕╤Д╨╕╨║╨░╤Ж╨╕╨╕ "/LTCG" [C:\\Users\\oklex\\OneDrive\\Documentos\\sakhalin_colony_main\\build\\CMakeFiles\\CMakeScratch\\TryCompile-1bh8sy\\cmTC_32731.vcxproj]
         
             ╨Я╤А╨╡╨┤╤Г╨┐╤А╨╡╨╢╨┤╨╡╨╜╨╕╨╣: 1
             ╨Ю╤И╨╕╨▒╨╛╨║: 0
         
-        ╨Я╤А╨╛╤И╨╗╨╛ ╨▓╤А╨╡╨╝╨╡╨╜╨╕ 00:00:01.15
+        ╨Я╤А╨╛╤И╨╗╨╛ ╨▓╤А╨╡╨╝╨╡╨╜╨╕ 00:00:01.29
         
       exitCode: 0
   -
@@ -1553,6 +1672,7 @@ events:
       CMAKE_PREFIX_PATH:
         - "C:\\Users\\oklex\\AppData\\Roaming\\Python\\Python314\\site-packages\\pybind11\\share\\cmake\\pybind11"
       ENV{PATH}:
+        - "C:\\Program Files\\Eclipse Adoptium\\jdk-25.0.4.101-hotspot\\bin"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin\\x64"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin"
         - "C:\\Python314\\Scripts\\"
@@ -1576,6 +1696,8 @@ events:
         - "C:\\Users\\oklex\\.lmstudio\\bin"
         - "C:\\Users\\oklex\\AppData\\Roaming\\npm"
         - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v13.0\\bin"
+        - "C:\\maven\\apache-maven-3.9.16\\bin"
+        - "C:\\Program Files\\JetBrains\\IntelliJ IDEA 2026.2.2\\bin"
       CMAKE_INSTALL_PREFIX: "C:/Program Files (x86)/colony_cpp"
       CMAKE_SYSTEM_PREFIX_PATH:
         - "C:/Program Files"

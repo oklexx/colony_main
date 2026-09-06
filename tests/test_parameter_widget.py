@@ -59,7 +59,7 @@ def test_specs_keys():
     keys = [s.key for s in PARAM_SPECS]
     expected = ["total_timesteps", "n_envs", "n_steps", "batch_size", "n_epochs",
                 "learning_rate", "gamma", "gae_lambda", "clip_range", "ent_coef",
-                "vf_coef", "max_grad_norm", "net_arch", "seed", "map_size"]
+                "vf_coef", "max_grad_norm", "n_layers", "seed", "map_size"]
     assert keys == expected
 
 

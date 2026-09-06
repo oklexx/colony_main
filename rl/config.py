@@ -20,7 +20,7 @@ class RewardConfig:
     game_over_penalty: float = 10.0
     diversity_bonus: float = 8.0
     # --- penalties for errors / special actions ---
-    error_penalty: float = -5.0
+    error_penalty: float = -1.0
     preserve_penalty: float = 0.0
     demolish_penalty: float = -3.0
     manual_tax_penalty: float = -0.5
@@ -88,7 +88,7 @@ class RewardConfig:
             survival_bonus=d.get("survival_bonus", 0.1),
             game_over_penalty=d.get("game_over_penalty", 10.0),
             diversity_bonus=d.get("diversity_bonus", 8.0),
-            error_penalty=d.get("error_penalty", -5.0),
+            error_penalty=d.get("error_penalty", -1.0),
             preserve_penalty=d.get("preserve_penalty", 0.0),
             demolish_penalty=d.get("demolish_penalty", -3.0),
             manual_tax_penalty=d.get("manual_tax_penalty", -0.5),
@@ -127,7 +127,7 @@ class Config:
     gamma: float = 0.995
     gae_lambda: float = 0.98
     clip_range: float = 0.2
-    ent_coef: float = 0.005  # Reduced from 0.01 to discourage action loops
+    ent_coef: float = 0.05  # Increased to prevent policy collapse / action loops
     vf_coef: float = 0.5
     max_grad_norm: float = 0.5
 
@@ -183,6 +183,26 @@ class Config:
         if self.obs_mode not in ("flat", "minimap", "hybrid"):
             raise ValueError(f"obs_mode must be 'flat', 'minimap', or 'hybrid', got {self.obs_mode}")
 
+        import torch
+        if self.torch_compile and not torch.cuda.is_available():
+            import warnings
+            warnings.warn(
+                "torch_compile=True but CUDA is not available. "
+                "torch.compile will be disabled at runtime.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+        if self.use_amp and self.amp_dtype == "bfloat16" and torch.cuda.is_available():
+            if not torch.cuda.is_bf16_supported():
+                import warnings
+                warnings.warn(
+                    "amp_dtype='bfloat16' but GPU does not support BF16. "
+                    "AMP will silently fall back to float32.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
     def to_dict(self) -> Dict[str, Any]:
         d = {}
         for k in (
@@ -217,7 +237,7 @@ class Config:
             gamma=d.get("gamma", 0.995),
             gae_lambda=d.get("gae_lambda", 0.98),
             clip_range=d.get("clip_range", 0.2),
-            ent_coef=d.get("ent_coef", 0.005),
+            ent_coef=d.get("ent_coef", 0.05),
             vf_coef=d.get("vf_coef", 0.5),
             max_grad_norm=d.get("max_grad_norm", 0.5),
             net_arch=d.get("net_arch", [256, 256]),
@@ -227,7 +247,7 @@ class Config:
             save_freq=d.get("save_freq", 500_000),
             eval_freq=d.get("eval_freq", 100_000),
             eval_episodes=d.get("eval_episodes", 20),
-            eval_score_weights=tuple(d.get("eval_score_weights", (0.4, 3.0, 0.2, 0.0001))),
+            eval_score_weights=tuple(float(x) for x in d.get("eval_score_weights", (0.4, 3.0, 0.2, 0.0001))),
             eval_min_bases=d.get("eval_min_bases", 5),
             eval_min_return=d.get("eval_min_return", 0.0),
             eval_use_median=d.get("eval_use_median", True),

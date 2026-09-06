@@ -42,7 +42,8 @@ LEVEL_COLORS = {"info": "#D4D4D4", "warn": "#CE9178", "error": "#F44747"}
 
 DEFAULT_PARAMS: Dict[str, Any] = {
     "name": "run_001",
-    "use_amp": False,
+    "use_amp": True,
+    "amp_dtype": "bfloat16",
     "torch_compile": False,
     **{s.key: s.default for s in PARAM_SPECS},
     **{s.key: s.default for s in REWARD_SPECS},
@@ -105,7 +106,8 @@ class ParameterRow(QWidget):
         self.label = QLabel(spec.label)
         self.label.setObjectName(f"label_{spec.key}")
         self.label.setToolTip(spec.tooltip)
-        self.label.setFixedWidth(90)
+        self.label.setMinimumWidth(85)
+        self.label.setMaximumWidth(110)
         self.label.setStyleSheet(STYLE_SMALL)
 
         if spec.is_int:
@@ -130,7 +132,7 @@ class ParameterRow(QWidget):
         self.spin.setObjectName(f"spin_{spec.key}")
         self.spin.setToolTip(spec.tooltip)
         self.spin.setValue(float(spec.default))
-        self.spin.setFixedWidth(80)
+        self.spin.setFixedWidth(70)
         self.spin.setStyleSheet(STYLE_SMALL)
         self.spin.setGroupSeparatorShown(True)
         self.spin.valueChanged.connect(self._on_changed)
@@ -169,6 +171,107 @@ class ParameterRow(QWidget):
         self.spin.blockSignals(True)
         self.spin.setValue(float(v))
         self.spin.blockSignals(False)
+
+
+class NetArchWidget(QWidget):
+    """Widget for configuring hidden layer architecture: n_layers + per-layer size spinboxes."""
+
+    value_changed = Signal()
+
+    MAX_LAYERS = 4
+    DEFAULT_N_LAYERS = 2
+    DEFAULT_LAYER_SIZE = 256
+    MIN_SIZE = 64
+    MAX_SIZE = 1024
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
+
+        self.label = QLabel("Скрытые слои")
+        self.label.setToolTip(
+            "Архитектура скрытых слоёв сети. "
+            "Выберите количество слоёв и размер каждого.")
+        self.label.setFixedWidth(90)
+        self.label.setStyleSheet(STYLE_SMALL)
+
+        self.spin_layers = QSpinBox()
+        self.spin_layers.setRange(1, self.MAX_LAYERS)
+        self.spin_layers.setValue(self.DEFAULT_N_LAYERS)
+        self.spin_layers.setFixedHeight(24)
+        self.spin_layers.setFixedWidth(40)
+        self.spin_layers.setStyleSheet(STYLE_SMALL)
+        self.spin_layers.valueChanged.connect(self._on_n_layers_changed)
+
+        self.layer_spins: list[QSpinBox] = []
+        self.layer_labels: list[QLabel] = []
+        self._layer_container = QWidget()
+        self._layer_layout = QHBoxLayout(self._layer_container)
+        self._layer_layout.setContentsMargins(0, 0, 0, 0)
+        self._layer_layout.setSpacing(2)
+
+        layout.addWidget(self.label)
+        layout.addWidget(self.spin_layers)
+        layout.addWidget(self._layer_container)
+        layout.addStretch(1)
+
+        self._build_layer_spins(self.DEFAULT_N_LAYERS)
+
+    def _build_layer_spins(self, n: int):
+        while self._layer_layout.count():
+            item = self._layer_layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.setParent(None)
+                w.deleteLater()
+        self.layer_spins.clear()
+        self.layer_labels.clear()
+
+        for i in range(n):
+            lbl = QLabel(f"S{i+1}")
+            lbl.setStyleSheet("font-size:8px; color:#888;")
+            lbl.setFixedWidth(16)
+            spin = QSpinBox()
+            spin.setRange(self.MIN_SIZE, self.MAX_SIZE)
+            spin.setValue(self.DEFAULT_LAYER_SIZE)
+            spin.setFixedHeight(24)
+            spin.setFixedWidth(60)
+            spin.setStyleSheet(STYLE_SMALL)
+            spin.setGroupSeparatorShown(True)
+            spin.setSingleStep(64)
+            spin.valueChanged.connect(lambda _v: self.value_changed.emit())
+            self._layer_layout.addWidget(lbl)
+            self._layer_layout.addWidget(spin)
+            self.layer_spins.append(spin)
+            self.layer_labels.append(lbl)
+        self.value_changed.emit()
+
+    def _on_n_layers_changed(self, n: int):
+        self._build_layer_spins(n)
+
+    def get_arch(self) -> list[int]:
+        return [s.value() for s in self.layer_spins]
+
+    def set_arch(self, arch: list[int]):
+        n = len(arch) if arch else self.DEFAULT_N_LAYERS
+        n = max(1, min(self.MAX_LAYERS, n))
+        self.spin_layers.blockSignals(True)
+        self.spin_layers.setValue(n)
+        self.spin_layers.blockSignals(False)
+        self._build_layer_spins(n)
+        for i, size in enumerate(arch[:n]):
+            self.layer_spins[i].blockSignals(True)
+            self.layer_spins[i].setValue(size)
+            self.layer_spins[i].blockSignals(False)
+
+    def set_n_layers(self, n: int):
+        n = max(1, min(self.MAX_LAYERS, n))
+        self.spin_layers.blockSignals(True)
+        self.spin_layers.setValue(n)
+        self.spin_layers.blockSignals(False)
+        self._build_layer_spins(n)
 
 
 class MainWindow(QMainWindow):
@@ -525,9 +628,9 @@ class MainWindow(QMainWindow):
         override_row_l.addWidget(QLabel("Stage:"))
         self.stage_combo = QComboBox()
         self.stage_combo.addItems([
-            "0 — откл.", "1 — быстрый",
-            "2 — стандартный", "3 — медленный"])
-        self.stage_combo.setCurrentIndex(2)
+            "0 — откл.", "1 — выживание", "2 — нефть",
+            "3 — промышленность", "4 — еда", "5 — полная"])
+        self.stage_combo.setCurrentIndex(0)
         self.stage_combo.setFixedWidth(120)
         self.stage_combo.setFixedHeight(22)
         self.stage_combo.setStyleSheet("font-size:10px; padding:2px; min-height:22px;")
@@ -585,6 +688,8 @@ class MainWindow(QMainWindow):
         rw_g = QGridLayout()
         rw_g.setSpacing(4)
         rw_g.setContentsMargins(0, 0, 0, 0)
+        rw_g.setColumnMinimumWidth(0, 170)
+        rw_g.setColumnMinimumWidth(1, 170)
         self.reward_rows: Dict[str, ParameterRow] = {}
         n_rewards = len(REWARD_SPECS)
         half_r = (n_rewards + 1) // 2
@@ -624,12 +729,15 @@ class MainWindow(QMainWindow):
         hp_g = QGridLayout()
         hp_g.setSpacing(4)
         hp_g.setContentsMargins(0, 0, 0, 0)
+        hp_g.setColumnMinimumWidth(0, 170)
+        hp_g.setColumnMinimumWidth(1, 170)
         self._obs_mode = "flat"
         self._minimap_radius = 14
         self.param_rows: Dict[str, ParameterRow] = {}
-        n_params = len(PARAM_SPECS)
+        hp_specs = [s for s in PARAM_SPECS if s.key != "n_layers"]
+        n_params = len(hp_specs)
         half_p = (n_params + 1) // 2
-        for idx, spec in enumerate(PARAM_SPECS):
+        for idx, spec in enumerate(hp_specs):
             row = ParameterRow(spec)
             row.value_changed.connect(lambda _k, _v: self._on_param_changed())
             self.param_rows[spec.key] = row
@@ -640,19 +748,65 @@ class MainWindow(QMainWindow):
         hp_wrap.setMaximumWidth(350)
         top_h.addWidget(hp_wrap, 1)
 
+        # --- Net Arch Widget (right of Гиперпараметры) ---
+        arch_box = QVBoxLayout()
+        arch_box.setSpacing(0)
+        arch_box.setContentsMargins(0, 0, 0, 0)
+        arch_h = QHBoxLayout()
+        arch_h.setContentsMargins(0, 0, 0, 0)
+        arch_h.setSpacing(3)
+        arch_title = QLabel("Архитектура")
+        arch_title.setStyleSheet("font-size: 11px; font-weight:bold; color:#4a90d9; padding:2px; background:transparent;")
+        arch_h.addWidget(arch_title)
+        arch_help = QPushButton("?")
+        arch_help.setStyleSheet(HELP_BTN_STYLE)
+        arch_help.setCursor(QCursor(Qt.PointingHandCursor))
+        arch_help.clicked.connect(lambda: _show_help_at_button(
+            arch_help,
+            "Настройка архитектуры скрытых слоёв сети.\n"
+            "Количество слоёв и размер каждого слоя.\n"
+            "Больше слоёв/нейронов — мощнее модель, но медленнее обучение."))
+        arch_h.addWidget(arch_help)
+        arch_h.addStretch(1)
+        arch_box.addLayout(arch_h, 0)
+        self.net_arch_widget = NetArchWidget()
+        self.net_arch_widget.value_changed.connect(lambda: self._on_param_changed())
+        arch_box.addWidget(self.net_arch_widget)
+        arch_box.addStretch(1)
+        arch_wrap = QWidget()
+        arch_wrap.setLayout(arch_box)
+        arch_wrap.setMaximumWidth(280)
+        top_h.addWidget(arch_wrap, 0)
+
         layout.addLayout(top_h)
 
         # ── AMP / compile + Buttons ──
         r3 = QHBoxLayout()
         r3.setSpacing(3)
 
-        self.chk_amp = QCheckBox("AMP (bfloat16)")
+        self.chk_amp = QCheckBox("AMP")
         self.chk_amp.setStyleSheet(STYLE_SMALL)
-        self.chk_amp.setChecked(bool(self.config.get("use_amp", False)))
+        self.chk_amp.setChecked(bool(self.config.get("use_amp", True)))
+        self.cmb_amp_dtype = QComboBox()
+        self.cmb_amp_dtype.addItems(["bfloat16", "float16"])
+        self.cmb_amp_dtype.setStyleSheet(STYLE_SMALL)
+        self.cmb_amp_dtype.setMaximumWidth(70)
+        saved_dtype = self.config.get("amp_dtype", "bfloat16")
+        idx = self.cmb_amp_dtype.findText(saved_dtype)
+        if idx >= 0:
+            self.cmb_amp_dtype.setCurrentIndex(idx)
         self.chk_compile = QCheckBox("torch.compile")
         self.chk_compile.setStyleSheet(STYLE_SMALL)
         self.chk_compile.setChecked(
             bool(self.config.get("torch_compile", False)))
+
+        self.chk_hybrid = QCheckBox("Гибрид")
+        self.chk_hybrid.setStyleSheet(STYLE_SMALL)
+        self.chk_hybrid.setToolTip(
+            "Гибридный режим: MLP + CNN ветка.\n"
+            "Объединяет глобальную статистику и миникарту.")
+        self.chk_hybrid.setChecked(self._obs_mode == "hybrid")
+        self.chk_hybrid.toggled.connect(self._on_hybrid_toggled)
 
         self.btn_load_cfg = QPushButton("Загрузить конфиг")
         self.btn_load_cfg.setStyleSheet(STYLE_BTN_SM)
@@ -673,7 +827,9 @@ class MainWindow(QMainWindow):
         self.btn_reset_default.clicked.connect(self._reset_to_defaults)
 
         r3.addWidget(self.chk_amp, 0)
+        r3.addWidget(self.cmb_amp_dtype, 0)
         r3.addWidget(self.chk_compile, 0)
+        r3.addWidget(self.chk_hybrid, 0)
         r3.addWidget(self.btn_load_cfg, 0)
         r3.addWidget(self.btn_reset, 0)
         r3.addWidget(self.btn_start, 1)
@@ -955,6 +1111,12 @@ class MainWindow(QMainWindow):
                 "--speed", "5", "--device", "cpu",
                 "--log-file", watch_msg,
                 "--visual"]
+        # Pass curriculum stage from UI
+        if self.watch_use_model_stage_chk.isChecked():
+            if self.watch_override_stage_chk.isChecked():
+                args.extend(["--curriculum-stage", str(self.stage_combo.currentIndex())])
+        else:
+            args.extend(["--curriculum-stage", str(self.stage_combo.currentIndex())])
         proc = _sp.Popen(
             args,
             cwd=str(Path(__file__).resolve().parent.parent),
@@ -1106,6 +1268,9 @@ class MainWindow(QMainWindow):
     def _on_param_changed(self):
         pass
 
+    def _on_hybrid_toggled(self, checked: bool):
+        self._obs_mode = "hybrid" if checked else "flat"
+
     def _randomize_seed(self):
         spec = spec_for("seed")
         self.param_rows["seed"].set_value(
@@ -1130,6 +1295,7 @@ class MainWindow(QMainWindow):
         cfg: Dict[str, Any] = {
             "name": name,
             "use_amp": self.chk_amp.isChecked(),
+            "amp_dtype": self.cmb_amp_dtype.currentText(),
             "torch_compile": self.chk_compile.isChecked(),
             "obs_mode": getattr(self, "_obs_mode", "flat"),
             "minimap_radius": int(getattr(self, "_minimap_radius", 14)),
@@ -1138,8 +1304,8 @@ class MainWindow(QMainWindow):
             cfg[k] = r.value()
         for k, r in self.reward_rows.items():
             cfg[k] = r.value()
-        net = int(cfg.pop("net_arch", 256))
-        cfg["net_arch"] = [net, net]
+        cfg.pop("n_layers", None)
+        cfg["net_arch"] = self.net_arch_widget.get_arch()
         cur = self._get_curriculum_data()
         if cur:
             ok, msg = self._validate_curriculum(cur)
@@ -1430,19 +1596,25 @@ class MainWindow(QMainWindow):
         for k, r in self.param_rows.items():
             r.set_value(DEFAULT_PARAMS[k])
         
+        self.net_arch_widget.set_arch([NetArchWidget.DEFAULT_LAYER_SIZE] * NetArchWidget.DEFAULT_N_LAYERS)
+        
         for k, r in self.reward_rows.items():
             r.set_value(DEFAULT_PARAMS[k])
         
         # Also reset curriculum and toggles
         self._cur_clear()
-        self.stage_combo.setCurrentIndex(2)
+        self.stage_combo.setCurrentIndex(0)
         
         self.log("info", "[UI] ✅ All parameters reset to defaults")
 
     def _reset_to_defaults(self):
         self._reset_params()
-        self.chk_amp.setChecked(False)
+        self.chk_amp.setChecked(True)
+        idx = self.cmb_amp_dtype.findText("bfloat16")
+        if idx >= 0:
+            self.cmb_amp_dtype.setCurrentIndex(idx)
         self.chk_compile.setChecked(False)
+        self.chk_hybrid.setChecked(False)
         self._load_data_to_table([[0, 1], [5_000_000, 2], [15_000_000, 3]])
         
         self.log("info", "[UI] ✅ Restored default configuration")
@@ -1561,6 +1733,7 @@ class MainWindow(QMainWindow):
     def save_state(self) -> Dict[str, Any]:
         state: Dict[str, Any] = {
             "use_amp": self.chk_amp.isChecked(),
+            "amp_dtype": self.cmb_amp_dtype.currentText(),
             "torch_compile": self.chk_compile.isChecked(),
             "model_name": self.name_edit.text().strip(),
             "config_version": CONFIG_VERSION,
@@ -1572,6 +1745,7 @@ class MainWindow(QMainWindow):
             state["selected_model"] = m.name
         for k, r in self.param_rows.items():
             state[k] = r.value()
+        state["net_arch"] = self.net_arch_widget.get_arch()
         for k, r in self.reward_rows.items():
             state[k] = r.value()
         state["stage"] = self.stage_combo.currentIndex()
@@ -1599,6 +1773,10 @@ class MainWindow(QMainWindow):
 
         if "use_amp" in cfg:
             self.chk_amp.setChecked(bool(cfg["use_amp"]))
+        if "amp_dtype" in cfg:
+            idx = self.cmb_amp_dtype.findText(cfg["amp_dtype"])
+            if idx >= 0:
+                self.cmb_amp_dtype.setCurrentIndex(idx)
         if "torch_compile" in cfg:
             self.chk_compile.setChecked(bool(cfg["torch_compile"]))
 
@@ -1608,6 +1786,18 @@ class MainWindow(QMainWindow):
                 v = v[0] if v else None
             if v is not None:
                 r.set_value(float(v))
+
+        net_arch = cfg.get("net_arch")
+        if isinstance(net_arch, list) and net_arch:
+            self.net_arch_widget.set_arch([int(x) for x in net_arch])
+        elif isinstance(net_arch, int):
+            self.net_arch_widget.set_arch([net_arch, net_arch])
+        elif "n_layers" in cfg:
+            n = int(cfg["n_layers"])
+            size = cfg.get("net_arch", 256)
+            if isinstance(size, list):
+                size = size[0] if size else 256
+            self.net_arch_widget.set_arch([int(size)] * n)
 
         for k, r in self.reward_rows.items():
             v = cfg.get(k)
@@ -1620,6 +1810,7 @@ class MainWindow(QMainWindow):
             self.stage_combo.setCurrentIndex(int(cfg["curriculum_stage"]))
 
         self._obs_mode = cfg.get("obs_mode", "flat")
+        self.chk_hybrid.setChecked(self._obs_mode == "hybrid")
         self._minimap_radius = int(cfg.get("minimap_radius", 14))
 
         if "curriculum_schedule" in cfg and isinstance(cfg["curriculum_schedule"], list):
@@ -1632,9 +1823,14 @@ class MainWindow(QMainWindow):
 
     def _restore_state(self):
         cfg = self.config
-        self.chk_amp.setChecked(bool(cfg.get("use_amp", False)))
+        self.chk_amp.setChecked(bool(cfg.get("use_amp", True)))
+        saved_dtype = cfg.get("amp_dtype", "bfloat16")
+        idx = self.cmb_amp_dtype.findText(saved_dtype)
+        if idx >= 0:
+            self.cmb_amp_dtype.setCurrentIndex(idx)
         self.chk_compile.setChecked(bool(cfg.get("torch_compile", False)))
         self._obs_mode = cfg.get("obs_mode", "flat")
+        self.chk_hybrid.setChecked(self._obs_mode == "hybrid")
         self._minimap_radius = int(cfg.get("minimap_radius", 14))
         saved_name = cfg.get("model_name", "")
         if saved_name:

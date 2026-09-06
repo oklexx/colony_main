@@ -108,6 +108,7 @@ class AsyncTrainer:
         self._action_history_maxlen = 50000
 
         # Boost tracking
+        self._initial_ent_coef = cfg.ent_coef
         self._boost_history: Dict[int, float] = {}
         self._last_boost_rollout = -100
         self._boost_cooldown = 10
@@ -212,7 +213,11 @@ class AsyncTrainer:
         return action_counts
 
     def _maybe_boost_entropy(self, rollout_idx: int):
-        """Auto-boost entropy if loop rate is high and entropy is low."""
+        """Auto-boost entropy if loop rate is high and entropy is low.
+
+        Safe version: caps ent_coef at 3x initial and proportionally
+        reduces vf_coef to maintain balance.
+        """
         if self.loop_detector is None:
             return
         if rollout_idx - self._last_boost_rollout < self._boost_cooldown:
@@ -222,13 +227,24 @@ class AsyncTrainer:
         loop_rate = stats["envs_with_loops"] / max(self.em.n_envs, 1)
         if loop_rate > 0.3 and self.metrics.entropy < 2.5:
             old_coef = self.em.ppo.ent_coef
-            new_coef = min(old_coef * 1.3, 0.05)
+            max_ent = self._initial_ent_coef * 3.0
+            new_coef = min(old_coef * 1.3, max_ent)
             if new_coef > old_coef:
                 self.em.ppo.ent_coef = new_coef
                 self.metrics.ent_coef = new_coef
+
+                old_vf = self.em.ppo.vf_coef
+                boost_ratio = new_coef / max(old_coef, 1e-10)
+                if boost_ratio > 1.5:
+                    new_vf = old_vf * (1.0 / boost_ratio)
+                    new_vf = max(new_vf, 0.1)
+                    self.em.ppo.vf_coef = new_vf
+                    self._log(f"[AutoBoost] vf_coef: {old_vf:.3f} -> {new_vf:.3f} "
+                              f"(compensating ent boost)")
+
                 self._last_boost_rollout = rollout_idx
                 self._log(f"[AutoBoost] ent_coef: {old_coef:.5f} -> {new_coef:.5f} "
-                          f"(loop_rate={loop_rate:.1%})")
+                          f"(loop_rate={loop_rate:.1%}, max={max_ent:.5f})")
 
     def _process_commands(self, command_queue: Optional[queue.Queue]):
         """Process queued commands from the UI."""
@@ -261,7 +277,7 @@ class AsyncTrainer:
                     self._stop = True
                     self._log("[Command] Training stop requested")
                     return
-            except _queue.Empty:
+            except queue.Empty:
                 break
 
     def _update_ppo(self, rollout: Dict[str, Any]) -> Dict[str, float]:
@@ -311,6 +327,9 @@ class AsyncTrainer:
 
         eval_model_path = save_dir / "_eval_temp.pt"
         self.em.ppo.save(str(eval_model_path))
+
+        if self.loop_detector:
+            self.loop_detector.clear()
 
         norm_path = save_dir / "normalization.json"
         norm_str = str(norm_path) if norm_path.exists() else None
@@ -388,10 +407,9 @@ class AsyncTrainer:
             best_path = save_dir / "best_model.pt"
             self.em.ppo.save(str(best_path))
 
-            norm_path = save_dir / "normalization.json"
-            if norm_path.exists():
-                import shutil
-                shutil.copy2(norm_path, str(best_path).replace(".pt", ".norm.json"))
+            # Save CURRENT normalization stats (not the stale file from training start)
+            norm_path = save_dir / "best_model.norm.json"
+            self.em.env.venv.save_normalization(str(norm_path))
 
             meta = {
                 "best_score": score,

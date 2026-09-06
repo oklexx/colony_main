@@ -55,7 +55,7 @@ class ProgressMsg:
     value_loss: float = 0.0
     entropy: float = 0.0
     kl: float = 0.0
-    ent_coef: float = 0.005
+    ent_coef: float = 0.0  # display-only, always provided by caller
     top_actions: Dict[str, float] = field(default_factory=dict)
     loop_detected: bool = False
     loop_action_name: Optional[str] = None
