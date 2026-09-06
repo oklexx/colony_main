@@ -231,6 +231,8 @@ def _run_train_inner(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_
         use_amp=bool(cfg_dict.get("use_amp", True)),
         amp_dtype=str(cfg_dict.get("amp_dtype", "bfloat16")),
         torch_compile=bool(cfg_dict.get("torch_compile", False)),
+        obs_mode=str(cfg_dict.get("obs_mode", "flat")),
+        minimap_radius=int(cfg_dict.get("minimap_radius", 14)),
         cpp_threads=int(cfg_dict.get("cpp_threads", 0)),
         torch_threads=int(cfg_dict.get("torch_threads", 0)),
         async_train=bool(cfg_dict.get("async_train", False)),
@@ -284,8 +286,24 @@ def _run_train_inner(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_
             except Exception:
                 pass
 
-    log("info", f"[Worker] run={run_name} steps={cfg.total_timesteps:,} "
-                f"envs={cfg.n_envs} device={device}")
+    log("info", f"[Worker] run={run_name}")
+    log("info", f"[Worker] === TRAINING PARAMETERS ===")
+    log("info", f"[Worker] steps={cfg.total_timesteps:,} envs={cfg.n_envs} n_steps={cfg.n_steps} "
+                f"batch_size={cfg.batch_size} n_epochs={cfg.n_epochs}")
+    log("info", f"[Worker] lr={cfg.learning_rate} gamma={cfg.gamma} gae_lambda={cfg.gae_lambda} "
+                f"clip_range={cfg.clip_range}")
+    log("info", f"[Worker] ent_coef={cfg.ent_coef} vf_coef={cfg.vf_coef} "
+                f"max_grad_norm={cfg.max_grad_norm}")
+    log("info", f"[Worker] net_arch={cfg.net_arch} obs_mode={cfg.obs_mode} "
+                f"minimap_radius={cfg.minimap_radius}")
+    log("info", f"[Worker] device={device} amp={cfg.use_amp}({cfg.amp_dtype}) "
+                f"compile={cfg.torch_compile}")
+    log("info", f"[Worker] seed={cfg.seed} map_size={cfg.map_size}")
+    log("info", f"[Worker] reward: build={cfg.reward.build_bonus} chain={cfg.reward.chain_bonus} "
+                f"novelty={cfg.reward.novelty} income={cfg.reward.daily_income} "
+                f"error={cfg.reward.error_penalty} game_over={cfg.reward.game_over_penalty}")
+    log("info", f"[Worker] curriculum_stage={cfg.curriculum_stage} "
+                f"schedule={cfg.curriculum_schedule}")
     log("info", f"[Worker] model_dir={cfg.model_dir}")
 
     t0 = time.perf_counter()

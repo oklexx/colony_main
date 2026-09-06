@@ -44,6 +44,8 @@ class ActorCriticHybrid(nn.Module):
         self.grid_size = grid_size
         self.n_actions = n_actions
         hidden = list(hidden_sizes) if hidden_sizes else [256, 256]
+        if len(hidden) == 1:
+            hidden = [hidden[0], hidden[0]]
         self.hidden_sizes = hidden
 
         # Flat branch: obs_size -> hidden[0]

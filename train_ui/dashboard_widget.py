@@ -6,9 +6,11 @@ from __future__ import annotations
 import numpy as np
 import time
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QSplitter
+    QWidget, QVBoxLayout, QHBoxLayout, QFrame, QLabel, QSplitter, QPushButton, QToolTip,
+    QProgressBar, QSizePolicy
 )
-from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtCore import Qt, Signal, QTimer, QPoint
+from PySide6.QtGui import QCursor
 from PySide6.QtGui import QFont
 
 import pyqtgraph as pg
@@ -48,63 +50,163 @@ class TrainingDashboardWidget(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(3)
 
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(3)
         title_label = QLabel("Training Dashboard")
         title_label.setStyleSheet("font-size: 10pt; font-weight: bold; color: #4a90d9; padding: 2px; background: transparent;")
-        layout.addWidget(title_label)
+        title_row.addWidget(title_label)
+        help_btn = QPushButton("?")
+        help_btn.setStyleSheet(
+            "QPushButton { font-size:8px; font-weight:bold; color:#888; "
+            "background:#2a2a2a; border:1px solid #444; border-radius:6px; "
+            "min-width:12px; max-width:12px; min-height:12px; max-height:12px; "
+            "padding:0; }"
+            "QPushButton:hover { color:#4a90d9; border-color:#4a90d9; }")
+        help_btn.setCursor(QCursor(Qt.PointingHandCursor))
+        help_btn.clicked.connect(lambda: QToolTip.showText(
+            help_btn.mapToGlobal(QPoint(help_btn.width() + 4, 0)),
+            "Интерактивные графики в реальном времени.\n"
+            "• KL — график KL-дивергенции (красная линия = целевое значение)\n"
+            "• Entropy — график энтропии (разнообразия действий)\n"
+            "• Actions — распределение частоты выбора действий (%)\n"
+            "Графики автоматически прокручиваются по времени.",
+            help_btn))
+        title_row.addWidget(help_btn)
 
-        splitter = QSplitter(Qt.Horizontal)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 1000)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setFormat("Ожидание…")
+        self.progress_bar.setFixedHeight(14)
+        self.progress_bar.setFixedWidth(280)
+        self.progress_bar.setStyleSheet("font-size:9px;")
+        title_row.addWidget(self.progress_bar)
+
+        title_row.addStretch(1)
+        layout.addLayout(title_row)
+
+        # Use QHBoxLayout instead of QSplitter to avoid stretching
+        plots_layout = QHBoxLayout()
+        plots_layout.setContentsMargins(0, 0, 0, 0)
+        plots_layout.setSpacing(4)
 
         # KL plot
         kl_frame = QFrame()
-        kl_frame.setStyleSheet("QFrame { background-color: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; }")
+        kl_frame.setStyleSheet("QFrame { background-color: transparent; border: none; }")
         kl_layout = QVBoxLayout(kl_frame)
-        kl_layout.setContentsMargins(2, 2, 2, 2)
+        kl_layout.setContentsMargins(0, 0, 0, 0)
+        kl_layout.setSpacing(0)
+        kl_title_row = QHBoxLayout()
+        kl_title_row.setContentsMargins(0, 0, 0, 0)
+        kl_title_row.setSpacing(1)
         kl_title = QLabel("KL")
-        kl_title.setStyleSheet("font-size: 8pt; color: #888; padding: 1px; background: transparent;")
-        kl_layout.addWidget(kl_title)
+        kl_title.setStyleSheet("font-size: 7pt; color: #888; padding: 0px; margin: 0px; background: transparent;")
+        kl_title.setFixedHeight(12)
+        kl_title_row.addWidget(kl_title)
+        kl_help = QPushButton("?")
+        kl_help.setStyleSheet(
+            "QPushButton { font-size:7px; font-weight:bold; color:#666; "
+            "background:#222; border:1px solid #333; border-radius:5px; "
+            "min-width:10px; max-width:10px; min-height:10px; max-height:10px; "
+            "padding:0; }"
+            "QPushButton:hover { color:#4a90d9; border-color:#4a90d9; }")
+        kl_help.setCursor(QCursor(Qt.PointingHandCursor))
+        kl_help.clicked.connect(lambda: QToolTip.showText(
+            kl_help.mapToGlobal(QPoint(kl_help.width() + 2, 0)),
+            "KL-дивергенция — разница между текущей и исходной стратегией.\n"
+            "Красная пунктирная линия = целевое значение (~0.05).", kl_help))
+        kl_title_row.addWidget(kl_help)
+        kl_title_row.addStretch(1)
+        kl_layout.addLayout(kl_title_row)
         self._kl_plot_widget = pg.PlotWidget(background='#1e1e1e', showGrid=(True, True, '#333'))
         self._kl_plot_widget.setMouseEnabled(x=False, y=False)
         self._kl_plot_widget.hideAxis('bottom')
         self._kl_plot_widget.hideAxis('left')
-        self._kl_plot_widget.setMinimumHeight(50)
-        self._kl_plot_widget.setMaximumHeight(80)
+        self._kl_plot_widget.setMinimumHeight(80)
+        self._kl_plot_widget.setMaximumHeight(110)
+        self._kl_plot_widget.setStyleSheet("QGraphicsView { padding: 0px; margin: 0px; }")
         kl_layout.addWidget(self._kl_plot_widget)
-        splitter.addWidget(kl_frame)
+        plots_layout.addWidget(kl_frame, 1)
 
         # Entropy plot
         ent_frame = QFrame()
-        ent_frame.setStyleSheet("QFrame { background-color: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; }")
+        ent_frame.setStyleSheet("QFrame { background-color: transparent; border: none; }")
         ent_layout = QVBoxLayout(ent_frame)
-        ent_layout.setContentsMargins(2, 2, 2, 2)
+        ent_layout.setContentsMargins(0, 0, 0, 0)
+        ent_layout.setSpacing(0)
+        ent_title_row = QHBoxLayout()
+        ent_title_row.setContentsMargins(0, 0, 0, 0)
+        ent_title_row.setSpacing(1)
         ent_title = QLabel("Entropy")
-        ent_title.setStyleSheet("font-size: 8pt; color: #888; padding: 1px; background: transparent;")
-        ent_layout.addWidget(ent_title)
+        ent_title.setStyleSheet("font-size: 7pt; color: #888; padding: 0px; margin: 0px; background: transparent;")
+        ent_title.setFixedHeight(12)
+        ent_title_row.addWidget(ent_title)
+        ent_help = QPushButton("?")
+        ent_help.setStyleSheet(
+            "QPushButton { font-size:7px; font-weight:bold; color:#666; "
+            "background:#222; border:1px solid #333; border-radius:5px; "
+            "min-width:10px; max-width:10px; min-height:10px; max-height:10px; "
+            "padding:0; }"
+            "QPushButton:hover { color:#4a90d9; border-color:#4a90d9; }")
+        ent_help.setCursor(QCursor(Qt.PointingHandCursor))
+        ent_help.clicked.connect(lambda: QToolTip.showText(
+            ent_help.mapToGlobal(QPoint(ent_help.width() + 2, 0)),
+            "Энтропия — мера разнообразия действий агента.\n"
+            "Высокая энтропия = агент исследует больше действий.\n"
+            "Низкая энтропия = агент повторяет одни и те же действия.", ent_help))
+        ent_title_row.addWidget(ent_help)
+        ent_title_row.addStretch(1)
+        ent_layout.addLayout(ent_title_row)
         self._entropy_plot_widget = pg.PlotWidget(background='#1e1e1e', showGrid=(True, True, '#333'))
         self._entropy_plot_widget.setMouseEnabled(x=False, y=False)
         self._entropy_plot_widget.hideAxis('bottom')
         self._entropy_plot_widget.hideAxis('left')
-        self._entropy_plot_widget.setMinimumHeight(50)
-        self._entropy_plot_widget.setMaximumHeight(80)
+        self._entropy_plot_widget.setMinimumHeight(80)
+        self._entropy_plot_widget.setMaximumHeight(110)
+        self._entropy_plot_widget.setStyleSheet("QGraphicsView { padding: 0px; margin: 0px; }")
         ent_layout.addWidget(self._entropy_plot_widget)
-        splitter.addWidget(ent_frame)
+        plots_layout.addWidget(ent_frame, 1)
 
         # Action distribution plot
         act_frame = QFrame()
-        act_frame.setStyleSheet("QFrame { background-color: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 4px; }")
+        act_frame.setStyleSheet("QFrame { background-color: transparent; border: none; }")
         act_layout = QVBoxLayout(act_frame)
-        act_layout.setContentsMargins(2, 2, 2, 2)
+        act_layout.setContentsMargins(0, 0, 0, 0)
+        act_layout.setSpacing(0)
+        act_title_row = QHBoxLayout()
+        act_title_row.setContentsMargins(0, 0, 0, 0)
+        act_title_row.setSpacing(1)
         act_title = QLabel("Actions")
-        act_title.setStyleSheet("font-size: 8pt; color: #888; padding: 1px; background: transparent;")
-        act_layout.addWidget(act_title)
+        act_title.setStyleSheet("font-size: 7pt; color: #888; padding: 0px; margin: 0px; background: transparent;")
+        act_title.setFixedHeight(12)
+        act_title_row.addWidget(act_title)
+        act_help = QPushButton("?")
+        act_help.setStyleSheet(
+            "QPushButton { font-size:7px; font-weight:bold; color:#666; "
+            "background:#222; border:1px solid #333; border-radius:5px; "
+            "min-width:10px; max-width:10px; min-height:10px; max-height:10px; "
+            "padding:0; }"
+            "QPushButton:hover { color:#4a90d9; border-color:#4a90d9; }")
+        act_help.setCursor(QCursor(Qt.PointingHandCursor))
+        act_help.clicked.connect(lambda: QToolTip.showText(
+            act_help.mapToGlobal(QPoint(act_help.width() + 2, 0)),
+            "Распределение частоты выбора действий агентом (%).\n"
+            "Показывает, какие действия агент выбирает чаще всего.\n"
+            "10 столбцов = 10 наиболее частых действий.", act_help))
+        act_title_row.addWidget(act_help)
+        act_title_row.addStretch(1)
+        act_layout.addLayout(act_title_row)
         self._action_plot_widget = pg.PlotWidget(background='#1e1e1e', showGrid=(True, True, '#333'))
         self._action_plot_widget.setLabel('left', '%', units='')
         self._action_plot_widget.setLabel('bottom', '', units='')
-        self._action_plot_widget.setMinimumHeight(50)
-        self._action_plot_widget.setMaximumHeight(80)
+        self._action_plot_widget.setMinimumHeight(80)
+        self._action_plot_widget.setMaximumHeight(110)
+        self._action_plot_widget.setStyleSheet("QGraphicsView { padding: 0px; margin: 0px; }")
         act_layout.addWidget(self._action_plot_widget)
-        splitter.addWidget(act_frame)
+        plots_layout.addWidget(act_frame, 1)
 
-        layout.addWidget(splitter)
+        layout.addLayout(plots_layout)
 
     def _setup_plots(self):
         if self._kl_plot_widget is None:

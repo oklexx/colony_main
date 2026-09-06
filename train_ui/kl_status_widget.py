@@ -5,9 +5,11 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QWidget, QLabel, QVBoxLayout, QHBoxLayout, QFrame, QProgressBar,
-    QSizePolicy
+    QSizePolicy, QPushButton
 )
-from PySide6.QtCore import Qt, Signal, Property
+from PySide6.QtCore import Qt, Signal, Property, QPoint
+from PySide6.QtGui import QCursor
+from PySide6.QtWidgets import QToolTip
 
 
 class KLStatusWidget(QWidget):
@@ -27,9 +29,32 @@ class KLStatusWidget(QWidget):
         layout.setContentsMargins(4, 2, 4, 2)
         layout.setSpacing(1)
 
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(3)
         title = QLabel("KL Divergence")
         title.setStyleSheet("font-size: 9pt; font-weight: bold; color: #4a90d9; padding: 0px; background: transparent;")
-        layout.addWidget(title)
+        title_row.addWidget(title)
+        help_btn = QPushButton("?")
+        help_btn.setStyleSheet(
+            "QPushButton { font-size:8px; font-weight:bold; color:#888; "
+            "background:#2a2a2a; border:1px solid #444; border-radius:6px; "
+            "min-width:12px; max-width:12px; min-height:12px; max-height:12px; "
+            "padding:0; }"
+            "QPushButton:hover { color:#4a90d9; border-color:#4a90d9; }")
+        help_btn.setCursor(QCursor(Qt.PointingHandCursor))
+        help_btn.clicked.connect(lambda: QToolTip.showText(
+            help_btn.mapToGlobal(QPoint(help_btn.width() + 4, 0)),
+            "KL-дивергенция — мера отличия текущей стратегии от исходной.\n"
+            "• LOW (< 0.01): стратегия слишком стабильна, мало обучается\n"
+            "• OK (0.01–0.025): допустимый диапазон\n"
+            "• OPTIMAL (0.025–0.08): лучшая зона обучения\n"
+            "• HIGH (> 0.08): стратегия меняется слишком быстро\n"
+            "ent_coef — коэффициент энтропии (стимулирует исследование).",
+            help_btn))
+        title_row.addWidget(help_btn)
+        title_row.addStretch(1)
+        layout.addLayout(title_row)
 
         self._status_label = QLabel("OPTIMAL")
         self._status_label.setAlignment(Qt.AlignCenter)

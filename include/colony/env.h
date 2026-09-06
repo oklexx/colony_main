@@ -33,7 +33,7 @@ struct RewardConfig {
 
     // --- penalties for errors / special actions ---
     double error_penalty = -5.0;      // penalty for failed action (increased to discourage spam)
-    double preserve_penalty = -8.0;   // cost of preserve/unpreserve (increased to prevent PRESERVE loops)
+    double preserve_penalty = 0.0;    // preserve/unpreserve is free (matches game logic)
     double demolish_penalty = -3.0;   // penalty for successful DEMOLISH (new: discourage destroying buildings)
     double manual_tax_penalty = -0.5; // cost of manual tax payment
     double build_cost_penalty = 0.0001; // fraction of build cost (subtraction)

@@ -31,7 +31,7 @@ def test_preserve_penalty_config():
     from rl.config import RewardConfig
     rc = RewardConfig()
     assert hasattr(rc, "preserve_penalty")
-    assert rc.preserve_penalty == -8.0
+    assert rc.preserve_penalty == 0.0
 
 
 def test_demolish_penalty_config():
@@ -61,7 +61,7 @@ def test_error_penalty_cpp():
 def test_preserve_penalty_cpp():
     """Verify preserve_penalty works in C++ RewardConfig."""
     rc = colony_cpp.RewardConfig()
-    assert rc.preserve_penalty == -8.0
+    assert rc.preserve_penalty == 0.0
     rc.preserve_penalty = -2.0
     assert rc.preserve_penalty == -2.0
 

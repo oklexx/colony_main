@@ -6,9 +6,10 @@ from __future__ import annotations
 from PySide6.QtWidgets import (
     QWidget, QLabel, QVBoxLayout, QHBoxLayout, QFrame, QPushButton,
     QListWidget, QListWidgetItem, QSizePolicy, QTableWidget, QTableWidgetItem,
-    QHeaderView
+    QHeaderView, QToolTip
 )
-from PySide6.QtCore import Qt, Property
+from PySide6.QtCore import Qt, Property, QPoint
+from PySide6.QtGui import QCursor
 from typing import Dict, List, Optional
 
 
@@ -55,9 +56,33 @@ class ActionLoopWidget(QWidget):
         self._alert_spacer.setVisible(True)
         layout.addWidget(self._alert_spacer)
 
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(3)
         title = QLabel("Loop Detection")
         title.setStyleSheet("font-size: 10pt; font-weight: bold; color: #4a90d9; padding: 2px; background: transparent;")
-        layout.addWidget(title)
+        title_row.addWidget(title)
+        help_btn = QPushButton("?")
+        help_btn.setStyleSheet(
+            "QPushButton { font-size:8px; font-weight:bold; color:#888; "
+            "background:#2a2a2a; border:1px solid #444; border-radius:6px; "
+            "min-width:12px; max-width:12px; min-height:12px; max-height:12px; "
+            "padding:0; }"
+            "QPushButton:hover { color:#4a90d9; border-color:#4a90d9; }")
+        help_btn.setCursor(QCursor(Qt.PointingHandCursor))
+        help_btn.clicked.connect(lambda: QToolTip.showText(
+            help_btn.mapToGlobal(QPoint(help_btn.width() + 4, 0)),
+            "Обнаружение зацикливания действий агента.\n"
+            "Если агент повторяет одно и то же действие несколько раз\n"
+            "подряд (превышая порог), появляется предупреждение.\n"
+            "• Envs in Loops — количество сред в состоянии зацикливания\n"
+            "• Status — ACTIVE (есть зацикливание) или Normal\n"
+            "• Action — название повторяющегося действия\n"
+            "• Threshold — порог подряд идущих повторов",
+            help_btn))
+        title_row.addWidget(help_btn)
+        title_row.addStretch(1)
+        layout.addLayout(title_row)
 
         self._stats_grid = QTableWidget()
         self._stats_grid.setColumnCount(2)

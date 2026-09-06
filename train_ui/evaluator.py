@@ -125,7 +125,7 @@ def _load_policy(model_path: Path, device, mode: str = "auto", minimap_radius: i
 def run_eval(
     model_path: str | Path,
     episodes: int = 5,
-    max_days: int = 1000,
+    max_days: int = 10000,
     seed: int = 7,
     device: str = "cpu",
     normalization_path: str | Path | None = None,

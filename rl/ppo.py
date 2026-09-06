@@ -71,7 +71,10 @@ class PPO:
         """
         self.model.eval()
         with torch.no_grad():
-            logits, values = self.model(flat)
+            if self.is_hybrid:
+                logits, values = self.model(flat, minimap)
+            else:
+                logits, values = self.model(flat)
             if action_masks is not None:
                 # Mask unavailable actions: set logits to -inf
                 logits = logits.masked_fill(action_masks == 0, float("-inf"))

@@ -404,17 +404,29 @@ def main():
                           f"episode {episode}/{total_episodes}")
                     if episode >= total_episodes:
                         break
-                    # Wait for C++ auto-reset, then force restart if needed
-                    time.sleep(1.0)
+                    # Wait for C++ auto-reset (5s in gui.cpp) + margin
+                    print("  [Waiting for C++ auto-reset...]")
+                    time.sleep(6.0)
                     if proc.poll() is not None:
+                        # Process died — restart it
                         proc = _restart_gui()
-                    time.sleep(0.5)
+                        time.sleep(0.5)
+                    else:
+                        # Process alive — GUI auto-reset, clear IPC and send fresh action
+                        for f in (actions_file, state_file):
+                            if f.exists():
+                                f.unlink()
+                        write_action(actions_file, 0)  # 0 = DAY
+                        time.sleep(0.1)
                     continue
 
                 step_count += 1
                 day = state.get("day", "?")
-                if step_count <= 5 or step_count % 50 == 0:
+                money = state.get("money", "?")
+                bases = state.get("bases", "?")
+                if step_count <= 10 or step_count % 50 == 0:
                     print(f"  step {step_count}  day {day}  "
+                          f"money={money} bases={bases} "
                           f"action_history={state.get('action')}")
 
                 obs = state.get("obs", [])
@@ -424,7 +436,15 @@ def main():
                     with torch.no_grad():
                         obs_t = torch.from_numpy(obs_arr).to(dev).reshape(1, -1)
                         logits, _ = policy(obs_t)
+                        # Apply action masking from GUI env (match training behavior)
+                        mask = state.get("action_mask", None)
+                        if mask is not None:
+                            mask_t = torch.tensor(mask, dtype=torch.float32, device=dev).reshape(1, -1)
+                            logits = logits.masked_fill(mask_t == 0, float("-inf"))
                         action = int(logits.argmax(dim=-1).item())
+                    action_name = action_names[action] if action < len(action_names) else str(action)
+                    if step_count <= 10 or step_count % 50 == 0:
+                        print(f"  -> sending action {action} ({action_name})")
                     write_action(actions_file, action)
 
                 if args.speed > 0:

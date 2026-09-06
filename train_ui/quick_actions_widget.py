@@ -5,9 +5,10 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFrame,
-    QMessageBox, QDialog, QFileDialog
+    QMessageBox, QDialog, QFileDialog, QToolTip
 )
-from PySide6.QtCore import Qt, Signal, Property
+from PySide6.QtCore import Qt, Signal, Property, QPoint
+from PySide6.QtGui import QCursor
 from typing import Dict, Optional, Callable
 
 
@@ -31,15 +32,37 @@ class QuickActionsWidget(QWidget):
         layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(4)
 
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(3)
         title_label = QLabel("Quick Actions")
         title_label.setStyleSheet("""
             font-size: 11pt;
             font-weight: bold;
             color: #4a90d9;
             padding: 2px;
-            border-bottom: 1px solid #3a3a3a;
         """)
-        layout.addWidget(title_label)
+        title_row.addWidget(title_label)
+        help_btn = QPushButton("?")
+        help_btn.setStyleSheet(
+            "QPushButton { font-size:8px; font-weight:bold; color:#888; "
+            "background:#2a2a2a; border:1px solid #444; border-radius:6px; "
+            "min-width:12px; max-width:12px; min-height:12px; max-height:12px; "
+            "padding:0; }"
+            "QPushButton:hover { color:#4a90d9; border-color:#4a90d9; }")
+        help_btn.setCursor(QCursor(Qt.PointingHandCursor))
+        help_btn.clicked.connect(lambda: QToolTip.showText(
+            help_btn.mapToGlobal(QPoint(help_btn.width() + 4, 0)),
+            "Панель быстрого управления тренировкой.\n"
+            "• Pause — приостановить обучение (веса сохраняются)\n"
+            "• Resume — продолжить обучение\n"
+            "• Boost Entropy x2 — увеличить энтропию в 2 раза\n"
+            "  (стимулирует исследование, полезно при зацикливании)\n"
+            "• Reset Stage 0 — сбросить курикулум на 1-й этап",
+            help_btn))
+        title_row.addWidget(help_btn)
+        title_row.addStretch(1)
+        layout.addLayout(title_row)
 
         # Pause/Resume
         self._status_label = QLabel("Status: IDLE")

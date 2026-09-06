@@ -77,6 +77,8 @@ class AsyncTrainer:
         self.best_reward = float("-inf")
         self.best_eval_days: Optional[float] = None
         self.best_score: Optional[float] = None
+        self._es_patience = 0
+        self._es_best_score: Optional[float] = None
         self._ep_returns: list[float] = []
         self._ep_returns_maxlen = 10000
         self._ep_lengths: list[int] = []
@@ -324,7 +326,7 @@ class AsyncTrainer:
                 result = run_eval(
                     model_path=str(eval_model_path),
                     episodes=self.cfg.eval_episodes,
-                    max_days=1000,
+                    max_days=10000,
                     seed=seed,
                     device=str(self.device),
                     normalization_path=norm_str,
@@ -359,12 +361,26 @@ class AsyncTrainer:
         min_return = getattr(self.cfg, "eval_min_return", 0.0)
         thresholds_met = (bases_agg >= min_bases) and (return_agg >= min_return)
 
-        self._log(
-            f"[Eval @ {total_done:,}] days={days_agg:.1f} "
-            f"people={people_agg:.1f} bases={bases_agg:.1f} "
-            f"return={return_agg:.1f} score={score:.2f} "
-            f"thresholds={'PASS' if thresholds_met else 'FAIL'}"
-        )
+        ci95 = {}
+        if len(all_days) >= 4:
+            ci95["days"] = [float(np.percentile(all_days, 2.5)), float(np.percentile(all_days, 97.5))]
+            ci95["bases"] = [float(np.percentile(all_bases, 2.5)), float(np.percentile(all_bases, 97.5))]
+            ci95["people"] = [float(np.percentile(all_people, 2.5)), float(np.percentile(all_people, 97.5))]
+            self._log(
+                f"[Eval @ {total_done:,}] days={days_agg:.1f} "
+                f"people={people_agg:.1f} bases={bases_agg:.1f} "
+                f"return={return_agg:.1f} score={score:.2f} "
+                f"CI95 days={ci95['days'][0]:.1f}-{ci95['days'][1]:.1f} "
+                f"bases={ci95['bases'][0]:.1f}-{ci95['bases'][1]:.1f} "
+                f"thresholds={'PASS' if thresholds_met else 'FAIL'}"
+            )
+        else:
+            self._log(
+                f"[Eval @ {total_done:,}] days={days_agg:.1f} "
+                f"people={people_agg:.1f} bases={bases_agg:.1f} "
+                f"return={return_agg:.1f} score={score:.2f} "
+                f"thresholds={'PASS' if thresholds_met else 'FAIL'}"
+            )
 
         if thresholds_met and (self.best_score is None or score > self.best_score):
             self.best_score = score
@@ -389,6 +405,7 @@ class AsyncTrainer:
                 "total_timesteps": total_done,
                 "episodes": len(all_days),
                 "curriculum_stage_at_best": self._curriculum_stage,
+                "ci95": ci95,
             }
             meta_path = save_dir / "best_model.meta.json"
             with open(meta_path, "w") as f:
@@ -596,6 +613,19 @@ class AsyncTrainer:
             # Run eval
             if eval_every > 0 and rollout_idx % eval_every == 0:
                 eval_result = self._eval(total_done)
+
+                es_patience = getattr(self.cfg, "early_stopping_patience", 0)
+                if es_patience > 0:
+                    if self.best_score is not None and self.best_score > (self._es_best_score or 0):
+                        self._es_best_score = self.best_score
+                        self._es_patience = 0
+                    else:
+                        self._es_patience += 1
+                        self._log(f"[EarlyStop] {self._es_patience}/{es_patience} evals without improvement")
+                        if self._es_patience >= es_patience:
+                            self._log(f"[EarlyStop] Stopping at step {total_done:,} (best_score={self.best_score:.2f})")
+                            self._stop = True
+
                 if self.progress_callback:
                     try:
                         self.metrics.eval_days = eval_result["days"]

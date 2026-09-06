@@ -131,7 +131,18 @@ def main():
     print(f"reward: disable_net_worth={cfg.reward.disable_net_worth}, "
           f"disable_daily_income={cfg.reward.disable_daily_income}")
 
-    policy = ActorCritic(obs_size, n_actions, cfg.net_arch, device)
+    # Read hidden_sizes from checkpoint (handles empty config dict case)
+    hidden_sizes = ckpt.get("hidden_sizes") or None
+    if hidden_sizes is None:
+        model_state = ckpt.get("model_state", {})
+        hidden_keys = sorted(
+            (k for k in model_state if k.startswith("trunk.") and k.endswith(".weight")),
+            key=lambda k: int(k.split(".")[1]),
+        )
+        hidden_sizes = [model_state[k].shape[0] for k in hidden_keys] if hidden_keys else cfg.net_arch
+    print(f"net_arch (from checkpoint): {hidden_sizes}")
+
+    policy = ActorCritic(obs_size, n_actions, hidden_sizes, device)
     policy.load_state_dict(ckpt["model_state"])
     policy.eval()
 

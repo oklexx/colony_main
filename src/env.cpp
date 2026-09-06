@@ -588,9 +588,32 @@ std::vector<float> ColonyEnvCpp::action_mask() {
         mask[act] = 1.0f;
     }
 
-    // Manager actions — always available (they handle empty cases internally)
+    // Manager actions
     for (int i = 0; i < N_MANAGERS; ++i) {
-        mask[manager_base_ + i] = 1.0f;
+        int act = manager_base_ + i;
+        if (i == 4) {
+            // PRESERVE: только если есть непreserved здания
+            bool has_unpreserved = false;
+            for (const Base& b : g.bases) {
+                if (!b.preserved && !b.data->no_preserve && b.data->id != DEPOT_ID) {
+                    has_unpreserved = true;
+                    break;
+                }
+            }
+            if (has_unpreserved) mask[act] = 1.0f;
+        } else if (i == 5) {
+            // UNPRESERVE: только если есть preserved здания
+            bool has_preserved = false;
+            for (const Base& b : g.bases) {
+                if (b.preserved) {
+                    has_preserved = true;
+                    break;
+                }
+            }
+            if (has_preserved) mask[act] = 1.0f;
+        } else {
+            mask[act] = 1.0f;
+        }
     }
 
     return mask;
@@ -846,7 +869,6 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
         }
         if (best == nullptr || !g.preserve(best->x, best->y).first) { rew += cfg_.error_penalty; c_error += cfg_.error_penalty; }
         else {
-            rew -= cfg_.preserve_penalty; c_preserve -= cfg_.preserve_penalty;
             invalidate_net_worth();
         }
     } else if (action == manager_base_ + 5) {
@@ -858,7 +880,6 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
         if (first_preserved == nullptr ||
             !g.preserve(first_preserved->x, first_preserved->y).first) { rew += cfg_.error_penalty; c_error += cfg_.error_penalty; }
         else {
-            rew -= cfg_.preserve_penalty; c_preserve -= cfg_.preserve_penalty;
             invalidate_net_worth();
         }
     } else if (action == manager_base_ + 6) {

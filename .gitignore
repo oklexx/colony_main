@@ -1,3 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+*.egg-info/
+dist/
+build/
+*.egg
+
+# C++ build
+build/
+*.obj
+*.o
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.sln
+*.slnx
+*.vcxproj
+*.vcxproj.filters
+*.tlog
+*.lastbuildstate
+*.FileListAbsolute.txt
+*.CppClean.log
+CMakeCache.txt
+CMakeFiles/
+
+# Binaries
+*.exe
+*.dll
+*.dylib
+
+# Logs
+*.log
+ai_debug_gui.log
+
+# Temp
+temp.txt
+FINAL_OUTPUT.txt
+QUICK_SUMMARY.txt
+REVIEW_SUMMARY.txt
+opencode.json
 opencode.jsonc
 opencode.jsonc.backup
 opencode.jsonc.bak
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store

@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <fstream>
 
 #include "raylib.h"
@@ -435,9 +436,14 @@ static std::string ai_state_path;
 static int ai_last_action = -1;   // last action written by Python
 static bool ai_terminated = false;
 static float ai_reset_timer = 0.0f;
+static char ai_build_msg[128] = "";
+static float ai_build_msg_timer = 0.0f;
+static int ai_step_count = 0;
+static FILE* ai_debug_log = nullptr;
 
 static int ai_read_action() {
     // Read action from file. Returns -1 if no new action available.
+    if (ai_actions_path.empty()) return -1;
     std::ifstream f(ai_actions_path);
     if (!f.is_open()) return -1;
     int action = -1;
@@ -450,8 +456,8 @@ static int ai_read_action() {
     return action;
 }
 
-static void ai_write_state(const Game& g, const std::vector<float>& obs, int action, bool terminated) {
-    // Write state JSON to file (includes obs for Python policy)
+static void ai_write_state(const Game& g, const std::vector<float>& obs, int action, bool terminated, const std::vector<float>& mask) {
+    // Write state JSON to file (includes obs and action_mask for Python policy)
     std::ofstream f(ai_state_path);
     if (!f.is_open()) return;
     f << "{"
@@ -468,8 +474,14 @@ static void ai_write_state(const Game& g, const std::vector<float>& obs, int act
         f << obs[i];
         if (i + 1 < obs.size()) f << ",";
     }
-    f << "]";
-    f << "}";
+    f << "],"
+      << "\"action_mask\":[";
+    for (size_t i = 0; i < mask.size(); i++) {
+        f << mask[i];
+        if (i + 1 < mask.size()) f << ",";
+    }
+    f << "]"
+      << "}";
     f.close();
 }
 
@@ -488,13 +500,14 @@ static void ai_reset_env(ColonyEnvCpp& env) {
     cur_dlg = DLG_NONE;
     stat_built.clear(); stat_earned = 0; stat_spent = 0;
     stat_started = false; stat_tax_over = false;
+    ai_build_msg[0] = '\0'; ai_build_msg_timer = 0.0f;
     cam.target = {(float)env.game().earth.init_sel_x * TILE,
                   (float)env.game().earth.init_sel_y * TILE};
     cam.zoom = 1.0f;
     // Clear action file so Python knows to send a new one
     std::filesystem::remove(ai_actions_path);
     // Write fresh state so Python sends a new action
-    ai_write_state(env.game(), env.obs(), -1, false);
+    ai_write_state(env.game(), env.obs(), -1, false, env.action_mask());
 }
 
 static bool btn(int x, int y, int w, int h, const char* label, bool enabled = true) {
@@ -666,7 +679,7 @@ static void draw_newgame(ColonyEnvCpp& env) {
     std::vector<std::string> maps = {"Старый город", "Новый город 2", "Сахалин"};
     static int sel = 0;
     list_box(x + 14, y + 64, 300, 150, maps, sel, sel);
-    if (btn(x + 330, y + 64, 110, 32, "ОК")) { env.reset(42); sel_bx = sel_by = -1; cur_dlg = DLG_NONE; tax_from_dialog = false; stat_built.clear(); stat_earned = 0; stat_spent = 0; stat_started = false; stat_tax_over = false; }
+    if (btn(x + 330, y + 64, 110, 32, "ОК")) { env.reset(42); sel_bx = sel_by = -1; cur_dlg = DLG_NONE; tax_from_dialog = false; stat_built.clear(); stat_earned = 0; stat_spent = 0; stat_started = false; stat_tax_over = false; ai_build_msg[0] = '\0'; ai_build_msg_timer = 0.0f; }
     if (btn(x + 330, y + 104, 110, 32, "Отмена")) cur_dlg = DLG_NONE;
 }
 static void draw_open(ColonyEnvCpp& env) {
@@ -849,6 +862,16 @@ int main(int argc, char* argv[]) {
     InitWindow(WIN_W, WIN_H, "Сахалинская колония 3.47");
     SetTargetFPS(60);
     load_assets();
+    // Debug: log startup mode
+    {
+        FILE* f = fopen("ai_debug_gui.log", "a");
+        if (f) {
+            fprintf(f, "=== GUI STARTUP === headless=%d actions_path='%s' state_path='%s' seed=%lld map_size=%d stage=%d\n",
+                    headless_ai, ai_actions_path.c_str(), ai_state_path.c_str(),
+                    (long long)seed, map_size, curriculum_stage);
+            fclose(f);
+        }
+    }
     {
         static int cps[512];
         int n = 0;
@@ -869,6 +892,11 @@ int main(int argc, char* argv[]) {
         // ─── Headless AI mode: read action from file, step env ───
         if (headless_ai) {
             if (IsKeyPressed(KEY_ESCAPE)) { want_close = true; }
+            // Update build notification timer
+            if (ai_build_msg_timer > 0.0f) {
+                ai_build_msg_timer -= GetFrameTime();
+                if (ai_build_msg_timer <= 0.0f) ai_build_msg[0] = '\0';
+            }
 
             if (game_over) {
                 // Auto-reset after 5 seconds
@@ -881,15 +909,52 @@ int main(int argc, char* argv[]) {
             } else {
                 int action = ai_read_action();
                 if (action >= 0) {
+                    ai_step_count++;
+                    if (!ai_debug_log) {
+                        ai_debug_log = fopen("ai_debug_gui.log", "a");
+                    }
+                    if (ai_debug_log) {
+                        fprintf(ai_debug_log, "STEP %d: action=%d money=%lld bases=%d path='%s'\n",
+                                ai_step_count, action, (long long)env.game().money,
+                                (int)env.game().bases.size(), ai_actions_path.c_str());
+                        fflush(ai_debug_log);
+                    }
                     ai_last_action = action;
                     sel_action = action;  // highlight in palette
+                    // Track bases before step to detect new buildings
+                    Game& gstep = env.game();
+                    std::unordered_set<int64_t> uids_before_ai;
+                    for (const Base& b : gstep.bases) uids_before_ai.insert(b.uid);
                     auto out = env.step(action);
+                    if (ai_debug_log) {
+                        fprintf(ai_debug_log, "  -> after step: money=%lld bases=%d terminated=%d\n",
+                                (long long)gstep.money, (int)gstep.bases.size(), out.terminated);
+                        fflush(ai_debug_log);
+                    }
+                    // Update stat_built for any new buildings added by AI
+                    for (const Base& b : gstep.bases) {
+                        if (uids_before_ai.find(b.uid) == uids_before_ai.end()) {
+                            stat_built[b.data->caption]++;
+                            snprintf(ai_build_msg, sizeof(ai_build_msg), "AI построил: %s", b.data->caption.c_str());
+                            ai_build_msg_timer = 3.0f;
+                        }
+                    }
                     if (out.terminated) {
                         game_over = true;
                         ai_terminated = true;
                     }
-                    // Write state including obs for Python policy
-                    ai_write_state(env.game(), out.obs, action, out.terminated);
+                    // Write state including obs and action_mask for Python policy
+                    ai_write_state(env.game(), out.obs, action, out.terminated, env.action_mask());
+                } else {
+                    // No action available yet - log once
+                    if (!ai_debug_log) {
+                        ai_debug_log = fopen("ai_debug_gui.log", "a");
+                    }
+                    if (ai_debug_log && ai_step_count == 0) {
+                        fprintf(ai_debug_log, "WAITING: no action yet, path='%s' headless=%d\n",
+                                ai_actions_path.c_str(), headless_ai);
+                        fflush(ai_debug_log);
+                    }
                 }
             }
         }
@@ -929,6 +994,7 @@ int main(int argc, char* argv[]) {
                 cam.zoom = 1.0f;
                 stat_built.clear(); stat_earned = 0; stat_spent = 0;
                 stat_started = false; stat_tax_over = false;
+                ai_build_msg[0] = '\0'; ai_build_msg_timer = 0.0f;
                 game_over = false;
             }
             if (btn(px + pw/2 - 80, py + ph - 50, 160, 36, "Повторить карту")) {
@@ -940,6 +1006,7 @@ int main(int argc, char* argv[]) {
                 cam.zoom = 1.0f;
                 stat_built.clear(); stat_earned = 0; stat_spent = 0;
                 stat_started = false; stat_tax_over = false;
+                ai_build_msg[0] = '\0'; ai_build_msg_timer = 0.0f;
                 game_over = false;
             }
             if (btn(px + pw - 190, py + ph - 50, 170, 36, "Выход"))
@@ -1438,6 +1505,13 @@ int main(int argc, char* argv[]) {
                 snprintf(st, sizeof(st), "Ход: %s %d %s %d", month_ru(g.month), g.day, "года", g.year);
             }
             text(st, 6, by + 4, 16, C_ACCENT);
+
+            // AI build notification
+            if (headless_ai && ai_build_msg_timer > 0.0f && ai_build_msg[0]) {
+                int msg_w = (int)MeasureTextEx(gFont, ai_build_msg, 16.0f, 1.0f).x;
+                DrawRectangle(WIN_W/2 - msg_w/2 - 10, by, msg_w + 20, BOTTOM_H, Color{40, 80, 40, 220});
+                text(ai_build_msg, WIN_W/2 - msg_w/2, by + 4, 16, {150, 255, 150, 255});
+            }
 
             // legend strip
             int ly = by + CH + 2;

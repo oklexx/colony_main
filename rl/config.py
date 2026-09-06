@@ -21,7 +21,7 @@ class RewardConfig:
     diversity_bonus: float = 8.0
     # --- penalties for errors / special actions ---
     error_penalty: float = -5.0
-    preserve_penalty: float = -8.0
+    preserve_penalty: float = 0.0
     demolish_penalty: float = -3.0
     manual_tax_penalty: float = -0.5
     build_cost_penalty: float = 0.0001
@@ -89,7 +89,7 @@ class RewardConfig:
             game_over_penalty=d.get("game_over_penalty", 10.0),
             diversity_bonus=d.get("diversity_bonus", 8.0),
             error_penalty=d.get("error_penalty", -5.0),
-            preserve_penalty=d.get("preserve_penalty", -8.0),
+            preserve_penalty=d.get("preserve_penalty", 0.0),
             demolish_penalty=d.get("demolish_penalty", -3.0),
             manual_tax_penalty=d.get("manual_tax_penalty", -0.5),
             build_cost_penalty=d.get("build_cost_penalty", 0.0001),
@@ -150,6 +150,7 @@ class Config:
     eval_min_return: float = 0.0
     eval_use_median: bool = True
     eval_seeds: list = field(default_factory=lambda: [42])
+    early_stopping_patience: int = 0
 
     # Curriculum schedule: list of (step_threshold, stage) pairs
     curriculum_schedule: list = field(default_factory=list)
@@ -191,7 +192,7 @@ class Config:
             "net_arch", "obs_mode", "minimap_radius",
             "total_timesteps", "save_freq", "eval_freq", "eval_episodes",
             "eval_score_weights", "eval_min_bases", "eval_min_return",
-            "eval_use_median", "eval_seeds", "curriculum_schedule",
+            "eval_use_median", "eval_seeds", "early_stopping_patience", "curriculum_schedule",
             "device", "use_amp", "amp_dtype", "torch_compile",
             "cpp_threads", "torch_threads", "async_train", "queue_size",
             "log_dir", "model_dir",
@@ -231,6 +232,7 @@ class Config:
             eval_min_return=d.get("eval_min_return", 0.0),
             eval_use_median=d.get("eval_use_median", True),
             eval_seeds=d.get("eval_seeds", [42]),
+            early_stopping_patience=d.get("early_stopping_patience", 0),
             curriculum_schedule=d.get("curriculum_schedule", []),
             device=d.get("device", "cuda"),
             use_amp=d.get("use_amp", True),

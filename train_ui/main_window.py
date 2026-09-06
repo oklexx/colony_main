@@ -9,14 +9,14 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QAction, QPalette, QColor
+from PySide6.QtCore import Qt, QTimer, Signal, QPoint
+from PySide6.QtGui import QAction, QPalette, QColor, QCursor
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog,
     QFrame, QGridLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
     QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QProgressBar,
     QPushButton, QScrollArea, QSpinBox, QSplitter, QTableWidget, QTableWidgetItem,
-    QVBoxLayout, QWidget, QSizePolicy, QListWidget,
+    QVBoxLayout, QWidget, QSizePolicy, QListWidget, QToolTip,
 )
 
 from train_ui import protocol as P
@@ -51,6 +51,41 @@ DEFAULT_PARAMS: Dict[str, Any] = {
 STYLE_SMALL = "font-size:10px;"
 STYLE_BTN_SM = "font-size:10px; padding:3px 6px; min-height:18px;"
 STYLE_TITLE = "font-weight:bold; font-size:10px;"
+
+HELP_BTN_STYLE = (
+    "QPushButton { font-size:9px; font-weight:bold; color:#888; "
+    "background:#2a2a2a; border:1px solid #444; border-radius:7px; "
+    "min-width:14px; max-width:14px; min-height:14px; max-height:14px; "
+    "padding:0; }"
+    "QPushButton:hover { color:#4a90d9; border-color:#4a90d9; }"
+)
+
+
+def _make_header(title: str, help_text: str, parent: QWidget = None) -> QHBoxLayout:
+    """Create a horizontal layout with a bold title label and a ? help button."""
+    h = QHBoxLayout()
+    h.setContentsMargins(0, 0, 0, 0)
+    h.setSpacing(3)
+    lbl = QLabel(title)
+    lbl.setStyleSheet(
+        "font-size:11px; font-weight:bold; color:#aaa; padding:2px; "
+        "background:transparent;")
+    h.addWidget(lbl)
+    btn = QPushButton("?")
+    btn.setStyleSheet(HELP_BTN_STYLE)
+    btn.setCursor(QCursor(Qt.PointingHandCursor))
+    btn.setToolTip(help_text)
+    btn.clicked.connect(
+        lambda checked=False, b=btn, t=help_text: _show_help_at_button(b, t))
+    h.addWidget(btn)
+    h.addStretch(1)
+    return h
+
+
+def _show_help_at_button(btn: QPushButton, text: str):
+    """Show a tooltip-style popup at the help button position."""
+    pos = btn.mapToGlobal(QPoint(btn.width() + 4, btn.height()))
+    QToolTip.showText(pos, text, btn)
 
 
 class ParameterRow(QWidget):
@@ -176,11 +211,12 @@ class MainWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         root = QHBoxLayout(central)
-        root.setContentsMargins(4, 4, 4, 4)
-        root.setSpacing(4)
+        root.setContentsMargins(2, 4, 0, 4)
+        root.setSpacing(0)
 
         left = QVBoxLayout()
         left.setSpacing(2)
+        left.setContentsMargins(4, 4, 0, 4)
         right = QVBoxLayout()
         right.setSpacing(2)
 
@@ -199,7 +235,7 @@ class MainWindow(QMainWindow):
             QLabel { color: #d4d4d4; background-color: transparent; border: none; }
         """)
         right_outer = QVBoxLayout(right_panel)
-        right_outer.setContentsMargins(2, 2, 2, 2)
+        right_outer.setContentsMargins(0, 0, 0, 0)
         right_outer.setSpacing(3)
 
         # -- Learning Metrics (compact) --
@@ -208,9 +244,27 @@ class MainWindow(QMainWindow):
         metrics_layout = QVBoxLayout(metrics_frame)
         metrics_layout.setContentsMargins(6, 4, 6, 4)
         metrics_layout.setSpacing(2)
+        mh = QHBoxLayout()
+        mh.setContentsMargins(0, 0, 0, 0)
+        mh.setSpacing(3)
         metrics_title = QLabel("Learning Metrics")
         metrics_title.setStyleSheet("font-size: 11pt; font-weight: bold; color: #4a90d9; padding: 2px; background: transparent;")
-        metrics_layout.addWidget(metrics_title)
+        mh.addWidget(metrics_title)
+        metrics_help = QPushButton("?")
+        metrics_help.setStyleSheet(HELP_BTN_STYLE)
+        metrics_help.setCursor(QCursor(Qt.PointingHandCursor))
+        metrics_help.setToolTip("Основные метрики обучения: эпизоды, шаги, награды")
+        metrics_help.clicked.connect(lambda: _show_help_at_button(
+            metrics_help,
+            "Основные метрики обучения в реальном времени.\n"
+            "• Episodes — количество завершённых эпизодов\n"
+            "• Step — текущий шаг обучения\n"
+            "• Total Reward — суммарная награда за последние 50 эпизодов\n"
+            "• Avg Reward — средняя награда за эпизод\n"
+            "• Best Reward — лучшая достигнутая награда"))
+        mh.addWidget(metrics_help)
+        mh.addStretch(1)
+        metrics_layout.addLayout(mh)
         mg = QGridLayout()
         mg.setSpacing(3)
         self._episodes_label = QLabel("Episodes: 0")
@@ -240,12 +294,8 @@ class MainWindow(QMainWindow):
         widgets_layout.setSpacing(0)
         self.kl_status_widget = KLStatusWidget()
         widgets_layout.addWidget(self.kl_status_widget)
-        self.curriculum_progress_widget = CurriculumProgressWidget()
-        widgets_layout.addWidget(self.curriculum_progress_widget)
         self.action_loop_widget = ActionLoopWidget()
         widgets_layout.addWidget(self.action_loop_widget)
-        self.return_statistics_widget = ReturnStatisticsWidget()
-        widgets_layout.addWidget(self.return_statistics_widget)
         right_outer.addWidget(widgets_frame)
 
         # -- Quick Actions --
@@ -258,17 +308,6 @@ class MainWindow(QMainWindow):
         qa_layout.addWidget(self.quick_actions_widget)
         right_outer.addWidget(qa_frame)
 
-        # -- Training Dashboard (plots) --
-        dash_frame = QFrame()
-        dash_frame.setStyleSheet("QFrame { background-color: #252525; border: 1px solid #3a3a3a; border-radius: 6px; }")
-        dash_layout = QVBoxLayout(dash_frame)
-        dash_layout.setContentsMargins(2, 2, 2, 2)
-        dash_layout.setSpacing(1)
-        self.dashboard = TrainingDashboardWidget()
-        dash_layout.addWidget(self.dashboard)
-        dash_frame.setMaximumHeight(220)
-        right_outer.addWidget(dash_frame)
-
         # Connect QuickActionsWidget signals
         self.quick_actions_widget.cmd_boost_entropy.connect(self._on_quick_boost_entropy)
         self.quick_actions_widget.cmd_pause_training.connect(self._on_quick_pause)
@@ -280,13 +319,20 @@ class MainWindow(QMainWindow):
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("QScrollArea { background-color: #1e1e1e; border: none; }")
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setMaximumWidth(600)
+        scroll.setContentsMargins(0, 0, 0, 0)
+        scroll.setMaximumWidth(400)
         root.addWidget(scroll, 1)
 
     # ── LEFT COLUMN ──
 
     def _build_left(self, layout: QVBoxLayout):
-        # Models
+        # ── Модели ──
+        layout.addLayout(_make_header(
+            "Модели",
+            "Выбор модели для обучения, наблюдения или дообучения. "
+            "Из выпадающего списка выберите существующую модель или "
+            "создайте новую, задав имя и параметры."))
+
         m_row = QHBoxLayout()
         m_row.setSpacing(2)
         m_row.addWidget(QLabel("Модель:"), 0)
@@ -326,6 +372,13 @@ class MainWindow(QMainWindow):
         mb.addWidget(self.btn_resume)
         layout.addLayout(mb)
 
+        # ── Статистика модели ──
+        layout.addLayout(_make_header(
+            "Статистика",
+            "Ключевые метрики выбранной модели: количество шагов, "
+            "эпизодов, лучшая награда, время обучения и результаты "
+            "оценки (eval). Значения обновляются при выборе модели."))
+
         # Stats
         self._stat_labels: Dict[str, QLabel] = {}
         sg = QGridLayout()
@@ -346,6 +399,13 @@ class MainWindow(QMainWindow):
             sg.addWidget(vl, r * 2 + 1, c)
             self._stat_labels[k] = vl
         layout.addLayout(sg)
+
+        # ── Наблюдение ──
+        layout.addLayout(_make_header(
+            "Наблюдение (Live)",
+            "Текущее состояние среды во время наблюдения за моделью: "
+            "день, действие, награда, количество людей и деньги. "
+            "Обновляется в реальном времени при запуске наблюдения."))
 
         # Observation
         self._obs_labels: Dict[str, QLabel] = {}
@@ -368,39 +428,28 @@ class MainWindow(QMainWindow):
             self._obs_labels[k] = vl
         layout.addLayout(og)
 
-        # Parameters (1-column)
-        pg = QGridLayout()
-        pg.setSpacing(2)
-        pg.setContentsMargins(0, 0, 0, 0)
-        self.param_rows: Dict[str, ParameterRow] = {}
-        for i, spec in enumerate(PARAM_SPECS):
-            row = ParameterRow(spec)
-            row.value_changed.connect(lambda _k, _v: self._on_param_changed())
-            self.param_rows[spec.key] = row
-            pg.addWidget(row, i, 0)
-        layout.addLayout(pg)
+        # ── Return Statistics (над Курикулумом) ──
+        self.return_statistics_widget = ReturnStatisticsWidget()
+        layout.addWidget(self.return_statistics_widget)
 
-    # ── RIGHT COLUMN ──
+        # ── Курикулум ──
+        cur_box_left = QGroupBox("Курикулум  [?]")
+        cur_box_left.setStyleSheet("font-weight:bold; font-size:10px;")
+        cur_box_left.setToolTip(
+            "Настройка курикулума: расписание этапов и параметры наблюдения.\n"
+            "Этап определяет набор доступных действий для агента.\n"
+            "Этапы нумеруются по порядку строк (1-й строка = этап 1, "
+            "2-я = этап 2, 3-я = этап 3).\n"
+            "• Использовать stage модели — берёт stage из meta.json\n"
+            "• Override stage — принудительно задаёт stage из списка\n"
+            "• Визуализация — графическое окно наблюдения")
+        cur_lay_left = QVBoxLayout(cur_box_left)
+        cur_lay_left.setSpacing(2)
+        cur_lay_left.setContentsMargins(4, 8, 4, 4)
 
-    def _build_right(self, layout: QVBoxLayout):
-        # ── Top row: Curriculum+Watch (left) ‖ Rewards (right) ──
-        top_h = QHBoxLayout()
-        top_h.setSpacing(6)
-
-        # --- Left: Autocurriculum + Watch stage stacked vertically ---
-        left_v = QVBoxLayout()
-        left_v.setSpacing(4)
-        left_v.setContentsMargins(0, 0, 0, 0)
-
-        cur_box = QGroupBox("Автокурикулум (расписание этапов)")
-        cur_box.setStyleSheet("font-weight:bold; font-size:10px;")
-        cur_lay = QVBoxLayout(cur_box)
-        cur_lay.setSpacing(3)
-        cur_lay.setContentsMargins(4, 8, 4, 4)
-
-        cur_prof = QHBoxLayout()
-        cur_prof.setSpacing(4)
-        cur_prof.addWidget(QLabel("Профиль:"))
+        cur_prof_l = QHBoxLayout()
+        cur_prof_l.setSpacing(4)
+        cur_prof_l.addWidget(QLabel("Профиль:"))
         self.cur_profile_combo = QComboBox()
         self.cur_profile_combo.addItems(
             ["Отключён", "Стандартный", "Быстрый", "Медленный"])
@@ -409,25 +458,24 @@ class MainWindow(QMainWindow):
         self.cur_profile_combo.setStyleSheet(STYLE_SMALL)
         self.cur_profile_combo.currentIndexChanged.connect(
             self._cur_profile_changed)
-        cur_prof.addWidget(self.cur_profile_combo)
-        cur_prof.addStretch(1)
-        cur_lay.addLayout(cur_prof)
+        cur_prof_l.addWidget(self.cur_profile_combo)
+        cur_prof_l.addStretch(1)
+        cur_lay_left.addLayout(cur_prof_l)
 
-        self.curriculum_table = QTableWidget(0, 2)
+        self.curriculum_table = QTableWidget(0, 1)
         self.curriculum_table.setObjectName("curriculum_table")
-        self.curriculum_table.setHorizontalHeaderLabels(
-            ["Порог шагов", "Этап (1-3)"])
+        self.curriculum_table.setHorizontalHeaderLabels(["Порог шагов"])
         self.curriculum_table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeMode.Stretch)
-        self.curriculum_table.horizontalHeader().setSectionResizeMode(
-            1, QHeaderView.ResizeMode.Stretch)
-        self.curriculum_table.setMinimumHeight(100)
-        self.curriculum_table.setMaximumHeight(130)
-        self.curriculum_table.setStyleSheet("font-size:10px;")
-        cur_lay.addWidget(self.curriculum_table)
+        self.curriculum_table.setMinimumHeight(120)
+        self.curriculum_table.setMaximumHeight(120)
+        self.curriculum_table.verticalHeader().setVisible(False)
+        self.curriculum_table.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.curriculum_table.setStyleSheet("font-size:10px; QTableWidget::item { padding: 1px; } QHeaderView::section { padding: 1px; }")
+        cur_lay_left.addWidget(self.curriculum_table)
 
-        cur_btns = QHBoxLayout()
-        cur_btns.setSpacing(4)
+        cur_btns_l = QGridLayout()
+        cur_btns_l.setSpacing(2)
         self.btn_cur_add = QPushButton("Добавить")
         self.btn_cur_add.setStyleSheet(STYLE_BTN_SM)
         self.btn_cur_add.clicked.connect(self._cur_add_row)
@@ -443,21 +491,18 @@ class MainWindow(QMainWindow):
         self.btn_cur_load = QPushButton("Загрузить")
         self.btn_cur_load.setStyleSheet(STYLE_BTN_SM)
         self.btn_cur_load.clicked.connect(self._cur_load)
-        cur_btns.addWidget(self.btn_cur_add)
-        cur_btns.addWidget(self.btn_cur_del)
-        cur_btns.addWidget(self.btn_cur_clear)
-        cur_btns.addWidget(self.btn_cur_save)
-        cur_btns.addWidget(self.btn_cur_load)
-        cur_lay.addLayout(cur_btns)
+        cur_btns_l.addWidget(self.btn_cur_add, 0, 0)
+        cur_btns_l.addWidget(self.btn_cur_del, 0, 1)
+        cur_btns_l.addWidget(self.btn_cur_clear, 1, 0)
+        cur_btns_l.addWidget(self.btn_cur_save, 1, 1)
+        cur_btns_l.addWidget(self.btn_cur_load, 2, 0)
+        cur_lay_left.addLayout(cur_btns_l)
 
-        left_v.addWidget(cur_box)
-
-        # Watch stage block (same width, below)
-        watch_box = QGroupBox("Этап курикулума")
-        watch_box.setStyleSheet("font-weight:bold; font-size:10px;")
-        watch_lay = QVBoxLayout(watch_box)
-        watch_lay.setSpacing(4)
-        watch_lay.setContentsMargins(4, 8, 4, 4)
+        cur_lay_left.addSpacing(2)
+        watch_sep_l = QLabel("")
+        watch_sep_l.setStyleSheet("border-top: 1px solid #3a3a3a; padding: 0;")
+        watch_sep_l.setFixedHeight(1)
+        cur_lay_left.addWidget(watch_sep_l)
 
         self.watch_use_model_stage_chk = QCheckBox(
             "Использовать stage модели")
@@ -465,79 +510,137 @@ class MainWindow(QMainWindow):
         self.watch_use_model_stage_chk.setChecked(True)
         self.watch_use_model_stage_chk.toggled.connect(
             self._watch_stage_mode_changed)
-        watch_lay.addWidget(self.watch_use_model_stage_chk)
+        cur_lay_left.addWidget(self.watch_use_model_stage_chk)
 
+        override_row_l = QHBoxLayout()
+        override_row_l.setSpacing(4)
         self.watch_override_stage_chk = QCheckBox("Override stage")
         self.watch_override_stage_chk.setStyleSheet(STYLE_SMALL)
         self.watch_override_stage_chk.setChecked(False)
         self.watch_override_stage_chk.setEnabled(False)
         self.watch_override_stage_chk.toggled.connect(
             self._watch_stage_mode_changed)
-        watch_lay.addWidget(self.watch_override_stage_chk)
-
-        self.watch_visual_chk = QCheckBox("Визуализация")
-        self.watch_visual_chk.setStyleSheet(STYLE_SMALL)
-        self.watch_visual_chk.setChecked(False)
-        watch_lay.addWidget(self.watch_visual_chk)
-
-        watch_lay.addWidget(QLabel("Stage:"))
+        override_row_l.addWidget(self.watch_override_stage_chk)
+        override_row_l.addSpacing(6)
+        override_row_l.addWidget(QLabel("Stage:"))
         self.stage_combo = QComboBox()
         self.stage_combo.addItems([
             "0 — откл.", "1 — быстрый",
             "2 — стандартный", "3 — медленный"])
         self.stage_combo.setCurrentIndex(2)
-        self.stage_combo.setFixedWidth(140)
-        self.stage_combo.setFixedHeight(28)
-        self.stage_combo.setStyleSheet("font-size:12px; padding:5px; min-height:28px;")
-        watch_lay.addWidget(self.stage_combo)
+        self.stage_combo.setFixedWidth(120)
+        self.stage_combo.setFixedHeight(22)
+        self.stage_combo.setStyleSheet("font-size:10px; padding:2px; min-height:22px;")
+        override_row_l.addWidget(self.stage_combo)
+        override_row_l.addStretch(1)
+        cur_lay_left.addLayout(override_row_l)
+
+        self.watch_visual_chk = QCheckBox("Визуализация")
+        self.watch_visual_chk.setStyleSheet(STYLE_SMALL)
+        self.watch_visual_chk.setChecked(False)
+        cur_lay_left.addWidget(self.watch_visual_chk)
 
         self.watch_stage_info_label = QLabel(
             "Stage из meta.json модели.")
         self.watch_stage_info_label.setStyleSheet(
             "font-size:9px; color:#808080;")
         self.watch_stage_info_label.setWordWrap(True)
-        watch_lay.addWidget(self.watch_stage_info_label)
+        cur_lay_left.addWidget(self.watch_stage_info_label)
 
-        left_v.addWidget(watch_box)
-        top_h.addLayout(left_v, 3)
+        self.curriculum_progress_widget = CurriculumProgressWidget()
+        cur_lay_left.addWidget(self.curriculum_progress_widget)
 
-        # --- Right: Rewards single column ---
+        layout.addWidget(cur_box_left)
+
+    # ── RIGHT COLUMN ──
+
+    def _build_right(self, layout: QVBoxLayout):
+        # ── Top row: Rewards (left) ‖ Гиперпараметры (right) ──
+        top_h = QHBoxLayout()
+        top_h.setSpacing(6)
+
+        # --- Left: Rewards ---
         rw_box = QVBoxLayout()
         rw_box.setSpacing(0)
         rw_box.setContentsMargins(0, 0, 0, 0)
-        rw_box.addWidget(QLabel("Награды"), 0)
-        rw_v = QVBoxLayout()
-        rw_v.setSpacing(8)  # Increased spacing between reward parameters to prevent overlap
+        rw_h = QHBoxLayout()
+        rw_h.setContentsMargins(0, 0, 0, 0)
+        rw_h.setSpacing(3)
+        rw_title = QLabel("Награды")
+        rw_title.setStyleSheet("font-size: 11px; font-weight:bold; color:#4a90d9; padding:2px; background:transparent;")
+        rw_h.addWidget(rw_title)
+        rw_help = QPushButton("?")
+        rw_help.setStyleSheet(HELP_BTN_STYLE)
+        rw_help.setCursor(QCursor(Qt.PointingHandCursor))
+        rw_help.clicked.connect(lambda: _show_help_at_button(
+            rw_help,
+            "Параметры наград (reward shaping).\n"
+            "Определяют, как агент оценивает свои действия.\n"
+            "Изменяя коэффициенты, можно направлять поведение\n"
+            "агента: например, увеличить награду за строительство\n"
+            "или уменьшить штраф за потерю людей."))
+        rw_h.addWidget(rw_help)
+        rw_h.addStretch(1)
+        rw_box.addLayout(rw_h, 0)
+        rw_g = QGridLayout()
+        rw_g.setSpacing(4)
+        rw_g.setContentsMargins(0, 0, 0, 0)
         self.reward_rows: Dict[str, ParameterRow] = {}
-        for spec in REWARD_SPECS:
+        n_rewards = len(REWARD_SPECS)
+        half_r = (n_rewards + 1) // 2
+        for idx, spec in enumerate(REWARD_SPECS):
             row = ParameterRow(spec)
             row.value_changed.connect(lambda _k, _v: self._on_param_changed())
             self.reward_rows[spec.key] = row
-            rw_v.addWidget(row)
-        rw_box.addLayout(rw_v)
+            rw_g.addWidget(row, idx % half_r, idx // half_r)
+        rw_box.addLayout(rw_g)
         rw_wrap = QWidget()
         rw_wrap.setLayout(rw_box)
-        rw_wrap.setMaximumWidth(250)
+        rw_wrap.setMaximumWidth(350)
         top_h.addWidget(rw_wrap, 1)
 
-        layout.addLayout(top_h)
+        # --- Right: Гиперпараметры ---
+        hp_box = QVBoxLayout()
+        hp_box.setSpacing(0)
+        hp_box.setContentsMargins(0, 0, 0, 0)
+        hp_h = QHBoxLayout()
+        hp_h.setContentsMargins(0, 0, 0, 0)
+        hp_h.setSpacing(3)
+        hp_title = QLabel("Гиперпараметры")
+        hp_title.setStyleSheet("font-size: 11px; font-weight:bold; color:#4a90d9; padding:2px; background:transparent;")
+        hp_h.addWidget(hp_title)
+        hp_help = QPushButton("?")
+        hp_help.setStyleSheet(HELP_BTN_STYLE)
+        hp_help.setCursor(QCursor(Qt.PointingHandCursor))
+        hp_help.clicked.connect(lambda: _show_help_at_button(
+            hp_help,
+            "Настройки алгоритма PPO: скорость обучения (lr), "
+            "размер батча, архитектура сети и другие параметры. "
+            "Наведите на название параметра для подробного описания. "
+            "Кнопки ×2/÷2 позволяют быстро изменить значение в 2 раза."))
+        hp_h.addWidget(hp_help)
+        hp_h.addStretch(1)
+        hp_box.addLayout(hp_h, 0)
+        hp_g = QGridLayout()
+        hp_g.setSpacing(4)
+        hp_g.setContentsMargins(0, 0, 0, 0)
+        self._obs_mode = "flat"
+        self._minimap_radius = 14
+        self.param_rows: Dict[str, ParameterRow] = {}
+        n_params = len(PARAM_SPECS)
+        half_p = (n_params + 1) // 2
+        for idx, spec in enumerate(PARAM_SPECS):
+            row = ParameterRow(spec)
+            row.value_changed.connect(lambda _k, _v: self._on_param_changed())
+            self.param_rows[spec.key] = row
+            hp_g.addWidget(row, idx % half_p, idx // half_p)
+        hp_box.addLayout(hp_g)
+        hp_wrap = QWidget()
+        hp_wrap.setLayout(hp_box)
+        hp_wrap.setMaximumWidth(350)
+        top_h.addWidget(hp_wrap, 1)
 
-        # ── Stage + Progress ──
-        r_prog = QHBoxLayout()
-        r_prog.setSpacing(3)
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 1000)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setFormat("Ожидание…")
-        self.progress_bar.setSizePolicy(
-            QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self.progress_bar.setFixedHeight(16)
-        self.status_label = QLabel("")
-        self.status_label.setStyleSheet("font-size:9px; color:#aaa;")
-        self.status_label.setFixedWidth(180)
-        r_prog.addWidget(self.progress_bar, 1)
-        r_prog.addWidget(self.status_label, 0)
-        layout.addLayout(r_prog)
+        layout.addLayout(top_h)
 
         # ── AMP / compile + Buttons ──
         r3 = QHBoxLayout()
@@ -550,6 +653,10 @@ class MainWindow(QMainWindow):
         self.chk_compile.setStyleSheet(STYLE_SMALL)
         self.chk_compile.setChecked(
             bool(self.config.get("torch_compile", False)))
+
+        self.btn_load_cfg = QPushButton("Загрузить конфиг")
+        self.btn_load_cfg.setStyleSheet(STYLE_BTN_SM)
+        self.btn_load_cfg.clicked.connect(self._load_config_from_file)
 
         self.btn_reset = QPushButton("Сбросить")
         self.btn_reset.setStyleSheet(STYLE_BTN_SM)
@@ -567,26 +674,41 @@ class MainWindow(QMainWindow):
 
         r3.addWidget(self.chk_amp, 0)
         r3.addWidget(self.chk_compile, 0)
+        r3.addWidget(self.btn_load_cfg, 0)
         r3.addWidget(self.btn_reset, 0)
         r3.addWidget(self.btn_start, 1)
         r3.addWidget(self.btn_stop, 0)
         r3.addWidget(self.btn_reset_default, 0)
-        r3.addWidget(self.status_label, 0)
         layout.addLayout(r3)
 
-        # ── Console ──
-        ct = QHBoxLayout()
-        ct.setSpacing(2)
+        # ── Training Dashboard (над Консолью) ──
+        dash_frame = QFrame()
+        dash_frame.setStyleSheet("QFrame { background-color: #252525; border: 1px solid #3a3a3a; border-radius: 6px; }")
+        dash_layout = QVBoxLayout(dash_frame)
+        dash_layout.setContentsMargins(2, 2, 2, 2)
+        dash_layout.setSpacing(1)
+        self.dashboard = TrainingDashboardWidget()
+        dash_layout.addWidget(self.dashboard)
+        dash_frame.setMaximumHeight(330)
+        layout.addWidget(dash_frame)
+
+        # ── Консоль (с кнопками в заголовке) ──
+        console_header = QHBoxLayout()
+        console_header.setContentsMargins(0, 0, 0, 0)
+        console_header.setSpacing(3)
+        console_header.addLayout(_make_header(
+            "Консоль",
+            "Лог тренировки: сообщения о процессе, ошибках, "
+            "прогрессе и событиях."))
         self.btn_copy_log = QPushButton("Копировать")
         self.btn_copy_log.setStyleSheet(STYLE_BTN_SM)
         self.btn_copy_log.clicked.connect(self._copy_log)
         self.btn_clear_log = QPushButton("Очистить")
         self.btn_clear_log.setStyleSheet(STYLE_BTN_SM)
         self.btn_clear_log.clicked.connect(self._clear_log)
-        ct.addStretch(1)
-        ct.addWidget(self.btn_copy_log)
-        ct.addWidget(self.btn_clear_log)
-        layout.addLayout(ct)
+        console_header.addWidget(self.btn_copy_log)
+        console_header.addWidget(self.btn_clear_log)
+        layout.addLayout(console_header)
 
         self.console = QPlainTextEdit()
         self.console.setReadOnly(True)
@@ -1009,6 +1131,8 @@ class MainWindow(QMainWindow):
             "name": name,
             "use_amp": self.chk_amp.isChecked(),
             "torch_compile": self.chk_compile.isChecked(),
+            "obs_mode": getattr(self, "_obs_mode", "flat"),
+            "minimap_radius": int(getattr(self, "_minimap_radius", 14)),
         }
         for k, r in self.param_rows.items():
             cfg[k] = r.value()
@@ -1098,7 +1222,7 @@ class MainWindow(QMainWindow):
                 self._msg_timer.start(250)
 
             self._set_training_ui(True)
-            self.progress_bar.setValue(0)
+            self.dashboard.progress_bar.setValue(0)
         except Exception as e:
             self.log("error", f"[UI] Failed to start worker: {type(e).__name__}: {e}")
             try:
@@ -1153,14 +1277,13 @@ class MainWindow(QMainWindow):
 
     def _update_progress(self, m: P.ProgressMsg):
         total = max(m.total, 1)
-        self.progress_bar.setValue(min(1000, int(1000 * m.done / total)))
-        self.progress_bar.setFormat(f"{m.done:,}/{m.total:,}")
+        self.dashboard.progress_bar.setValue(min(1000, int(1000 * m.done / total)))
         fps = m.fps if m.fps > 0 else 0.0
         eta = ""
         if fps > 0 and m.done < m.total:
             eta = f" ~{int((m.total - m.done) / fps // 60)}min"
-        self.status_label.setText(
-            f"FPS {fps:.0f} best {m.best_reward:.1f} ep{m.episodes}{eta}")
+        self.dashboard.progress_bar.setFormat(
+            f"{m.done:,}/{m.total:,}  FPS {fps:.0f} best {m.best_reward:.1f} ep{m.episodes}{eta}")
 
         # Update Learning Metrics labels
         self._episodes_label.setText(f"Episodes: {m.episodes}")
@@ -1251,7 +1374,7 @@ class MainWindow(QMainWindow):
         
         self._cleanup_training()
         self._set_training_ui(False)
-        self.status_label.setText("Остановлено")
+        self.dashboard.progress_bar.setFormat("Остановлено")
 
     def _on_train_finished(self, code: int = 0):
         self.log("info", f"[UI] Training finished (code={code})")
@@ -1260,8 +1383,8 @@ class MainWindow(QMainWindow):
         self._set_training_ui(False)
         
         if code == 0:
-            self.progress_bar.setValue(1000)
-            self.status_label.setText("Завершено")
+            self.dashboard.progress_bar.setValue(1000)
+            self.dashboard.progress_bar.setFormat("Завершено")
             self.log("info", "[UI] ✅ Training completed successfully")
         else:
             self.log("error", f"[UI] ❌ Training failed with exit code {code}")
@@ -1294,8 +1417,8 @@ class MainWindow(QMainWindow):
         self.btn_start.setEnabled(not running)
         self.btn_stop.setEnabled(running)
         if not running:
-            self.progress_bar.setFormat("Ожидание…")
-            self.progress_bar.setValue(0)
+            self.dashboard.progress_bar.setFormat("Ожидание…")
+            self.dashboard.progress_bar.setValue(0)
 
     # ────────────────────── params ──────────────────────
 
@@ -1326,35 +1449,43 @@ class MainWindow(QMainWindow):
 
     # ────────────────────── curriculum ──────────────────────
 
-    CURRICULUM_PROFILES: Dict[str, List[List[int]]] = {
+    CURRICULUM_PROFILES: Dict[str, List[int]] = {
         "Отключён": [],
-        "Стандартный": [[0, 1], [5_000_000, 2], [15_000_000, 3]],
-        "Быстрый": [[0, 2], [3_000_000, 3]],
-        "Медленный": [[0, 1], [10_000_000, 2], [30_000_000, 3]],
+        "Стандартный": [0, 5_000_000, 15_000_000],
+        "Быстрый": [0, 3_000_000],
+        "Медленный": [0, 10_000_000, 30_000_000],
     }
 
     def _table_to_data(self) -> List[List[int]]:
+        """Read table → [[threshold, stage], ...]. Stage = row_index + 1."""
         data: List[List[int]] = []
         for r in range(self.curriculum_table.rowCount()):
             try:
                 th = int(self.curriculum_table.item(r, 0).text())
-                st = int(self.curriculum_table.item(r, 1).text())
-                data.append([th, st])
+                data.append([th, r + 1])
             except (AttributeError, ValueError):
                 continue
         return data
 
     def _load_data_to_table(self, data: List[List[int]]):
+        """Write [[threshold, stage], ...] → table (1 col, sorted by threshold)."""
         self.curriculum_table.setRowCount(0)
-        for th, st in sorted(data, key=lambda x: x[0]):
+        for th, _st in sorted(data, key=lambda x: x[0]):
             row = self.curriculum_table.rowCount()
             self.curriculum_table.insertRow(row)
             self.curriculum_table.setItem(row, 0, QTableWidgetItem(str(th)))
-            self.curriculum_table.setItem(row, 1, QTableWidgetItem(str(st)))
 
-    def _cur_add_row(self, threshold: int = 0, stage: int = 1):
+    def _load_thresholds_to_table(self, thresholds: List[int]):
+        """Write plain threshold list → table (1 col)."""
+        self.curriculum_table.setRowCount(0)
+        for th in sorted(thresholds):
+            row = self.curriculum_table.rowCount()
+            self.curriculum_table.insertRow(row)
+            self.curriculum_table.setItem(row, 0, QTableWidgetItem(str(th)))
+
+    def _cur_add_row(self, threshold: int = 0):
         data = self._table_to_data()
-        data.append([threshold, stage])
+        data.append([threshold, len(data) + 1])
         self._load_data_to_table(data)
 
     def _cur_del_row(self):
@@ -1367,8 +1498,8 @@ class MainWindow(QMainWindow):
 
     def _cur_profile_changed(self, _idx: int):
         name = self.cur_profile_combo.currentText()
-        profile = self.CURRICULUM_PROFILES.get(name, [])
-        self._load_data_to_table(profile)
+        thresholds = self.CURRICULUM_PROFILES.get(name, [])
+        self._load_thresholds_to_table(thresholds)
 
     def _get_curriculum_data(self) -> List[List[int]]:
         return self._table_to_data()
@@ -1398,8 +1529,13 @@ class MainWindow(QMainWindow):
                 data = json.load(f)
             if not isinstance(data, list):
                 return
-            parsed = [[int(a), int(b)] for a, b in data
-                       if isinstance(a, (int, float)) and isinstance(b, (int, float))]
+            # Support both formats: [threshold, ...] and [[threshold, stage], ...]
+            if data and isinstance(data[0], list):
+                parsed = [[int(a), int(b)] for a, b in data
+                          if isinstance(a, (int, float)) and isinstance(b, (int, float))]
+            else:
+                parsed = [[int(a), i + 1] for i, a in enumerate(data)
+                          if isinstance(a, (int, float))]
             self._load_data_to_table(parsed)
             self.log("info", f"Загружено: {path}")
         except Exception as e:
@@ -1428,6 +1564,8 @@ class MainWindow(QMainWindow):
             "torch_compile": self.chk_compile.isChecked(),
             "model_name": self.name_edit.text().strip(),
             "config_version": CONFIG_VERSION,
+            "obs_mode": self._obs_mode,
+            "minimap_radius": self._minimap_radius,
         }
         m = self._selected_model()
         if m:
@@ -1440,10 +1578,64 @@ class MainWindow(QMainWindow):
         state["curriculum_schedule"] = self._get_curriculum_data()
         return state
 
+    def _load_config_from_file(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Загрузить конфиг", "",
+            "JSON (*.json);;Все файлы (*)")
+        if not path:
+            return
+        try:
+            with open(path, encoding="utf-8") as f:
+                cfg = json.load(f)
+            if not isinstance(cfg, dict):
+                QMessageBox.warning(self, "Ошибка", "Файл не содержит JSON объект")
+                return
+        except (json.JSONDecodeError, OSError) as e:
+            QMessageBox.warning(self, "Ошибка", f"Не удалось прочитать файл:\n{e}")
+            return
+
+        if "name" in cfg:
+            self.name_edit.setText(str(cfg["name"]))
+
+        if "use_amp" in cfg:
+            self.chk_amp.setChecked(bool(cfg["use_amp"]))
+        if "torch_compile" in cfg:
+            self.chk_compile.setChecked(bool(cfg["torch_compile"]))
+
+        for k, r in self.param_rows.items():
+            v = cfg.get(k)
+            if isinstance(v, (list, tuple)):
+                v = v[0] if v else None
+            if v is not None:
+                r.set_value(float(v))
+
+        for k, r in self.reward_rows.items():
+            v = cfg.get(k)
+            if isinstance(v, (list, tuple)):
+                v = v[0] if v else None
+            if v is not None:
+                r.set_value(float(v))
+
+        if "curriculum_stage" in cfg:
+            self.stage_combo.setCurrentIndex(int(cfg["curriculum_stage"]))
+
+        self._obs_mode = cfg.get("obs_mode", "flat")
+        self._minimap_radius = int(cfg.get("minimap_radius", 14))
+
+        if "curriculum_schedule" in cfg and isinstance(cfg["curriculum_schedule"], list):
+            parsed = [[int(a), int(b)] for a, b in cfg["curriculum_schedule"]
+                      if isinstance(a, (int, float)) and isinstance(b, (int, float))]
+            self._load_data_to_table(parsed)
+
+        self.log("info", f"[UI] Config loaded from: {path}")
+        self.log("info", f"[UI] Parameters: {json.dumps({k: v for k, v in cfg.items() if k != 'curriculum_schedule'}, ensure_ascii=False)}")
+
     def _restore_state(self):
         cfg = self.config
         self.chk_amp.setChecked(bool(cfg.get("use_amp", False)))
         self.chk_compile.setChecked(bool(cfg.get("torch_compile", False)))
+        self._obs_mode = cfg.get("obs_mode", "flat")
+        self._minimap_radius = int(cfg.get("minimap_radius", 14))
         saved_name = cfg.get("model_name", "")
         if saved_name:
             self.name_edit.setText(saved_name)
