@@ -95,14 +95,20 @@ ColonyEnvCpp::ColonyEnvCpp(const std::vector<BaseData>& base_data,
                            const std::vector<BaseEvent>& events_data,
                            int64_t seed, int map_size, int curriculum_stage,
                            const std::vector<std::string>& unlock_ids,
-                           const RewardConfig& cfg)
+                           const RewardConfig& cfg,
+                           const std::string& difficulty,
+                           bool no_city_game_over,
+                           int64_t no_people_days)
     : base_data_(std::make_shared<const std::vector<BaseData>>(base_data)),
       events_data_(std::make_shared<const std::vector<BaseEvent>>(events_data)),
       cfg_(cfg),
       map_size_(map_size),
       curriculum_stage_(curriculum_stage),
       has_unlocked_(false),
-      game_(*base_data_, *events_data_, seed, map_size) {
+      difficulty_(difficulty),
+      no_city_game_over_(no_city_game_over),
+      no_people_days_(no_people_days),
+      game_(*base_data_, *events_data_, seed, map_size, difficulty, no_city_game_over, no_people_days) {
     // пул построек
     std::unordered_set<std::string> subset;
     for (const char* id : BUILD_SUBSET) subset.insert(id);
@@ -212,7 +218,7 @@ void ColonyEnvCpp::set_step_log(const std::string& path) {
     }
 
 void ColonyEnvCpp::reset(int64_t seed) {
-    game_ = Game(base_data_, events_data_, seed, map_size_);
+    game_ = Game(base_data_, events_data_, seed, map_size_, difficulty_, no_city_game_over_, no_people_days_);
     game_.reset_milestones();
     net_worth_valid_ = false;
     cached_net_worth_ = 0.0;
@@ -551,6 +557,25 @@ std::vector<float> ColonyEnvCpp::obs(const Game& g) const {
     }
     for (float v : idle_by_type) push(v);
 
+    // Tax deadline features: days to next annual tax + money/tax ratio
+    // Annual tax is due on March 1 of each year (year > START_YEAR)
+    int days_to_tax = 0;
+    if (g.year > START_YEAR) {
+        if (g.month < 3) {
+            days_to_tax = (12 - g.month + 1) * 30;
+        } else if (g.month == 3) {
+            days_to_tax = 31 - g.day;
+        } else {
+            days_to_tax = (12 - g.month) * 30 + 31 - g.day;
+        }
+    } else {
+        days_to_tax = (12 - g.month + 3) * 30 + 31 - g.day;
+    }
+    push((float)(days_to_tax / 365.0));
+    int64_t tax_amount = g.annual_tax_amount();
+    double ratio = (tax_amount > 0) ? (double)g.money / (double)tax_amount : 0.0;
+    push((float)std::min(2.0, ratio));
+
     return obs_buf_;
 }
 
@@ -707,26 +732,6 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
     // Capture ALL base uids before action for correct built_price calculation
     std::unordered_set<int64_t> uids_before;
     for (const Base& b : g.bases) uids_before.insert(b.uid);
-
-    // налог платится автоматически
-    if (!g.tax_postponed_ && g.annual_tax_due()) {
-        if (g.money >= g.annual_tax_amount()) {
-            g.pay_annual_tax();
-        } else {
-            rew -= 5.0; c_tax -= 5.0;
-        }
-    } else if (!g.tax_postponed_ && g.main_tax_due()) {
-        if (g.money >= g.main_tax_amount()) {
-            g.pay_main_tax();
-        } else {
-            rew -= 5.0; c_tax -= 5.0;
-        }
-    }
-    if (!g.annual_tax_due() && !g.main_tax_due() && !g.tax_postponed_) {
-        rew += cfg_.tax_daily_bonus; c_tax_bonus += cfg_.tax_daily_bonus;
-    }
-    // Money changed (taxes paid/auto-paid) -> net-worth cache is now stale.
-    invalidate_net_worth();
 
     // Grace period: count days since the player postponed the tax.
     if (g.tax_postponed_ && (g.annual_tax_due() || g.main_tax_due()))
@@ -906,7 +911,7 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
         if (g.credit <= 0 || !g.bank_give(give).first) { rew += cfg_.error_penalty; c_error += cfg_.error_penalty; }
     } else if (action == manager_base_ + 10) {
         action_name = "MGR:manual_tax";
-        rew -= cfg_.manual_tax_penalty; c_manual_tax -= cfg_.manual_tax_penalty;
+        rew += cfg_.manual_tax_penalty;  c_manual_tax += cfg_.manual_tax_penalty;
     }
 
     g.refresh_occupied();
@@ -924,6 +929,24 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
         if (r.ok) results.push_back(r.res);
     }
     if (results.empty() && (action == A_DAY || action == A_WEEK || action == manager_base_ + 10)) { rew += cfg_.error_penalty; c_error += cfg_.error_penalty; }
+
+    // налог платится автоматически после advance_day
+    if (!g.tax_postponed_ && g.annual_tax_due()) {
+        if (g.money >= g.annual_tax_amount()) {
+            g.pay_annual_tax();
+        } else {
+            rew -= cfg_.tax_fail_penalty; c_tax -= cfg_.tax_fail_penalty;
+        }
+    } else if (!g.tax_postponed_ && g.main_tax_due()) {
+        if (g.money >= g.main_tax_amount()) {
+            g.pay_main_tax();
+        } else {
+            rew -= cfg_.tax_fail_penalty; c_tax -= cfg_.tax_fail_penalty;
+        }
+    }
+    if (!g.annual_tax_due() && !g.main_tax_due() && !g.tax_postponed_) {
+        rew += cfg_.tax_daily_bonus; c_tax_bonus += cfg_.tax_daily_bonus;
+    }
     invalidate_net_worth();
 
     int64_t built_price = 0;
@@ -937,11 +960,11 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
         rew += nw; c_survival += nw;
     }
     for (const DayResult& r : results) {
-        rew -= 0.02 * (double)g.credit / 1000.0;  // Increased from 0.005 to discourage debt
-        rew += (double)r.born * 1.0 + (double)r.people_arrived * 1.0;
-        rew -= (double)r.died * 20.0;
-        rew -= (double)r.base_lost * 30.0;
-        if (r.home_overflow) rew -= 2.0;
+        rew -= cfg_.debt_coeff * (double)g.credit / 1000.0;
+        rew += (double)r.born * cfg_.born_bonus + (double)r.people_arrived * cfg_.born_bonus;
+        rew -= (double)r.died * cfg_.death_penalty;
+        rew -= (double)r.base_lost * cfg_.base_lost_penalty;
+        if (r.home_overflow) rew -= cfg_.home_overflow_penalty;
         episode_metrics_.births += r.born;
         episode_metrics_.deaths += r.died;
     }
@@ -969,7 +992,7 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
                 const std::string& build_id = build_ids_[build_idx];
                 if (build_id == "House" || build_id == "SmallHouse" || 
                     build_id == "BigHouse" || build_id == "SuperHouse") {
-                    double housing_bonus = 3.0 * std::log1p((double)(people - housing) / 10.0);
+                    double housing_bonus = cfg_.housing_need_bonus * std::log1p((double)(people - housing) / 10.0);
                     rew += housing_bonus;
                     c_build += housing_bonus;
                 }
@@ -982,7 +1005,7 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
                 const int build_idx = action - A_BUILD0;
                 const std::string& build_id = build_ids_[build_idx];
                 if (build_id == "Farm" || build_id == "Garden" || build_id == "BigFarm") {
-                    double food_bonus = 2.0 * std::log1p((double)(days_since_last_build_) / 5.0);
+                    double food_bonus = cfg_.food_need_bonus * std::log1p((double)(days_since_last_build_) / 5.0);
                     rew += food_bonus;
                     c_build += food_bonus;
                 }
@@ -995,7 +1018,7 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
                 const int build_idx = action - A_BUILD0;
                 const std::string& build_id = build_ids_[build_idx];
                 if (build_id == "WaterChannel") {
-                    double water_bonus = 2.0 * std::log1p((double)(days_since_last_build_) / 5.0);
+                    double water_bonus = cfg_.water_need_bonus * std::log1p((double)(days_since_last_build_) / 5.0);
                     rew += water_bonus;
                     c_build += water_bonus;
                 }
@@ -1077,8 +1100,12 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
     // Auto-maintenance mutated money/live_time -> invalidate cached net worth.
     invalidate_net_worth();
 
+    // Count days actually passed (WEEK returns 7 DayResults, DAY returns 1)
+    int days_passed = (int)results.size();
+    if (days_passed < 1) days_passed = 1;
+
     // Increment idle days counter
-    days_since_last_build_ += 1;
+    days_since_last_build_ += days_passed;
 
     // терминалы
     steps_ += 1;
@@ -1086,8 +1113,9 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
     last_reward_ = rew;
     bool terminated = false, truncated = false;
     auto ov = g.game_over();
+
     if (g.annual_tax_due() || g.main_tax_due())
-        tax_due_days_ += 1;
+        tax_due_days_ += days_passed;
     else
         tax_due_days_ = 0;
     if (ov.has_value()) {
@@ -1105,8 +1133,20 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
 
     rew += cfg_.survival_bonus; c_survival += cfg_.survival_bonus;
     if (days_since_last_build_ >= cfg_.idle_build_threshold_days) {
-        // Penalize ALL actions when idle too long — prevents action-spam exploits
-        rew += cfg_.idle_build_penalty; c_idle += cfg_.idle_build_penalty;
+        // Only penalize when there are affordable, unlocked buildings available
+        bool any_build_available = false;
+        for (int i = 0; i < n_build_; ++i) {
+            const BaseData* d = build_data_[i];
+            if (has_unlocked_ && !unlocked_.count(d->id)) continue;
+            if (d->id == ROAD_ID && road_count() >= MAX_ROADS) continue;
+            if (g.money < d->price) continue;
+            any_build_available = true;
+            break;
+        }
+        if (any_build_available) {
+            rew += cfg_.idle_build_penalty;
+            c_idle += cfg_.idle_build_penalty;
+        }
         days_since_last_build_ = 0;
     }
 
@@ -1191,7 +1231,8 @@ ColonyVecEnvCpp::ColonyVecEnvCpp(
     int curriculum_stage,
     const std::vector<std::string>& unlock_ids,
     const RewardConfig& cfg,
-    int n_threads)
+    int n_threads,
+    const std::string& difficulty)
     : base_data_(std::make_shared<std::vector<BaseData>>(base_data)),
       events_data_(std::make_shared<std::vector<BaseEvent>>(events_data)),
       cfg_(cfg),
@@ -1210,7 +1251,7 @@ ColonyVecEnvCpp::ColonyVecEnvCpp(
     envs_.reserve(n_envs);
     for (int i = 0; i < n_envs; ++i) {
         envs_.emplace_back(*base_data_, *events_data_, base_seed + i * 10000,
-                           map_size, curriculum_stage, unlock_ids, cfg);
+                           map_size, curriculum_stage, unlock_ids, cfg, difficulty);
     }
     obs_size_ = envs_[0].obs_size();
     n_actions_ = envs_[0].n_actions();

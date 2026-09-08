@@ -353,11 +353,14 @@ PYBIND11_MODULE(colony_cpp, m) {
     py::class_<ColonyEnvCpp>(m, "ColonyEnvCpp")
         .def(py::init<const std::vector<BaseData>&, const std::vector<BaseEvent>&,
                       int64_t, int, int, const std::vector<std::string>&,
-                      const RewardConfig&>(),
+                      const RewardConfig&, const std::string&, bool, int64_t>(),
              py::arg("base_data"), py::arg("events_data"), py::arg("seed"),
              py::arg("map_size") = 280, py::arg("curriculum_stage") = 0,
              py::arg("unlock_ids") = std::vector<std::string>(),
-             py::arg("reward") = RewardConfig())
+             py::arg("reward") = RewardConfig(),
+             py::arg("difficulty") = "normal",
+             py::arg("no_city_game_over") = false,
+             py::arg("no_people_days") = 365)
         .def("reset", &ColonyEnvCpp::reset)
         .def("set_step_log", &ColonyEnvCpp::set_step_log, py::arg("path"))
         .def("dump_obs", &ColonyEnvCpp::dump_obs)
@@ -451,14 +454,15 @@ PYBIND11_MODULE(colony_cpp, m) {
     py::class_<ColonyVecEnvCpp>(m, "ColonyVecEnvCpp")
         .def(py::init<const std::vector<BaseData>&, const std::vector<BaseEvent>&,
                       int, int64_t, int, int, const std::vector<std::string>&,
-                      const RewardConfig&, int>(),
+                      const RewardConfig&, int, const std::string&>(),
              py::arg("base_data"), py::arg("events_data"),
              py::arg("n_envs"), py::arg("base_seed"),
              py::arg("map_size") = 280,
              py::arg("curriculum_stage") = 0,
              py::arg("unlock_ids") = std::vector<std::string>(),
              py::arg("reward") = RewardConfig(),
-             py::arg("n_threads") = 0)
+             py::arg("n_threads") = 0,
+             py::arg("difficulty") = "normal")
         .def("reset_batch", [](ColonyVecEnvCpp& v, const std::vector<int64_t>& seeds) {
             v.reset_batch(seeds);
         }, py::arg("seeds"), py::call_guard<py::gil_scoped_release>())

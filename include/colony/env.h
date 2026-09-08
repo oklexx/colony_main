@@ -24,10 +24,10 @@ struct RewardConfig {
     double chain_bonus = 1.0;       // chain multiplier: reward = chain_bonus * log2(1 + ypv/1000) per consumer
     double chain_daily = 0.5;       // daily bonus for active chain
     double novelty = 15.0;          // bonus for first working of new building type
-    double daily_income = 0.3;      // income multiplier: reward = daily_income * log1p(daily_total / 100)
+    double daily_income = 1.0;      // income multiplier: reward = daily_income * log1p(daily_total / 100)
     double sale_bonus = 0.2;        // sale multiplier: reward = sale_bonus * log1p(sale_value / 100)
     double tax_daily_bonus = 0.3;   // daily bonus when no tax due
-    double survival_bonus = 0.1;    // + per survival step
+    double survival_bonus = 0.0;    // disabled: agent must earn through actions, not passive survival
     double game_over_penalty = 10.0; // - on game over
     double diversity_bonus = 8.0;    // bonus for each unique building type built (after first)
 
@@ -39,10 +39,10 @@ struct RewardConfig {
     double build_cost_penalty = 0.0001; // fraction of build cost (subtraction)
     double idle_build_penalty = -10.0;    // penalty for long period without builds
     int idle_build_threshold_days = 3;    // threshold in days without builds
-    double survival_coeff = 0.001;        // net_worth change multiplier (was hardcoded 0.005, too aggressive)
+    double survival_coeff = 0.01;        // net_worth change multiplier
 
     // ─── milestone-бонусы ───
-    double milestone_base_bonus = 10.0;    // за каждые 5 баз (increased from 3.0)
+    double milestone_base_bonus = 30.0;    // за каждые 5 баз
     double milestone_people_bonus = 2.0;  // за каждые 50 человек
     double milestone_day_bonus = 2.0;     // за каждые 100 дней
     double milestone_year_bonus = 5.0;    // за первый год (365 дней)
@@ -51,13 +51,24 @@ struct RewardConfig {
     double proximity_bonus = 0.5;  // бонус за строительство рядом с ресурсом
 
     // ─── клиппинг сырой награды ───
-    double clip_reward_min = -10.0;
-    double clip_reward_max = 10.0;
+    double clip_reward_min = -50.0;
+    double clip_reward_max = 50.0;
 
     // ─── флаги ───
     bool disable_net_worth = false;
     bool disable_daily_income = false;
     bool disable_provider_bonus = false;
+
+    // ─── hardcoded weights (from env.cpp, now configurable) ───
+    double tax_fail_penalty = 5.0;
+    double death_penalty = 20.0;
+    double base_lost_penalty = 30.0;
+    double born_bonus = 1.0;
+    double debt_coeff = 0.02;
+    double home_overflow_penalty = 2.0;
+    double housing_need_bonus = 3.0;
+    double food_need_bonus = 2.0;
+    double water_need_bonus = 2.0;
 };
 
 // RL-среда: точная копия ColonyEnv из rl/env.py (награды и наблюдения).
@@ -67,7 +78,10 @@ public:
                  const std::vector<BaseEvent>& events_data, int64_t seed,
                  int map_size = 280, int curriculum_stage = 0,
                  const std::vector<std::string>& unlock_ids = {},
-                 const RewardConfig& cfg = RewardConfig());
+                 const RewardConfig& cfg = RewardConfig(),
+                 const std::string& difficulty = "normal",
+                 bool no_city_game_over = false,
+                 int64_t no_people_days = GAME_OVER_NO_PEOPLE_DAYS);
 
     void set_curriculum_stage(int stage);
     void set_rewards(const RewardConfig& cfg) {
@@ -132,7 +146,7 @@ public:
     int n_build() const { return n_build_; }
     int n_bases() const { return (int)game_.bases.size(); }
     int n_actions() const { return A_BUILD0 + n_build_ + N_MANAGERS; }
-    int obs_size() const { return 27 + n_build_ + 7 + 9 + 4 * n_build_ + 9 + n_build_; }
+    int obs_size() const { return 27 + n_build_ + 7 + 9 + 4 * n_build_ + 9 + n_build_ + 2; }
     // Action mask: 1.0 = available, 0.0 = blocked. Size = n_actions().
     std::vector<float> action_mask();
     const std::vector<std::string>& build_ids() const { return build_ids_; }
@@ -187,6 +201,9 @@ private:
     RewardConfig cfg_;
     int map_size_;
     int curriculum_stage_;
+    std::string difficulty_;
+    bool no_city_game_over_;
+    int64_t no_people_days_;
     std::unordered_set<std::string> unlocked_;
     bool has_unlocked_;
 
@@ -253,7 +270,8 @@ public:
                     int curriculum_stage = 0,
                     const std::vector<std::string>& unlock_ids = {},
                     const RewardConfig& cfg = RewardConfig(),
-                    int n_threads = 0);
+                    int n_threads = 0,
+                    const std::string& difficulty = "normal");
 
     void reset_batch(const std::vector<int64_t>& seeds);
     void step_async_batch(const std::vector<int>& actions);

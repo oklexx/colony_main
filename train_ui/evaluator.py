@@ -133,6 +133,7 @@ def run_eval(
     mode: str = "auto",
     minimap_radius: int = 14,
     log_path: str | Path | None = None,
+    difficulty: str = "normal",
 ) -> Dict[str, float]:
     """Run the trained policy in the colony env and return mean stats.
 
@@ -148,7 +149,7 @@ def run_eval(
     if not model_path.exists():
         raise FileNotFoundError(f"model not found: {model_path}")
 
-    dev = torch.device(device if torch.cuda.is_available() and device == "cuda" else "cpu")
+    dev = torch.device(device if torch.cuda.is_available() and device.startswith("cuda") else "cpu")
     policy = _load_policy(model_path, dev, mode=mode, minimap_radius=minimap_radius)
     from rl.actor_critic_cnn import ActorCriticCNN
     from rl.actor_critic_hybrid import ActorCriticHybrid
@@ -165,12 +166,13 @@ def run_eval(
                 import json as _json
                 meta = _json.loads(meta_path.read_text(encoding="utf-8"))
                 reward_cfg = meta.get("config", {}).get("reward")
+                difficulty = meta.get("difficulty", difficulty)
                 if reward_cfg:
                     break
             except (Exception,):
                 pass
 
-    env = CppColonyEnv(map_size=map_size, reward_config=reward_cfg)
+    env = CppColonyEnv(map_size=map_size, reward_config=reward_cfg, difficulty=difficulty)
     if normalization_path is not None and not use_minimap and not is_hybrid:
         norm_path = Path(normalization_path)
         if not norm_path.exists():
@@ -182,9 +184,11 @@ def run_eval(
         env.normalizer.set_update(False)
     if normalization_path is not None and is_hybrid:
         norm_path = Path(normalization_path)
-        if norm_path.exists():
-            env.normalizer.load(str(norm_path))
-            env.normalizer.set_update(False)
+        if not norm_path.exists():
+            raise FileNotFoundError(
+                f"normalization file not found: {norm_path} (hybrid mode requires it)")
+        env.normalizer.load(str(norm_path))
+        env.normalizer.set_update(False)
     mm_wrap = MinimapSingleEnvWrapper(env) if (use_minimap or is_hybrid) else None
 
     action_names = env._action_names if hasattr(env, "_action_names") else [str(i) for i in range(env.action_space.n)]
@@ -206,7 +210,7 @@ def run_eval(
 
     try:
         for ep in range(episodes):
-            obs, _info = env.reset(seed=seed + ep)
+            obs, _info = env.reset(seed=seed + 500_000 + ep)
             total_reward = 0.0
             if log_file:
                 log_file.write(f"\nEPISODE {ep} | seed={seed + ep}\n")

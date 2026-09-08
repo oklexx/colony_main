@@ -213,6 +213,7 @@ def _run_train_inner(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_
 
     cfg = Config(
         map_size=int(cfg_dict.get("map_size", _dc.map_size)),
+        difficulty=str(cfg_dict.get("difficulty", _dc.difficulty)),
         n_envs=int(cfg_dict.get("n_envs", _dc.n_envs)),
         seed=int(cfg_dict.get("seed", _dc.seed)),
         learning_rate=float(cfg_dict.get("learning_rate", _dc.learning_rate)),
@@ -225,11 +226,13 @@ def _run_train_inner(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_
         ent_coef=float(cfg_dict.get("ent_coef", _dc.ent_coef)),
         vf_coef=float(cfg_dict.get("vf_coef", _dc.vf_coef)),
         max_grad_norm=float(cfg_dict.get("max_grad_norm", _dc.max_grad_norm)),
+        target_kl=float(cfg_dict.get("target_kl", _dc.target_kl)),
         net_arch=[int(x) for x in net_arch],
         total_timesteps=int(cfg_dict.get("total_timesteps", _dc.total_timesteps)),
         save_freq=int(cfg_dict.get("save_freq", _dc.save_freq)),
         eval_freq=int(cfg_dict.get("eval_freq", _dc.eval_freq)),
         eval_episodes=int(cfg_dict.get("eval_episodes", _dc.eval_episodes)),
+        eval_min_days=float(cfg_dict.get("eval_min_days", _dc.eval_min_days)),
         device=str(cfg_dict.get("device", _dc.device)),
         use_amp=bool(cfg_dict.get("use_amp", _dc.use_amp)),
         amp_dtype=str(cfg_dict.get("amp_dtype", _dc.amp_dtype)),

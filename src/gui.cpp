@@ -841,7 +841,19 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    ColonyEnvCpp env(bd, ed, seed, map_size, curriculum_stage, {}, rc);
+    bool gui_no_city_game_over = false;
+    int64_t gui_no_people_days = 365;
+    {
+        std::ifstream gf("configs/gui_config.json");
+        if (gf.is_open()) {
+            nlohmann::json gj;
+            gf >> gj;
+            if (gj.contains("no_city_game_over")) gui_no_city_game_over = gj["no_city_game_over"].get<bool>();
+            if (gj.contains("no_people_days")) gui_no_people_days = gj["no_people_days"].get<int64_t>();
+        }
+    }
+
+    ColonyEnvCpp env(bd, ed, seed, map_size, curriculum_stage, {}, rc, "normal", gui_no_city_game_over, gui_no_people_days);
     env.reset(seed);
     const Game& g = env.game();
     prev_season = g.season;

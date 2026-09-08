@@ -27,8 +27,8 @@ class CppVecEnv(VecEnv):
         map_size: int = 280,
         curriculum_stage: int = 0,
         unlock_ids: Optional[str] = None,
-        disable_net_worth: bool = False,
-        disable_daily_income: bool = False,
+        disable_net_worth: Optional[bool] = None,
+        disable_daily_income: Optional[bool] = None,
         reward_config: Optional[Dict[str, float]] = None,
         norm_obs: bool = True,
         norm_reward: bool = True,
@@ -37,8 +37,10 @@ class CppVecEnv(VecEnv):
         seed: int = 0,
         n_threads: int = 0,
         render_mode: Optional[str] = None,
+        difficulty: str = "normal",
     ):
         self._seed = seed
+        self.difficulty = difficulty
         self.render_mode = render_mode
 
         # Load static data
@@ -63,7 +65,10 @@ class CppVecEnv(VecEnv):
                         "proximity_bonus",
                         "clip_reward_min", "clip_reward_max",
                         "disable_net_worth", "disable_daily_income",
-                        "disable_provider_bonus")
+                        "disable_provider_bonus",
+                        "tax_fail_penalty", "death_penalty", "base_lost_penalty",
+                        "born_bonus", "debt_coeff", "home_overflow_penalty",
+                        "housing_need_bonus", "food_need_bonus", "water_need_bonus")
         _INT_KEYS = {"idle_build_threshold_days"}
         if reward_config:
             for k in _REWARD_KEYS:
@@ -72,8 +77,11 @@ class CppVecEnv(VecEnv):
                     if k in _INT_KEYS:
                         v = int(v)
                     setattr(rc, k, v)
-        rc.disable_net_worth = disable_net_worth
-        rc.disable_daily_income = disable_daily_income
+        # Apply CLI flags only if explicitly provided (None = use JSON/reward_config value)
+        if disable_net_worth is not None:
+            rc.disable_net_worth = disable_net_worth
+        if disable_daily_income is not None:
+            rc.disable_daily_income = disable_daily_income
 
         if os.environ.get("COLONY_DEBUG", ""):
             print("=" * 60, flush=True)
@@ -100,6 +108,7 @@ class CppVecEnv(VecEnv):
             unlock_ids=unlock_list,
             reward=rc,
             n_threads=n_threads,
+            difficulty=difficulty,
         )
 
         obs_size = self.cpp_vec.obs_size()
@@ -118,17 +127,32 @@ class CppVecEnv(VecEnv):
         # Init SB3 VecEnv (sets self.num_envs, self.observation_space, self.action_space)
         super().__init__(n_envs, observation_space, action_space)
 
-        # Action names for display purposes
-        self._action_names: List[str] = [
-            "DAY", "WEEK",
-            "BUILD_HOUSE", "BUILD_FARM", "BUILD_ROAD", "BUILD_GARDEN",
-            "BUILD_SMALL_HOUSE", "BUILD_SAWMILL", "BUILD_WATER_CHANNEL",
-            "BUILD_COALMINE", "BUILD_IRONMINE", "BUILD_REFINERY",
-            "BUILD_GOLDMINE", "BUILD_POWER_STATION", "BUILD_HYDRO_STATION",
-            "IMPROVE_LAND", "REPAIR", "REPAIR_ALL", "DEMOLISH",
-            "PRESERVE", "UNPRESERVE", "SELL_SURPLUS", "BUY_FOOD",
-            "TAKE_LOAN", "REPAY_LOAN", "PAY_TAX",
+        # Action names for display purposes.
+        # Layout (constants.h): [DAY, WEEK] + BUILD_SUBSET (31 buildings, in
+        # BUILD_SUBSET order) + 11 manager actions.
+        # Building names: prefer C++ build order, fall back to BUILD_SUBSET order
+        try:
+            build_ids = list(self.cpp_vec.build_ids())
+        except AttributeError:
+            build_ids = [
+                "WaterChannel", "Farm", "Garden", "House", "SmallHouse",
+                "Sawmill", "Coalmine", "Ironmine", "Refinery", "Goldmine",
+                "PowerStation", "HydroStation", "Road", "Fish", "CoalCut",
+                "HuntingLand", "CowFarm", "Mushroom", "BigHouse", "BigFarm",
+                "Apiary", "Torchlight", "Hothouse", "SuperHouse", "BigSawmill",
+                "WaterMill", "BigRefinary", "Puerperal", "BigIronmine",
+                "AirStation", "SmallAtomStation", "AtomStation",
+            ]
+            if len(build_ids) > self.cpp_vec.n_build():
+                build_ids = build_ids[: self.cpp_vec.n_build()]
+        self._build_names: List[str] = [
+            "BUILD_" + b.upper().replace(" ", "_") for b in build_ids
         ]
+        self._manager_names: List[str] = [
+            "IMPROVE_LAND", "REPAIR", "REPAIR_ALL", "DEMOLISH", "PRESERVE",
+            "UNPRESERVE", "SELL_SURPLUS", "BUY_FOOD", "TAKE_LOAN", "REPAY_LOAN", "PAY_TAX",
+        ]
+        self._action_names: List[str] = ["DAY", "WEEK"] + self._build_names + self._manager_names
         # Trim to actual n_actions if C++ has fewer
         if n_actions < len(self._action_names):
             self._action_names = self._action_names[:n_actions]
@@ -247,6 +271,7 @@ def make_cpp_vec_env(
     seed: int = 0,
     n_threads: int = 0,
     render_mode: Optional[str] = None,
+    difficulty: str = "normal",
 ) -> CppVecEnv:
     """Factory for creating CppVecEnv."""
     return CppVecEnv(
@@ -260,4 +285,5 @@ def make_cpp_vec_env(
         seed=seed,
         n_threads=n_threads,
         render_mode=render_mode,
+        difficulty=difficulty,
     )

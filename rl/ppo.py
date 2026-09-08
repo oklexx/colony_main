@@ -33,6 +33,7 @@ class PPO:
         lr_warmup_steps: int = 0,
         lr_decay: bool = True,
         total_training_steps: int = 0,
+        target_kl: float = 0.0,
     ):
         self.model = model
         self.buffer = buffer
@@ -83,6 +84,7 @@ class PPO:
         self.lr_decay = lr_decay
         self._current_step = 0
         self._total_training_steps = total_training_steps
+        self.target_kl = target_kl
 
         if lr_warmup_steps > 0 or lr_decay:
             from torch.optim.lr_scheduler import LambdaLR
@@ -125,8 +127,10 @@ class PPO:
                 else:
                     logits, values = self.model(flat)
             if action_masks is not None:
-                # Mask unavailable actions: set logits to -inf
-                logits = logits.masked_fill(action_masks == 0, float("-inf"))
+                # Mask unavailable actions: set logits to a large negative value
+                # (-1e9 instead of -inf to avoid NaN when all actions are blocked)
+                # Cast to float32 first: -1e9 overflows float16 under autocast
+                logits = logits.float().masked_fill(action_masks == 0, -1e9)
             dist = torch.distributions.Categorical(logits=logits)
             action = dist.sample()
             log_prob = dist.log_prob(action)
@@ -156,8 +160,11 @@ class PPO:
         total_entropy = 0.0
         total_kl = 0.0
         n_batches = 0
+        early_stop = False
 
         for _ in range(self.n_epochs):
+            if early_stop:
+                break
             for batch in self.buffer.get_batches(self.batch_size):
                 obs = batch["obs"]
                 actions = batch["actions"]
@@ -211,6 +218,11 @@ class PPO:
                 total_kl += approx_kl.item()
                 n_batches += 1
 
+                # Early stopping: skip remaining epochs if KL diverges too much
+                if self.target_kl > 0 and approx_kl.item() > 1.5 * self.target_kl:
+                    early_stop = True
+                    break
+
         self.buffer.reset()
 
         return {
@@ -236,9 +248,9 @@ class PPO:
             logits, values = self.model(flat, obs)
         else:
             logits, values = self.model(obs)
-        # Apply action masks: set blocked actions to -inf
+        # Apply action masks: set blocked actions to a large negative value
         if action_masks is not None:
-            logits = logits.masked_fill(action_masks == 0, float("-inf"))
+            logits = logits.float().masked_fill(action_masks == 0, -1e9)
         dist = D.Categorical(logits=logits)
         new_log_probs = dist.log_prob(actions)
         entropy = dist.entropy().mean()

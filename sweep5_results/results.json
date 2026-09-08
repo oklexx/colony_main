@@ -1,0 +1,58 @@
+[
+  {
+    "name": "R5_0_s2_base",
+    "seed": 739531394,
+    "elapsed_s": 1067.9,
+    "best_reward": 4056.2710759211695,
+    "episodes": 10000,
+    "last_eval_raw": "[Eval @ 10,223,616] days=365.0 people=31.5 bases=39.0 return=-1119.3 score=117.21 CI95 days=365.0-731.0 bases=35.0-40.0 thresholds=FAIL",
+    "eval_bases": 39.0,
+    "eval_score": 117.21,
+    "eval_return": -1119.3,
+    "eval_people": 31.5,
+    "eval_days": 365.0,
+    "desc": "stage=2, inc15"
+  },
+  {
+    "name": "R5_1_s2_born10",
+    "seed": 364255814,
+    "elapsed_s": 1378.8,
+    "best_reward": 3811.8673745366896,
+    "episodes": 10000,
+    "last_eval_raw": "[Eval @ 10,223,616] days=731.0 people=50.0 bases=33.0 return=-2445.7 score=99.39 CI95 days=365.0-1461.0 bases=30.0-35.5 thresholds=FAIL",
+    "eval_bases": 33.0,
+    "eval_score": 99.39,
+    "eval_return": -2445.7,
+    "eval_people": 50.0,
+    "eval_days": 731.0,
+    "desc": "stage=2, born=10"
+  },
+  {
+    "name": "R5_2_s2_pop",
+    "seed": 593531104,
+    "elapsed_s": 1193.4,
+    "best_reward": 5758.161395632343,
+    "episodes": 10000,
+    "last_eval_raw": "[Eval @ 10,223,616] days=548.0 people=42.0 bases=30.0 return=-1500.3 score=90.30 CI95 days=365.0-731.0 bases=29.0-33.5 thresholds=FAIL",
+    "eval_bases": 30.0,
+    "eval_score": 90.3,
+    "eval_return": -1500.3,
+    "eval_people": 42.0,
+    "eval_days": 548.0,
+    "desc": "stage=2, born=15, survival=5"
+  },
+  {
+    "name": "R5_3_s1_pop",
+    "seed": 117292517,
+    "elapsed_s": 1094.4,
+    "best_reward": 9537.118930073264,
+    "episodes": 10000,
+    "last_eval_raw": "[Eval @ 10,223,616] days=365.0 people=31.0 bases=36.0 return=-1005.2 score=108.21 CI95 days=365.0-557.1 bases=31.0-42.7 thresholds=FAIL",
+    "eval_bases": 36.0,
+    "eval_score": 108.21,
+    "eval_return": -1005.2,
+    "eval_people": 31.0,
+    "eval_days": 365.0,
+    "desc": "stage=1, born=15, inc20, death=0"
+  }
+]

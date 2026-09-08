@@ -103,6 +103,7 @@ class CppColonyEnv(gym.Env):
         disable_net_worth: bool = False,
         disable_daily_income: bool = False,
         reward_config: Optional[Dict[str, float]] = None,
+        difficulty: str = "normal",
     ):
         super().__init__()
         
@@ -124,7 +125,10 @@ class CppColonyEnv(gym.Env):
                         "proximity_bonus",
                         "clip_reward_min", "clip_reward_max",
                         "disable_net_worth", "disable_daily_income",
-                        "disable_provider_bonus")
+                        "disable_provider_bonus",
+                        "tax_fail_penalty", "death_penalty", "base_lost_penalty",
+                        "born_bonus", "debt_coeff", "home_overflow_penalty",
+                        "housing_need_bonus", "food_need_bonus", "water_need_bonus")
         if reward_config:
             for k in _REWARD_KEYS:
                 if k in reward_config:
@@ -156,6 +160,7 @@ class CppColonyEnv(gym.Env):
             curriculum_stage=curriculum_stage,
             unlock_ids=unlock_list,
             reward=rc,
+            difficulty=difficulty,
         )
         
         # Spaces (use clipped observation space as SB3 expects)
@@ -238,6 +243,7 @@ def make_env(
     disable_daily_income: bool = False,
     reward_config: Optional[Dict[str, float]] = None,
     seed: int = 0,
+    difficulty: str = "normal",
 ) -> gym.Env:
     """Factory function for SubprocVecEnv compatibility."""
     def _init():
@@ -248,6 +254,7 @@ def make_env(
             disable_net_worth=disable_net_worth,
             disable_daily_income=disable_daily_income,
             reward_config=reward_config,
+            difficulty=difficulty,
         )
         env.reset(seed=seed)
         return env

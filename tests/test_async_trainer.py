@@ -123,7 +123,7 @@ def test_eval_and_best_model_saving(tmp_path):
         eval_freq=3,
         eval_episodes=2,
         eval_min_bases=2,
-        eval_min_return=0.0,
+        eval_min_days=0.0,
         eval_use_median=True,
         model_dir=str(tmp_path),
     )
@@ -188,7 +188,7 @@ def test_min_bases_threshold(tmp_path):
         eval_freq=3,
         eval_episodes=1,
         eval_min_bases=5,
-        eval_min_return=0.0,
+        eval_min_days=0.0,
         eval_use_median=True,
         model_dir=str(tmp_path),
     )
@@ -221,14 +221,14 @@ def test_composite_score_calculation():
     """Verify composite score formula: score = days*w1 + bases*w2 + people*w3 + max(0,return)*w4."""
     import numpy as np
 
-    w1, w2, w3, w4 = 0.4, 3.0, 0.2, 0.0001
+    w1, w2, w3, w4 = 0.10, 1.0, 0.10, 0.0001
     days, bases, people, ret = 100.0, 10.0, 20.0, 5000.0
     expected = days * w1 + bases * w2 + people * w3 + max(0.0, ret) * w4
-    assert abs(expected - (40.0 + 30.0 + 4.0 + 0.5)) < 1e-9
+    assert abs(expected - (10.0 + 10.0 + 2.0 + 0.5)) < 1e-9
 
     ret_neg = -100.0
     expected_neg = days * w1 + bases * w2 + people * w3 + 0.0
-    assert abs(expected_neg - 74.0) < 1e-9
+    assert abs(expected_neg - 22.0) < 1e-9
 
 
 def test_curriculum_stage_in_meta(tmp_path):
@@ -245,6 +245,8 @@ def test_curriculum_stage_in_meta(tmp_path):
         n_steps=128,
         batch_size=64,
         total_timesteps=200,
+        eval_min_bases=1,
+        eval_min_days=0.0,
         curriculum_schedule=[(0, 1), (100, 2)],
     )
 
@@ -291,7 +293,7 @@ def test_multi_seed_eval(tmp_path):
         eval_freq=3,
         eval_episodes=2,
         eval_min_bases=1,
-        eval_min_return=-1000.0,
+        eval_min_days=0.0,
         eval_use_median=True,
         eval_seeds=[1, 2, 3],
         model_dir=str(tmp_path),

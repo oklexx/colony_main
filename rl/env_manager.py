@@ -41,6 +41,7 @@ class EnvManager:
             reward_config=reward_dict,
             seed=cfg.seed,
             n_threads=cfg.cpp_threads,
+            difficulty=getattr(cfg, "difficulty", "normal"),
         )
 
         self.n_envs = cfg.n_envs
@@ -135,6 +136,9 @@ class EnvManager:
             amp_dtype=cfg.amp_dtype,
             torch_compile=cfg.torch_compile,
             device=device,
+            lr_decay=True,
+            total_training_steps=max(1, cfg.total_timesteps // max(1, cfg.n_steps * cfg.n_envs)) * max(1, (cfg.n_steps * cfg.n_envs) // cfg.batch_size) * cfg.n_epochs,
+            target_kl=cfg.target_kl,
         )
 
         self._obs_gpu = None
@@ -346,8 +350,7 @@ class EnvManager:
                 (500000, 2),
                 (1000000, 3)
             ]
-            # Convert to step->stage format
-            schedule = [(t, s+1) for t, s in enumerate(default_schedule)]
+            schedule = list(default_schedule)
         
         current_stage = self.cfg.curriculum_stage
         

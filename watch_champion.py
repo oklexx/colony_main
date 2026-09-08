@@ -445,31 +445,39 @@ def main():
                 obs = state.get("obs", [])
                 minimap_data = state.get("minimap", [])
                 if obs:
-                    obs_arr = np.array(obs, dtype=np.float32)
-                    obs_arr = env.normalizer.normalize(obs_arr)
-                    with torch.no_grad():
-                        if is_hybrid and minimap_data:
-                            mm_arr = np.array(minimap_data, dtype=np.float32).reshape(1, 8, 29, 29)
-                            mm_t = torch.from_numpy(mm_arr).to(dev)
-                            obs_t = torch.from_numpy(obs_arr).to(dev).reshape(1, -1)
-                            logits, _ = policy(obs_t, mm_t)
-                        elif is_cnn and minimap_data:
-                            mm_arr = np.array(minimap_data, dtype=np.float32).reshape(1, 8, 29, 29)
-                            mm_t = torch.from_numpy(mm_arr).to(dev)
-                            logits, _ = policy(mm_t)
-                        else:
-                            obs_t = torch.from_numpy(obs_arr).to(dev).reshape(1, -1)
-                            logits, _ = policy(obs_t)
-                        # Apply action masking from GUI env (match training behavior)
-                        mask = state.get("action_mask", None)
-                        if mask is not None:
-                            mask_t = torch.tensor(mask, dtype=torch.float32, device=dev).reshape(1, -1)
-                            logits = logits.masked_fill(mask_t == 0, float("-inf"))
-                        action = int(logits.argmax(dim=-1).item())
-                    action_name = action_names[action] if action < len(action_names) else str(action)
-                    if step_count <= 10 or step_count % 50 == 0:
-                        print(f"  -> sending action {action} ({action_name})")
-                    write_action(actions_file, action)
+                    try:
+                        obs_arr = np.array(obs, dtype=np.float32)
+                        obs_arr = env.normalizer.normalize(obs_arr)
+                        with torch.no_grad():
+                            if is_hybrid and minimap_data:
+                                mm_arr = np.array(minimap_data, dtype=np.float32).reshape(1, 8, 29, 29)
+                                mm_t = torch.from_numpy(mm_arr).to(dev)
+                                obs_t = torch.from_numpy(obs_arr).to(dev).reshape(1, -1)
+                                logits, _ = policy(obs_t, mm_t)
+                            elif is_cnn and minimap_data:
+                                mm_arr = np.array(minimap_data, dtype=np.float32).reshape(1, 8, 29, 29)
+                                mm_t = torch.from_numpy(mm_arr).to(dev)
+                                logits, _ = policy(mm_t)
+                            else:
+                                obs_t = torch.from_numpy(obs_arr).to(dev).reshape(1, -1)
+                                logits, _ = policy(obs_t)
+                            # Apply action masking from GUI env (match training behavior)
+                            mask = state.get("action_mask", None)
+                            if mask is not None:
+                                mask_t = torch.tensor(mask, dtype=torch.float32, device=dev).reshape(1, -1)
+                                logits = logits.masked_fill(mask_t == 0, float("-inf"))
+                            action = int(logits.argmax(dim=-1).item())
+                        action_name = action_names[action] if action < len(action_names) else str(action)
+                        if step_count <= 10 or step_count % 50 == 0:
+                            print(f"  -> sending action {action} ({action_name})")
+                        write_action(actions_file, action)
+                    except Exception as e:
+                        print(f"  [WARN] obs/inference error on step {step_count}: {e}")
+                        if step_count <= 10 or step_count % 50 == 0:
+                            print(f"  -> fallback action 0 (DAY)")
+                        write_action(actions_file, 0)
+                else:
+                    write_action(actions_file, 0)
 
                 if args.speed > 0:
                     time.sleep(1.0 / args.speed)

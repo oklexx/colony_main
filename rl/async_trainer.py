@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 import threading
 import queue
+from collections import deque
 import numpy as np
 import torch
 from pathlib import Path
@@ -85,8 +86,10 @@ class AsyncTrainer:
         self._curriculum_stage = getattr(cfg, "curriculum_stage", 0)
 
         # Loop detection
-        loop_config = getattr(cfg, "loop_detection", {})
-        self.loop_detector = LoopDetector(threshold_config=loop_config) if loop_config else None
+        self.loop_detector = (
+            LoopDetector({"consecutive_threshold": cfg.loop_consecutive_threshold})
+            if getattr(cfg, "loop_detection_enabled", False) else None
+        )
 
         # Action names from C++ env
         self._action_names: List[str] = getattr(env_manager, 'action_names', [])
@@ -104,14 +107,7 @@ class AsyncTrainer:
             ]
 
         # Action history for loop detection (safe tracking)
-        self._action_history: List[tuple[int, str]] = []
-        self._action_history_maxlen = 50000
-
-        # Boost tracking
-        self._initial_ent_coef = cfg.ent_coef
-        self._boost_history: Dict[int, float] = {}
-        self._last_boost_rollout = -100
-        self._boost_cooldown = 10
+        self._action_history: deque = deque(maxlen=1000)
 
     def _request_stop(self):
         self._stop = True
@@ -141,9 +137,18 @@ class AsyncTrainer:
 
             new_obs, infos = self.em.collect_step(obs)
 
-            terminated = self.em.buffer.terminated[
-                (self.em.buffer.pos - 1) * n_envs : self.em.buffer.pos * n_envs
-            ].cpu().numpy()
+            # Track actions for loop detection (read only current step slice)
+            try:
+                pos = self.em.buffer.pos - 1
+                step_actions = (self.em.buffer.actions[pos * n_envs:(pos + 1) * n_envs]
+                                .cpu().numpy())
+                for env_idx in range(n_envs):
+                    action_idx = int(step_actions[env_idx])
+                    action_name = (action_names[action_idx]
+                                   if action_idx < len(action_names) else f"ACTION_{action_idx}")
+                    self._action_history.append((env_idx, action_name))
+            except Exception:
+                pass
 
             # Track per-episode returns
             for info in infos:
@@ -159,32 +164,12 @@ class AsyncTrainer:
                         if r > self.best_reward:
                             self.best_reward = r
 
-            # Track actions for loop detection
-            try:
-                pos = self.em.buffer.pos - 1
-                if hasattr(self.em.buffer, 'actions') and self.em.buffer.actions is not None:
-                    actions_tensor = self.em.buffer.actions
-                    if hasattr(actions_tensor, 'dim') and actions_tensor.dim() > 0:
-                        actions_np = actions_tensor.cpu().numpy()
-                        if actions_np.ndim == 2:
-                            step_actions = actions_np[pos, :]
-                        elif actions_np.ndim == 1:
-                            step_actions = actions_np
-                        else:
-                            step_actions = np.array([])
-                        for env_idx in range(min(n_envs, len(step_actions))):
-                            try:
-                                action_idx = int(step_actions[env_idx])
-                                action_name = action_names[action_idx] if action_idx < len(action_names) else f"ACTION_{action_idx}"
-                                self._action_history.append((env_idx, action_name))
-                            except (IndexError, ValueError):
-                                pass
-            except Exception:
-                pass
-            if len(self._action_history) > self._action_history_maxlen:
-                self._action_history = self._action_history[-self._action_history_maxlen:]
-
             obs = new_obs
+
+        # Single terminated read after loop (not per step)
+        last_pos = self.em.buffer.pos - 1
+        terminated = (self.em.buffer.terminated[last_pos * n_envs:(last_pos + 1) * n_envs]
+                      .cpu().numpy())
 
         with torch.no_grad():
             if getattr(self.em, "obs_mode", "flat") == "hybrid":
@@ -203,7 +188,8 @@ class AsyncTrainer:
     def _calculate_action_distribution(self) -> List[int]:
         """Calculate action frequency counts from action history."""
         action_counts = [0] * len(self._action_names)
-        for _, action_name in self._action_history[-1000:]:
+        recent = list(self._action_history)[-1000:]
+        for _, action_name in recent:
             try:
                 idx = self._action_names.index(action_name)
                 if 0 <= idx < len(action_counts):
@@ -211,40 +197,6 @@ class AsyncTrainer:
             except ValueError:
                 pass
         return action_counts
-
-    def _maybe_boost_entropy(self, rollout_idx: int):
-        """Auto-boost entropy if loop rate is high and entropy is low.
-
-        Safe version: caps ent_coef at 3x initial and proportionally
-        reduces vf_coef to maintain balance.
-        """
-        if self.loop_detector is None:
-            return
-        if rollout_idx - self._last_boost_rollout < self._boost_cooldown:
-            return
-
-        stats = self.loop_detector.get_stats()
-        loop_rate = stats["envs_with_loops"] / max(self.em.n_envs, 1)
-        if loop_rate > 0.3 and self.metrics.entropy < 2.5:
-            old_coef = self.em.ppo.ent_coef
-            max_ent = self._initial_ent_coef * 3.0
-            new_coef = min(old_coef * 1.3, max_ent)
-            if new_coef > old_coef:
-                self.em.ppo.ent_coef = new_coef
-                self.metrics.ent_coef = new_coef
-
-                old_vf = self.em.ppo.vf_coef
-                boost_ratio = new_coef / max(old_coef, 1e-10)
-                if boost_ratio > 1.5:
-                    new_vf = old_vf * (1.0 / boost_ratio)
-                    new_vf = max(new_vf, 0.1)
-                    self.em.ppo.vf_coef = new_vf
-                    self._log(f"[AutoBoost] vf_coef: {old_vf:.3f} -> {new_vf:.3f} "
-                              f"(compensating ent boost)")
-
-                self._last_boost_rollout = rollout_idx
-                self._log(f"[AutoBoost] ent_coef: {old_coef:.5f} -> {new_coef:.5f} "
-                          f"(loop_rate={loop_rate:.1%}, max={max_ent:.5f})")
 
     def _process_commands(self, command_queue: Optional[queue.Queue]):
         """Process queued commands from the UI."""
@@ -334,6 +286,9 @@ class AsyncTrainer:
         norm_path = save_dir / "normalization.json"
         norm_str = str(norm_path) if norm_path.exists() else None
 
+        if norm_str is None:
+            self._log("[Eval] WARNING: normalization.json не найден — eval БЕЗ нормализации obs!")
+
         seeds = getattr(self.cfg, "eval_seeds", [42]) or [42]
         all_days: list[float] = []
         all_bases: list[float] = []
@@ -352,6 +307,7 @@ class AsyncTrainer:
                     map_size=self.em.cfg.map_size,
                     mode=getattr(self.cfg, "obs_mode", "flat"),
                     minimap_radius=getattr(self.cfg, "minimap_radius", 14),
+                    difficulty=getattr(self.cfg, "difficulty", "normal"),
                 )
                 all_days.extend(result.get("episode_days", [result["days"]]))
                 all_bases.extend(result.get("episode_bases", [result["bases"]]))
@@ -373,12 +329,13 @@ class AsyncTrainer:
             people_agg = float(np.mean(all_people))
             return_agg = float(np.mean(all_returns))
 
-        w1, w2, w3, w4 = getattr(self.cfg, "eval_score_weights", (0.4, 3.0, 0.2, 0.0001))
-        score = days_agg * w1 + bases_agg * w2 + people_agg * w3 + max(0.0, return_agg) * w4
+        w1, w2, w3, w4 = getattr(self.cfg, "eval_score_weights", (0.10, 1.0, 0.10, 0.0001))
+        score = (days_agg * w1 + bases_agg * w2
+                 + people_agg * w3 + max(0.0, return_agg) * w4)
 
         min_bases = getattr(self.cfg, "eval_min_bases", 5)
-        min_return = getattr(self.cfg, "eval_min_return", 0.0)
-        thresholds_met = (bases_agg >= min_bases) and (return_agg >= min_return)
+        min_days = getattr(self.cfg, "eval_min_days", 730.0)
+        thresholds_met = (bases_agg >= min_bases) and (days_agg >= min_days)
 
         ci95 = {}
         if len(all_days) >= 4:
@@ -417,13 +374,15 @@ class AsyncTrainer:
                 "best_bases": bases_agg,
                 "best_people": people_agg,
                 "best_return": return_agg,
-                "score_weights": list(getattr(self.cfg, "eval_score_weights", (0.4, 3.0, 0.2, 0.0001))),
+                "score_weights": list(getattr(self.cfg, "eval_score_weights", (0.10, 1.0, 0.10, 0.0001))),
                 "min_bases": min_bases,
-                "min_return": min_return,
+                "min_days": min_days,
                 "total_timesteps": total_done,
                 "episodes": len(all_days),
                 "curriculum_stage_at_best": self._curriculum_stage,
                 "ci95": ci95,
+                "difficulty": getattr(self.cfg, "difficulty", "normal"),
+                "config": {"reward": self.cfg.reward.to_dict()},
             }
             meta_path = save_dir / "best_model.meta.json"
             with open(meta_path, "w") as f:
@@ -455,6 +414,8 @@ class AsyncTrainer:
                   f"schedule={self.cfg.curriculum_schedule}")
 
         obs = self.em.reset()
+        Path(self.cfg.model_dir).mkdir(parents=True, exist_ok=True)
+        self.em.env.venv.save_normalization(str(Path(self.cfg.model_dir) / "normalization.json"))
         t_start = time.perf_counter()
         total_done = 0
         rollout_idx = 0
@@ -507,9 +468,6 @@ class AsyncTrainer:
             if self._stop:
                 break
 
-            # Auto-boost entropy if needed
-            self._maybe_boost_entropy(rollout_idx)
-
             stats = self._update_ppo(rollout)
 
             total_done += steps_per_rollout
@@ -531,13 +489,11 @@ class AsyncTrainer:
             self.metrics.ent_coef = self.em.ppo.ent_coef
 
             # Calculate top actions from history
-            top_actions = {}
             action_counts = self._calculate_action_distribution()
             total_actions = sum(action_counts)
-            for i, count in enumerate(action_counts[:5]):
-                if i < len(self._action_names):
-                    pct = round(count / max(total_actions, 1) * 100, 2)
-                    top_actions[self._action_names[i]] = pct
+            order = sorted(range(len(action_counts)), key=lambda i: action_counts[i], reverse=True)[:5]
+            top_actions = {self._action_names[i]: round(action_counts[i] / max(total_actions, 1) * 100, 2)
+                           for i in order if i < len(self._action_names)}
 
             # Return statistics
             avg_return = 0.0
@@ -581,7 +537,7 @@ class AsyncTrainer:
             self.metrics.n_episodes_for_stats = n_episodes_for_stats
             self.metrics.top_actions = top_actions
             self.metrics.loop_detected = envs_with_loops > 0
-            self.metrics.loop_action_name = None
+            self.metrics.loop_action_name = loop_action_name
             self.metrics.envs_with_loops = envs_with_loops
             self.metrics.curriculum_stage = self._curriculum_stage
             self.metrics.curriculum_progress_percent = 0.0
@@ -617,6 +573,7 @@ class AsyncTrainer:
                 self.em.ppo.save(str(ckpt_path))
                 norm_path = str(ckpt_path).replace(".pt", ".norm.json")
                 self.em.env.venv.save_normalization(norm_path)
+                self.em.env.venv.save_normalization(str(save_dir / "normalization.json"))
                 self._log(f"[Save] {ckpt_path}")
 
             # Curriculum stage switching
@@ -634,7 +591,8 @@ class AsyncTrainer:
 
                 es_patience = getattr(self.cfg, "early_stopping_patience", 0)
                 if es_patience > 0:
-                    if self.best_score is not None and self.best_score > (self._es_best_score or 0):
+                    if self.best_score is not None and (self._es_best_score is None
+                                                        or self.best_score > self._es_best_score):
                         self._es_best_score = self.best_score
                         self._es_patience = 0
                     else:

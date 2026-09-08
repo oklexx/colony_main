@@ -1,0 +1,58 @@
+[
+  {
+    "name": "R7_0_survival",
+    "seed": 285299259,
+    "elapsed_s": 2080.8,
+    "best_reward": 97.070318777166,
+    "episodes": 10000,
+    "last_eval_raw": "[Eval @ 10,223,616] days=365.0 people=31.0 bases=35.0 return=-1539.9 score=105.21 CI95 days=365.0-365.0 bases=35.0-35.0 thresholds=FAIL",
+    "eval_bases": 35.0,
+    "eval_score": 105.21,
+    "eval_return": -1539.9,
+    "eval_people": 31.0,
+    "eval_days": 365.0,
+    "desc": "surv_coeff=0.1, game_over=5, death=1, debt=0.005"
+  },
+  {
+    "name": "R7_1_nw_heavy",
+    "seed": 875958299,
+    "elapsed_s": 1275.7,
+    "best_reward": 34.52203300068305,
+    "episodes": 10000,
+    "last_eval_raw": "[Eval @ 10,223,616] days=731.0 people=50.0 bases=5.0 return=-3093.8 score=15.39 CI95 days=731.0-1114.2 bases=5.0-8.1 thresholds=FAIL",
+    "eval_bases": 5.0,
+    "eval_score": 15.39,
+    "eval_return": -3093.8,
+    "eval_people": 50.0,
+    "eval_days": 731.0,
+    "desc": "surv_coeff=0.2, game_over=3, death=0, debt=0.003"
+  },
+  {
+    "name": "R7_2_nw_max",
+    "seed": 754405810,
+    "elapsed_s": 1514.7,
+    "best_reward": 27.807756229889563,
+    "episodes": 10000,
+    "last_eval_raw": "[Eval @ 10,223,616] days=731.0 people=65.5 bases=17.0 return=-2426.3 score=51.42 CI95 days=731.0-731.0 bases=14.5-17.0 thresholds=FAIL",
+    "eval_bases": 17.0,
+    "eval_score": 51.42,
+    "eval_return": -2426.3,
+    "eval_people": 65.5,
+    "eval_days": 731.0,
+    "desc": "surv_coeff=0.5, game_over=1, death=0, debt=0.001"
+  },
+  {
+    "name": "R7_3_s2_nw",
+    "seed": 377782357,
+    "elapsed_s": 1231.2,
+    "best_reward": 35.12900077083407,
+    "episodes": 10000,
+    "last_eval_raw": "[Eval @ 10,223,616] days=365.0 people=31.0 bases=7.0 return=-1744.8 score=21.21 CI95 days=365.0-365.0 bases=7.0-7.0 thresholds=FAIL",
+    "eval_bases": 7.0,
+    "eval_score": 21.21,
+    "eval_return": -1744.8,
+    "eval_people": 31.0,
+    "eval_days": 365.0,
+    "desc": "stage=2, surv_coeff=0.2, inc=15, born=10"
+  }
+]

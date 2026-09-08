@@ -1,0 +1,110 @@
+[
+  {
+    "name": "R0_baseline",
+    "seed": 642412592,
+    "elapsed_s": 96.5,
+    "returncode": 0,
+    "best_reward": 20.5895,
+    "episodes": 2943,
+    "desc": "Current best config"
+  },
+  {
+    "name": "R1_income",
+    "seed": 403537622,
+    "elapsed_s": 140.6,
+    "returncode": 0,
+    "best_reward": 17.63832219119669,
+    "episodes": 2700,
+    "desc": "High income, lower production"
+  },
+  {
+    "name": "R2_low_pen",
+    "seed": 593393658,
+    "elapsed_s": 211.8,
+    "returncode": 0,
+    "best_reward": 18.807756229889563,
+    "episodes": 2928,
+    "desc": "Reduce fear of loss"
+  },
+  {
+    "name": "R3_high_build",
+    "seed": 786137623,
+    "elapsed_s": 152.8,
+    "returncode": 0,
+    "best_reward": 32.80775622988956,
+    "episodes": 2915,
+    "desc": "Maximum build incentive"
+  },
+  {
+    "name": "R4_production",
+    "seed": 531368665,
+    "elapsed_s": 96.7,
+    "returncode": 0,
+    "best_reward": 12.807756229889565,
+    "episodes": 2942,
+    "desc": "Food/housing/water production"
+  },
+  {
+    "name": "R5_chain",
+    "seed": 680374193,
+    "elapsed_s": 127.0,
+    "returncode": 0,
+    "best_reward": 12.807756229889565,
+    "episodes": 3180,
+    "desc": "Reward diversity"
+  },
+  {
+    "name": "R6_balanced",
+    "seed": 520636051,
+    "elapsed_s": 110.9,
+    "returncode": 0,
+    "best_reward": 26.8962,
+    "episodes": 3815,
+    "desc": "Everything moderate"
+  },
+  {
+    "name": "R7_no_death",
+    "seed": 387515823,
+    "elapsed_s": 110.8,
+    "returncode": 0,
+    "best_reward": 22.807756229889563,
+    "episodes": 3669,
+    "desc": "Remove death fear"
+  },
+  {
+    "name": "R8_milestones",
+    "seed": 527027169,
+    "elapsed_s": 112.7,
+    "returncode": 0,
+    "best_reward": 12.807756229889565,
+    "episodes": 3188,
+    "desc": "Milestone chasing"
+  },
+  {
+    "name": "R9_aggressive",
+    "seed": 151548342,
+    "elapsed_s": 93.8,
+    "returncode": 0,
+    "best_reward": 496.136178836403,
+    "episodes": 3667,
+    "desc": "High everything positive"
+  },
+  {
+    "name": "R10_minimal",
+    "seed": 857296012,
+    "elapsed_s": 260.4,
+    "returncode": 0,
+    "best_reward": 22.807756229889563,
+    "episodes": 2850,
+    "desc": "Almost no penalties"
+  },
+  {
+    "name": "R11_low_debt",
+    "seed": 308104913,
+    "elapsed_s": 248.3,
+    "returncode": 0,
+    "best_reward": 19.5895,
+    "episodes": 3031,
+    "desc": "High income, low debt"
+  }
+]

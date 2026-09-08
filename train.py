@@ -33,6 +33,8 @@ def parse_args():
     p.add_argument("--envs", type=int, default=_d.n_envs, help="Number of parallel envs")
     p.add_argument("--seed", type=int, default=_d.seed)
     p.add_argument("--map-size", type=int, default=_d.map_size)
+    p.add_argument("--difficulty", type=str, default=_d.difficulty, choices=["normal", "light"],
+                   help="Env difficulty: light = 2x money, no main tax (curriculum stage 1)")
     p.add_argument("--n-steps", type=int, default=_d.n_steps, help="Rollout length per env")
     p.add_argument("--batch-size", type=int, default=_d.batch_size)
     p.add_argument("--n-epochs", type=int, default=_d.n_epochs)
@@ -43,6 +45,7 @@ def parse_args():
     p.add_argument("--ent-coef", type=float, default=_d.ent_coef)
     p.add_argument("--vf-coef", type=float, default=_d.vf_coef)
     p.add_argument("--max-grad-norm", type=float, default=_d.max_grad_norm)
+    p.add_argument("--target-kl", type=float, default=_d.target_kl)
     p.add_argument("--net-arch", type=int, nargs="+", default=_d.net_arch)
     p.add_argument("--obs-mode", type=str, default=_d.obs_mode, choices=["flat", "minimap", "hybrid"],
                    help="flat = 209-dim vector + MLP; minimap = 2D spatial tensor + CNN; hybrid = both")
@@ -68,8 +71,8 @@ def parse_args():
     p.add_argument("--model-dir", type=str, default="")
     p.add_argument("--name", type=str, default="colony_run")
     p.add_argument("--reward-config", type=str, default="", help="Path to reward JSON")
-    p.add_argument("--disable-net-worth", action="store_true")
-    p.add_argument("--disable-daily-income", action="store_true")
+    p.add_argument("--disable-net-worth", action="store_true", default=None)
+    p.add_argument("--disable-daily-income", action="store_true", default=None)
     p.add_argument("--log-actions", action="store_true",
                    help="Log every step (action, reward, building info) to log_dir/name/actions.log")
     p.add_argument("--curriculum-schedule", type=str, default=None,
@@ -86,17 +89,18 @@ def main():
     if args.torch_threads > 0:
         torch.set_num_threads(args.torch_threads)
 
-    device = torch.device(args.device if torch.cuda.is_available() and args.device == "cuda" else "cpu")
+    device = torch.device(args.device if torch.cuda.is_available() and args.device.startswith("cuda") else "cpu")
 
     if device.type == "cuda":
         print(f"[Config] CUDA: {torch.cuda.get_device_name(0)}")
         print(f"[Config] VRAM: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
         print(f"[Config] bf16: {torch.cuda.is_bf16_supported()}")
 
-    reward = RewardConfig(
-        disable_net_worth=args.disable_net_worth,
-        disable_daily_income=args.disable_daily_income,
-    )
+    reward = RewardConfig()
+    if args.disable_net_worth is not None:
+        reward.disable_net_worth = args.disable_net_worth
+    if args.disable_daily_income is not None:
+        reward.disable_daily_income = args.disable_daily_income
     if args.reward_config:
         with open(args.reward_config) as f:
             rd = json.load(f)
@@ -104,6 +108,7 @@ def main():
 
     cfg = Config(
         map_size=args.map_size,
+        difficulty=args.difficulty,
         eval_seeds=args.eval_seeds if args.eval_seeds is not None else [42],
         eval_use_median=not args.eval_use_mean,
         early_stopping_patience=args.early_stopping_patience,
@@ -119,6 +124,7 @@ def main():
         ent_coef=args.ent_coef,
         vf_coef=args.vf_coef,
         max_grad_norm=args.max_grad_norm,
+        target_kl=args.target_kl,
         net_arch=args.net_arch,
         obs_mode=args.obs_mode,
         minimap_radius=args.minimap_radius,
