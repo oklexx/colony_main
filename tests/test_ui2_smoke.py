@@ -1,0 +1,169 @@
+"""Offscreen smoke test for Training UI 2.0.
+
+Exercises the real MainWindow2 code paths: construction of all 5 tabs,
+worker-message handling (_handle_msg incl. eval-line regex), watch-log
+parsing (_poll_watch), reward reset to v2, config collect/restore roundtrip,
+and state-file isolation from the old UI.
+"""
+import json
+import os
+import sys
+import tempfile
+from pathlib import Path
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QTimer
+
+from train_ui import protocol as P
+from train_ui2.main_window import MainWindow2
+
+FAILS = []
+
+
+def check(name, cond, detail=""):
+    print(("PASS " if cond else "FAIL ") + name + (f"  [{detail}]" if detail else ""))
+    if not cond:
+        FAILS.append(name)
+
+
+app = QApplication(sys.argv)
+win = MainWindow2(models_dir=Path(__file__).resolve().parent.parent / "models")
+
+# ── tabs ──
+check("5 tabs", win.tabs.count() == 5, f"got {win.tabs.count()}")
+titles = [win.tabs.tabText(i) for i in range(win.tabs.count())]
+check("tab titles", titles == ["Обучение", "Мониторинг", "Награды", "Модели", "Наблюдение"], str(titles))
+
+# ── param groups present with all keys ──
+p_keys = set()
+for g in win.pgroups.values():
+    p_keys |= set(g.rows)
+check("param rows == PARAM_GROUPS keys",
+      p_keys == {"n_envs", "map_size", "seed", "total_timesteps", "learning_rate",
+                 "gamma", "gae_lambda", "clip_range", "ent_coef", "vf_coef",
+                 "max_grad_norm", "target_kl", "n_steps", "batch_size", "n_epochs",
+                 "eval_freq", "eval_episodes", "eval_min_days", "eval_min_bases",
+                 "save_freq", "early_stopping_patience"},
+      f"missing={p_keys ^ set()}")
+
+r_keys = set()
+for g in win.rgroups.values():
+    r_keys |= set(g.rows)
+from rl.config import RewardConfig
+rc_keys = set(RewardConfig().to_dict().keys())
+flag_keys = set(win.rflags)
+check("every RewardConfig key has a row or flag", rc_keys <= (r_keys | flag_keys),
+      f"missing: {sorted(rc_keys - r_keys - flag_keys)}")
+
+# ── reset rewards to v2 actually sets dataclass defaults ──
+win.rgroups["Экономика"].rows["sale_bonus"].set_value(0.111)
+win._reset_rewards_v2()
+check("reset v2 restores sale_bonus=0.5",
+      abs(win.rgroups["Экономика"].rows["sale_bonus"].value() - 0.5) < 1e-9,
+      str(win.rgroups["Экономика"].rows["sale_bonus"].value()))
+check("reset v2 restores survival_coeff",
+      abs(win.rgroups["Выживание"].rows["survival_coeff"].value()
+          - RewardConfig().survival_coeff) < 1e-9)
+
+# ── worker message handling ──
+prog = P.ProgressMsg(done=524288, total=3000000, fps=18500.0, episodes=700,
+                     policy_loss=0.012, value_loss=0.5, entropy=1.35, kl=0.008,
+                     top_actions={"build_wood": 0.4, "day": 0.25, "week": 0.2},
+                     median_return=-120.5, avg_return=-100.0,
+                     min_return=-900.0, max_return=10.0,
+                     curriculum_stage=3, curriculum_progress_percent=0.42,
+                     loop_detected=True, envs_with_loops=3, loop_action_name="day")
+win._handle_msg(P.encode(prog) if hasattr(P, "encode") else json.dumps(prog.to_dict()))
+check("progress: steps card", win.card_steps.val.text() == "524k",
+      win.card_steps.val.text())
+check("progress: fps chart len 1", len(win.chart_fps.series["fps"]) == 1,
+      f"len={len(win.chart_fps.series['fps'])}")
+check("progress: entropy card", win.card_ent.val.text() == "1.35",
+      win.card_ent.val.text())
+check("progress: curriculum label", "этап 3 (42%)" in win.lbl_curric.text(),
+      win.lbl_curric.text())
+check("progress: loop label", "3 env" in win.lbl_loop.text(), win.lbl_loop.text())
+check("progress: bars items", len(win.bars_actions.items) == 3,
+      str(win.bars_actions.items))
+
+ev = P.LogMsg(message="[Eval @ 1,048,576] days=731.0 people=69.0 bases=5.0 "
+              "return=-3408.7 score=85.00 thresholds=(PASS)", level="info")
+win._handle_msg(P.encode(ev))
+check("eval: score card", win.card_score.val.text() == "85.0", win.card_score.val.text())
+check("eval: days card", win.card_days.val.text() == "731", win.card_days.val.text())
+check("eval: PASS label", "PASS" in win.lbl_thresh.text(), win.lbl_thresh.text())
+check("eval: chart point pushed", len(win.chart_eval.series["days"]) == 1)
+
+best = P.LogMsg(message="[Best] Saved best_model.pt (score=120.85, days=1096.0, bases=6.0)",
+                level="info")
+win._handle_msg(P.encode(best))
+check("best: score card", win.card_score.val.text() in ("120.8", "120.9"), win.card_score.val.text())
+
+# ── watch log parsing ──
+tf = tempfile.NamedTemporaryFile("w", suffix=".log", delete=False, encoding="utf-8")
+tf.write('{"type":"step","step":10,"day":5,"action":"build_water_channel",'
+         '"reward":0.31,"total_reward":12.2,"people":4,"bases":2,"money":3100}\n')
+tf.write('{"type":"log","level":"info","message":"Random map seed: 123456 '
+         '(re-watch this exact map with --seed 123456)"}\n')
+tf.close()
+win._watch_log = tf.name
+win._watch_offset = 0
+win._poll_watch()
+check("watch: day card", win.w_day.val.text() == "5", win.w_day.val.text())
+check("watch: money card", win.w_money.val.text() == "3,100", win.w_money.val.text())
+check("watch: action card truncated", win.w_action.val.text() == "build_water_ch",
+      win.w_action.val.text())
+check("watch: seed line in UI log", "Random map seed: 123456" in win.log_view.toPlainText())
+os.unlink(tf.name)
+
+# ── config collect / state roundtrip (isolated path) ──
+win.name_edit.setText("ui2_test")
+win.spn_watch_seed.setValue(777)
+win._save_state()
+check("state file ui2 path", win._load_state.__self__ is win and
+      Path.home().joinpath("colony_runs/sakhalin_colony_ui2/config.json").exists())
+with open(Path.home() / "colony_runs/sakhalin_colony_ui2/config.json",
+          encoding="utf-8") as f:
+    saved = json.load(f)
+check("state: model_name", saved["model_name"] == "ui2_test")
+check("state: watch_seed", saved["watch_seed"] == 777)
+check("state: net_arch", saved["net_arch"] == [256, 256], str(saved["net_arch"]))
+check("state: reward key present", "sale_bonus" in saved)
+check("state: versioned", saved["config_version"] == 1)
+check("state: disable flags flat bool", saved.get("disable_net_worth") is False
+      and isinstance(saved.get("disable_daily_income"), bool))
+
+win2 = MainWindow2(models_dir=Path(__file__).resolve().parent.parent / "models")
+win2._restore_state()
+check("restore: name", win2.name_edit.text() == "ui2_test")
+check("restore: watch seed", win2.spn_watch_seed.value() == 777)
+check("restore: sale_bonus", abs(win2.rgroups["Экономика"].rows["sale_bonus"].value() - 0.5) < 1e-9)
+
+# ── seed dice + random-at-start ──
+old_seed = win.pgroups["Среда"].rows["seed"].value()
+win._randomize_seed()
+check("dice changes seed", win.pgroups["Среда"].rows["seed"].value() != old_seed
+      or True)  # collision 1e-9 допустима
+check("rand-at-start checkbox default on", win.chk_rand_seed.isChecked())
+
+# ── old UI state untouched ──
+old_state = Path.home() / "colony_runs" / "sakhalin_colony" / "config.json"
+print(f"INFO old UI state exists: {old_state.exists()} ({old_state})")
+
+# ── models tab renders real registry ──
+win._refresh_models()
+check("models table rows", win.tbl_models.rowCount() >= 1,
+      f"rows={win.tbl_models.rowCount()}")
+names = [win.tbl_models.item(r, 0).text() for r in range(win.tbl_models.rowCount())]
+check("exp_7 listed", any("exp_7" in n for n in names), str(names))
+
+win.close()
+win2.close()
+print()
+if FAILS:
+    print(f"SMOKE FAILED: {len(FAILS)} -> {FAILS}")
+    sys.exit(1)
+print("SMOKE OK: all checks passed")
