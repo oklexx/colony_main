@@ -19,6 +19,7 @@ from PySide6.QtCore import QTimer
 
 from train_ui import protocol as P
 from train_ui2.main_window import MainWindow2
+from train_ui.models import ModelRegistry
 
 FAILS = []
 
@@ -153,12 +154,25 @@ check("rand-at-start checkbox default on", win.chk_rand_seed.isChecked())
 old_state = Path.home() / "colony_runs" / "sakhalin_colony" / "config.json"
 print(f"INFO old UI state exists: {old_state.exists()} ({old_state})")
 
-# ── models tab renders real registry ──
+# ── models tab renders a real registry (self-contained fixture) ──
+reg_root = Path(tempfile.mkdtemp(prefix="ui2_models_"))
+mdir = reg_root / "run_demo"
+mdir.mkdir()
+json.dump({"steps": 1000, "episodes": 3, "created": "2026-09-08T12:00:00"},
+          (mdir / "meta.json").open("w", encoding="utf-8"))
+json.dump({"best_score": 88.5, "best_days": 800.0, "best_bases": 6.0},
+          (mdir / "best_model.meta.json").open("w", encoding="utf-8"))
+(mdir / "final_model.pt").write_bytes(b"stub")  # реестр требует .pt
+win.registry = ModelRegistry(reg_root)
 win._refresh_models()
-check("models table rows", win.tbl_models.rowCount() >= 1,
+check("models table rows", win.tbl_models.rowCount() == 1,
       f"rows={win.tbl_models.rowCount()}")
-names = [win.tbl_models.item(r, 0).text() for r in range(win.tbl_models.rowCount())]
-check("exp_7 listed", any("exp_7" in n for n in names), str(names))
+check("model name+metrics rendered",
+      win.tbl_models.item(0, 0).text() == "run_demo"
+      and win.tbl_models.item(0, 2).text() == "88.5"
+      and win.tbl_models.item(0, 4).text() == "6",
+      [win.tbl_models.item(0, c).text() for c in range(5)])
+check("watch combo populated", win.cmb_watch_model.count() == 1)
 
 win.close()
 win2.close()
