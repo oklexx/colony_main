@@ -188,3 +188,83 @@ def test_run_eval_missing_model(tmp_path):
     from train_ui.evaluator import run_eval
     with pytest.raises(FileNotFoundError):
         run_eval(tmp_path / "nope.pt", episodes=1, max_days=1)
+
+
+def _make_hybrid_checkpoint(tmp_path: Path, grid_size: int = 57) -> Path:
+    """Hybrid policy checkpoint as saved by rl/ppo.py (grid_size in extras)."""
+    from rl.actor_critic_hybrid import ActorCriticHybrid
+
+    m = ActorCriticHybrid(obs_size=246, n_channels=8, grid_size=grid_size,
+                          n_actions=45, hidden_sizes=[64], device="cpu")
+    ckpt_path = tmp_path / "hybrid_model.pt"
+    torch.save({
+        "model_state": m.state_dict(),
+        "obs_size": 246,
+        "n_actions": 45,
+        "hidden_sizes": [64],
+        "n_channels": 8,
+        "grid_size": grid_size,
+    }, str(ckpt_path))
+    return ckpt_path
+
+
+@pytest.mark.skipif(not ENV_OK, reason="env not available")
+def test_run_eval_hybrid_pushes_policy_grid_into_env(tmp_path, monkeypatch):
+    """Regression: a hybrid policy trained with minimap_radius != 14 crashed with
+    "mat1 and mat2 shapes cannot be multiplied (1x3136 and 12544x256)" because the
+    eval env kept the default radius 14 (grid 29) while the CNN expected grid 57.
+    """
+    import train_ui.evaluator as ev
+    import cpp_env as cpp_env_mod
+
+    ckpt = _make_hybrid_checkpoint(tmp_path, grid_size=57)
+
+    created = []
+    RealEnv = cpp_env_mod.CppColonyEnv
+
+    class SpyEnv(RealEnv):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, **kw)
+            created.append(self)
+
+    monkeypatch.setattr(cpp_env_mod, "CppColonyEnv", SpyEnv, raising=False)
+
+    result = ev.run_eval(ckpt, episodes=1, max_days=3, seed=1, device="cpu",
+                         map_size=100, mode="hybrid", minimap_radius=28)
+
+    assert result["episodes"] == 1.0
+    assert len(created) == 1
+    # radius derived from the policy's grid, not the default 14
+    assert int(created[0].cpp_env.minimap_radius()) == 28
+
+
+@pytest.mark.skipif(not ENV_OK, reason="env not available")
+def test_run_eval_flat_untouched_by_radius_fix(tmp_path, monkeypatch):
+    """The flat path must not touch minimap radius (no minimap wrapper there)."""
+    import train_ui.evaluator as ev
+    import cpp_env as cpp_env_mod
+
+    real_obs = int(cpp_env_mod.CppColonyEnv(map_size=100).observation_space.shape[0])
+    from rl.actor_critic import ActorCritic
+
+    m = ActorCritic(obs_size=real_obs, n_actions=45, hidden_sizes=[64],
+                    device=torch.device("cpu"))
+    ckpt = tmp_path / "flat_model.pt"
+    torch.save({"model_state": m.state_dict(), "obs_size": real_obs,
+                "n_actions": 45, "hidden_sizes": [64]}, str(ckpt))
+
+    created = []
+    RealEnv = cpp_env_mod.CppColonyEnv
+
+    class SpyEnv(RealEnv):
+        def __init__(self, *a, **kw):
+            super().__init__(*a, **kw)
+            created.append(self)
+
+    monkeypatch.setattr(cpp_env_mod, "CppColonyEnv", SpyEnv, raising=False)
+
+    result = ev.run_eval(ckpt, episodes=1, max_days=3, seed=1, device="cpu",
+                         map_size=100, mode="flat")
+
+    assert result["episodes"] == 1.0
+    assert int(created[0].cpp_env.minimap_radius()) == 14

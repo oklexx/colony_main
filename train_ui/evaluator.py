@@ -173,6 +173,13 @@ def run_eval(
                 pass
 
     env = CppColonyEnv(map_size=map_size, reward_config=reward_cfg, difficulty=difficulty)
+    # The policy was built for a specific minimap grid (ppo.py saves grid_size
+    # in the checkpoint). A default env reports radius 14 -> grid 29, so any
+    # non-default training radius must be pushed into the env here, otherwise
+    # cnn_proj gets the wrong number of features:
+    #   "mat1 and mat2 shapes cannot be multiplied (1x3136 and 12544x256)"
+    if use_minimap or is_hybrid:
+        env.cpp_env.set_minimap_radius(int(policy.grid_size) // 2)
     if normalization_path is not None and not use_minimap and not is_hybrid:
         norm_path = Path(normalization_path)
         if not norm_path.exists():

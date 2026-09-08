@@ -171,6 +171,9 @@ def main():
                         help="Map size; MUST match the value the model was "
                              "trained with (training default is 280)")
     parser.add_argument("--device", type=str, default="cpu")
+    parser.add_argument("--minimap-radius", type=int, default=None,
+                        help="Minimap radius for minimap/hybrid models. Default: "
+                             "taken from the checkpoint's grid_size")
     parser.add_argument("--log-file", type=str, default=None,
                         help="Also write output to this file (for UI capture)")
     parser.add_argument("--step-log", type=str, default=None,
@@ -284,6 +287,16 @@ def main():
             except (Exception,):
                 pass
     env = CppColonyEnv(map_size=args.map_size, reward_config=reward_cfg)
+    # Match the env's minimap grid to the policy's (see train_ui/evaluator.py).
+    # Without this, watching a hybrid/minimap model trained with
+    # minimap_radius != 14 dies with a shape mismatch on the first step.
+    if args.minimap_radius is not None:
+        env.cpp_env.set_minimap_radius(int(args.minimap_radius))
+        print(f"Minimap radius: {args.minimap_radius} (grid {2*args.minimap_radius+1})")
+    elif hasattr(policy, "grid_size"):
+        r = int(policy.grid_size) // 2
+        env.cpp_env.set_minimap_radius(r)
+        print(f"Minimap radius: {r} from model grid_size={policy.grid_size}")
     if norm_path.exists():
         env.normalizer.load(str(norm_path))
         env.normalizer.set_update(False)
