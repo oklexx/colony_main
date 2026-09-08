@@ -194,61 +194,26 @@ def _run_train_inner(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_
     from rl.env_manager import EnvManager
     from rl.async_trainer import AsyncTrainer
 
-    from rl.config import Config as _DefaultCfg, RewardConfig
-    _dc = _DefaultCfg()  # canonical defaults
-
-    reward = RewardConfig()
-    if isinstance(cfg_dict.get("reward"), dict):
-        reward = RewardConfig.from_dict(cfg_dict["reward"])
-    else:
-        reward = RewardConfig.from_dict(cfg_dict)
-
-    net_arch = cfg_dict.get("net_arch", _dc.net_arch)
-    if isinstance(net_arch, int):
-        net_arch = [net_arch, net_arch]
-
     home = Path.home()
     model_dir = str(home / "colony_runs" / "models" / run_name)
     log_dir = str(home / "colony_runs" / "logs" / run_name)
 
-    cfg = Config(
-        map_size=int(cfg_dict.get("map_size", _dc.map_size)),
-        difficulty=str(cfg_dict.get("difficulty", _dc.difficulty)),
-        n_envs=int(cfg_dict.get("n_envs", _dc.n_envs)),
-        seed=int(cfg_dict.get("seed", _dc.seed)),
-        learning_rate=float(cfg_dict.get("learning_rate", _dc.learning_rate)),
-        n_steps=int(cfg_dict.get("n_steps", _dc.n_steps)),
-        batch_size=int(cfg_dict.get("batch_size", _dc.batch_size)),
-        n_epochs=int(cfg_dict.get("n_epochs", _dc.n_epochs)),
-        gamma=float(cfg_dict.get("gamma", _dc.gamma)),
-        gae_lambda=float(cfg_dict.get("gae_lambda", _dc.gae_lambda)),
-        clip_range=float(cfg_dict.get("clip_range", _dc.clip_range)),
-        ent_coef=float(cfg_dict.get("ent_coef", _dc.ent_coef)),
-        vf_coef=float(cfg_dict.get("vf_coef", _dc.vf_coef)),
-        max_grad_norm=float(cfg_dict.get("max_grad_norm", _dc.max_grad_norm)),
-        target_kl=float(cfg_dict.get("target_kl", _dc.target_kl)),
-        net_arch=[int(x) for x in net_arch],
-        total_timesteps=int(cfg_dict.get("total_timesteps", _dc.total_timesteps)),
-        save_freq=int(cfg_dict.get("save_freq", _dc.save_freq)),
-        eval_freq=int(cfg_dict.get("eval_freq", _dc.eval_freq)),
-        eval_episodes=int(cfg_dict.get("eval_episodes", _dc.eval_episodes)),
-        eval_min_days=float(cfg_dict.get("eval_min_days", _dc.eval_min_days)),
-        device=str(cfg_dict.get("device", _dc.device)),
-        use_amp=bool(cfg_dict.get("use_amp", _dc.use_amp)),
-        amp_dtype=str(cfg_dict.get("amp_dtype", _dc.amp_dtype)),
-        torch_compile=bool(cfg_dict.get("torch_compile", _dc.torch_compile)),
-        obs_mode=str(cfg_dict.get("obs_mode", _dc.obs_mode)),
-        minimap_radius=int(cfg_dict.get("minimap_radius", _dc.minimap_radius)),
-        cpp_threads=int(cfg_dict.get("cpp_threads", _dc.cpp_threads)),
-        torch_threads=int(cfg_dict.get("torch_threads", _dc.torch_threads)),
-        async_train=bool(cfg_dict.get("async_train", _dc.async_train)),
-        queue_size=int(cfg_dict.get("queue_size", _dc.queue_size)),
-        curriculum_stage=int(cfg_dict.get("curriculum_stage", _dc.curriculum_stage)),
-        curriculum_schedule=cfg_dict.get("curriculum_schedule", _dc.curriculum_schedule),
-        log_dir=log_dir,
-        model_dir=model_dir,
-        reward=reward,
-    )
+    # Build the FULL config via Config.from_dict so that every supported field
+    # (eval_seeds, eval_score_weights, early_stopping_patience, unlock_ids,
+    # loop_detection_*, target_kl, difficulty, ...) is honoured. The previous
+    # hand-written field list silently dropped ~10 fields — anything the UI or
+    # a JSON profile set for them was ignored ("params don't stick" bug).
+    work = dict(cfg_dict)
+    work.pop("name", None)
+    work.pop("n_layers", None)
+    cfg = Config.from_dict(work)
+
+    # Reward: UI writes reward keys flat at top level; JSON profiles may nest
+    # them under "reward". RewardConfig.from_dict handles both.
+    cfg.reward = RewardConfig.from_dict(cfg_dict)
+
+    cfg.log_dir = log_dir
+    cfg.model_dir = model_dir
 
     if cfg.device == "cuda" and not torch.cuda.is_available():
         cfg.device = "cpu"

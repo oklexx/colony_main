@@ -838,6 +838,30 @@ int main(int argc, char* argv[]) {
             if (rj.contains("disable_net_worth")) rc.disable_net_worth = rj["disable_net_worth"].get<bool>();
             if (rj.contains("disable_daily_income")) rc.disable_daily_income = rj["disable_daily_income"].get<bool>();
             if (rj.contains("disable_provider_bonus")) rc.disable_provider_bonus = rj["disable_provider_bonus"].get<bool>();
+            // --- the rest of the profile (previously ignored, so the GUI watch
+            // env silently played with different rewards than training) ---
+            if (rj.contains("sale_bonus")) rc.sale_bonus = rj["sale_bonus"].get<double>();
+            if (rj.contains("tax_daily_bonus")) rc.tax_daily_bonus = rj["tax_daily_bonus"].get<double>();
+            if (rj.contains("diversity_bonus")) rc.diversity_bonus = rj["diversity_bonus"].get<double>();
+            if (rj.contains("preserve_penalty")) rc.preserve_penalty = rj["preserve_penalty"].get<double>();
+            if (rj.contains("demolish_penalty")) rc.demolish_penalty = rj["demolish_penalty"].get<double>();
+            if (rj.contains("manual_tax_penalty")) rc.manual_tax_penalty = rj["manual_tax_penalty"].get<double>();
+            if (rj.contains("survival_coeff")) rc.survival_coeff = rj["survival_coeff"].get<double>();
+            if (rj.contains("milestone_base_bonus")) rc.milestone_base_bonus = rj["milestone_base_bonus"].get<double>();
+            if (rj.contains("milestone_people_bonus")) rc.milestone_people_bonus = rj["milestone_people_bonus"].get<double>();
+            if (rj.contains("milestone_day_bonus")) rc.milestone_day_bonus = rj["milestone_day_bonus"].get<double>();
+            if (rj.contains("milestone_year_bonus")) rc.milestone_year_bonus = rj["milestone_year_bonus"].get<double>();
+            if (rj.contains("clip_reward_min")) rc.clip_reward_min = rj["clip_reward_min"].get<double>();
+            if (rj.contains("clip_reward_max")) rc.clip_reward_max = rj["clip_reward_max"].get<double>();
+            if (rj.contains("tax_fail_penalty")) rc.tax_fail_penalty = rj["tax_fail_penalty"].get<double>();
+            if (rj.contains("death_penalty")) rc.death_penalty = rj["death_penalty"].get<double>();
+            if (rj.contains("base_lost_penalty")) rc.base_lost_penalty = rj["base_lost_penalty"].get<double>();
+            if (rj.contains("born_bonus")) rc.born_bonus = rj["born_bonus"].get<double>();
+            if (rj.contains("debt_coeff")) rc.debt_coeff = rj["debt_coeff"].get<double>();
+            if (rj.contains("home_overflow_penalty")) rc.home_overflow_penalty = rj["home_overflow_penalty"].get<double>();
+            if (rj.contains("housing_need_bonus")) rc.housing_need_bonus = rj["housing_need_bonus"].get<double>();
+            if (rj.contains("food_need_bonus")) rc.food_need_bonus = rj["food_need_bonus"].get<double>();
+            if (rj.contains("water_need_bonus")) rc.water_need_bonus = rj["water_need_bonus"].get<double>();
         }
     }
 

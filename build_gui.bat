@@ -1,10 +1,46 @@
 @echo off
-setlocal
+setlocal EnableDelayedExpansion
 
-set "ROOT=C:\Users\oklex\OneDrive\Documentos\sakhalin_colony_main"
-set "VCVARS=C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\Build\vcvarsall.bat"
+rem Project root = folder of this script (was hardcoded to one user's path,
+rem which broke the build on every other checkout).
+set "ROOT=%~dp0"
+if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
 set "OBJDIR=%ROOT%\build\gui_obj"
-set "RLDIR=%ROOT%\raylib\raylib-6.0_win64_msvc16"
+
+rem --- raylib: env var COLONY_RAYLIB_DIR wins, else <ROOT>\raylib\raylib-6.0_win64_msvc16 ---
+if not defined COLONY_RAYLIB_DIR set "COLONY_RAYLIB_DIR=%ROOT%\raylib\raylib-6.0_win64_msvc16"
+set "RLDIR=%COLONY_RAYLIB_DIR%"
+if not exist "%RLDIR%\lib\raylib.lib" (
+    echo ERROR: raylib not found at "%RLDIR%"
+    echo   Download https://github.com/raysan5/raylib/releases ^(raylib-6.0_win64_msvc16.zip^)
+    echo   and unpack into "%ROOT%\raylib\", or set COLONY_RAYLIB_DIR.
+    exit /b 1
+)
+
+rem --- Visual Studio: use VCVARS env var, else probe common locations via vswhere ---
+if not defined VCVARS (
+    set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+    if exist "!VSWHERE!" (
+        for /f "usebackq tokens=*" %%i in (`"!VSWHERE!" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSPATH=%%i"
+    )
+    if defined VSPATH set "VCVARS=!VSPATH!\VC\Auxiliary\Build\vcvarsall.bat"
+)
+if not defined VCVARS (
+    for %%V in (
+        "C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Auxiliary\Build\vcvarsall.bat"
+        "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat"
+        "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvarsall.bat"
+        "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat"
+        "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Auxiliary\Build\vcvarsall.bat"
+        "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat"
+    ) do if exist %%V set "VCVARS=%%~V"
+)
+if not defined VCVARS (
+    echo ERROR: vcvarsall.bat not found. Install Visual Studio Build Tools
+    echo   or set VCVARS=C:\path\to\vcvarsall.bat
+    exit /b 1
+)
+echo Using vcvars: %VCVARS%
 
 call "%VCVARS%" x64
 if errorlevel 1 (

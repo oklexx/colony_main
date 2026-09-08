@@ -235,7 +235,9 @@ class AsyncTrainer:
     def _update_ppo(self, rollout: Dict[str, Any]) -> Dict[str, float]:
         """Run PPO update on GPU."""
         last_value = torch.tensor(rollout["last_value"], dtype=torch.float32, device=self.device)
-        last_done = torch.tensor(rollout["last_done"], dtype=torch.bool, device=self.device)
+        # rollout["last_done"] is already a torch tensor — torch.tensor() on a
+        # tensor copies via a UserWarning path; move it instead.
+        last_done = rollout["last_done"].to(self.device)
 
         t0 = time.perf_counter()
         stats = self.em.ppo.update(last_value=last_value, last_done=last_done)
@@ -277,8 +279,20 @@ class AsyncTrainer:
         save_dir = Path(self.cfg.model_dir)
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        eval_model_path = save_dir / "_eval_temp.pt"
+        # Evaluate from a DEDICATED subdir with a FRESH meta.json.
+        # run_eval reads reward/difficulty from meta files next to the model;
+        # when the temp model sat in model_dir it picked up the PREVIOUS best
+        # model's reward config, so eval returns were computed with stale
+        # rewards (and a stale difficulty).
+        eval_dir = save_dir / "_eval"
+        eval_dir.mkdir(parents=True, exist_ok=True)
+        eval_model_path = eval_dir / "_eval_temp.pt"
         self.em.ppo.save(str(eval_model_path))
+        with open(eval_dir / "meta.json", "w", encoding="utf-8") as f:
+            json.dump({
+                "difficulty": getattr(self.cfg, "difficulty", "normal"),
+                "config": {"reward": self.cfg.reward.to_dict()},
+            }, f)
 
         if self.loop_detector:
             self.loop_detector.clear()
@@ -522,6 +536,14 @@ class AsyncTrainer:
                 allowed = self.em.get_allowed_buildings_for_stage(self._curriculum_stage)
                 available_actions = " | ".join(allowed[:5])
 
+            # Real progress of the current stage for the UI widget (was
+            # hardcoded 0.0 before).
+            try:
+                prog = self.em.get_curriculum_progress(total_done)
+                curriculum_progress = float(prog.get("progress_percent", 0.0))
+            except Exception:
+                curriculum_progress = 0.0
+
             upcoming_stages = []
             if schedule:
                 for threshold, stage in schedule:
@@ -540,7 +562,7 @@ class AsyncTrainer:
             self.metrics.loop_action_name = loop_action_name
             self.metrics.envs_with_loops = envs_with_loops
             self.metrics.curriculum_stage = self._curriculum_stage
-            self.metrics.curriculum_progress_percent = 0.0
+            self.metrics.curriculum_progress_percent = curriculum_progress
             self.metrics.curriculum_available_actions = available_actions
             self.metrics.curriculum_next_at_step = curriculum_next_at_step
             self.metrics.curriculum_upcoming_stages = upcoming_stages

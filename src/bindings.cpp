@@ -203,7 +203,12 @@ PYBIND11_MODULE(colony_cpp, m) {
         .def("main_tax_due", &Game::main_tax_due)
         .def("check_advance", [](const Game& g) {
             auto r = g.check_advance();
-            return py::make_tuple(r.first, r.second.empty() ? py::none() : py::str(r.second));
+            // py::object cast: py::none and py::str have no common type, so a
+            // bare ternary does not compile on some toolchains (MSVC/GCC).
+            py::object reason = r.second.empty()
+                                    ? py::object(py::none())
+                                    : py::object(py::str(r.second));
+            return py::make_tuple(r.first, reason);
         })
         .def("annual_tax_amount", &Game::annual_tax_amount)
         .def("main_tax_amount", &Game::main_tax_amount)
@@ -334,7 +339,17 @@ PYBIND11_MODULE(colony_cpp, m) {
         .def_readwrite("clip_reward_max", &RewardConfig::clip_reward_max)
         .def_readwrite("disable_net_worth", &RewardConfig::disable_net_worth)
         .def_readwrite("disable_daily_income", &RewardConfig::disable_daily_income)
-        .def_readwrite("disable_provider_bonus", &RewardConfig::disable_provider_bonus);
+        .def_readwrite("disable_provider_bonus", &RewardConfig::disable_provider_bonus)
+        // formerly-hardcoded weights (env.cpp) — exposed so Python/UI can tune them
+        .def_readwrite("tax_fail_penalty", &RewardConfig::tax_fail_penalty)
+        .def_readwrite("death_penalty", &RewardConfig::death_penalty)
+        .def_readwrite("base_lost_penalty", &RewardConfig::base_lost_penalty)
+        .def_readwrite("born_bonus", &RewardConfig::born_bonus)
+        .def_readwrite("debt_coeff", &RewardConfig::debt_coeff)
+        .def_readwrite("home_overflow_penalty", &RewardConfig::home_overflow_penalty)
+        .def_readwrite("housing_need_bonus", &RewardConfig::housing_need_bonus)
+        .def_readwrite("food_need_bonus", &RewardConfig::food_need_bonus)
+        .def_readwrite("water_need_bonus", &RewardConfig::water_need_bonus);
 
     py::class_<ColonyEnvCpp::EpisodeMetrics>(m, "EpisodeMetrics")
         .def_readonly("total_reward", &ColonyEnvCpp::EpisodeMetrics::total_reward)

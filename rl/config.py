@@ -8,26 +8,30 @@ from typing import Any, Dict, List, Optional
 
 @dataclass
 class RewardConfig:
+    # ─── Defaults = reward_v2 profile (see configs/reward_v2.json). ───
+    # v1 values (build 1.0 / novelty 15 / diversity 8 / idle -10@3d /
+    # survival_coeff 0.01) let the agent drain cash into one-off bonuses and
+    # die at the first annual tax (day 365) — see REPORT_2026_09.md §2.
     # --- base bonuses ---
-    build_bonus: float = 1.0
+    build_bonus: float = 2.0
     chain_bonus: float = 1.0
     chain_daily: float = 0.5
-    novelty: float = 15.0
+    novelty: float = 5.0
     daily_income: float = 1.0
-    sale_bonus: float = 0.2
+    sale_bonus: float = 0.5
     tax_daily_bonus: float = 0.3
     survival_bonus: float = 0.0
     game_over_penalty: float = 10.0
-    diversity_bonus: float = 8.0
+    diversity_bonus: float = 3.0
     # --- penalties for errors / special actions ---
     error_penalty: float = -1.0
     preserve_penalty: float = 0.0
     demolish_penalty: float = -3.0
     manual_tax_penalty: float = -0.5
     build_cost_penalty: float = 0.0001
-    idle_build_penalty: float = -10.0
-    idle_build_threshold_days: int = 3
-    survival_coeff: float = 0.01
+    idle_build_penalty: float = -2.0
+    idle_build_threshold_days: int = 7
+    survival_coeff: float = 0.0
     # --- milestone bonuses ---
     milestone_base_bonus: float = 30.0
     milestone_people_bonus: float = 2.0
@@ -83,12 +87,29 @@ class RewardConfig:
             "disable_net_worth": self.disable_net_worth,
             "disable_daily_income": self.disable_daily_income,
             "disable_provider_bonus": self.disable_provider_bonus,
+            # --- formerly-hardcoded C++ weights (env.h). They MUST be exported,
+            # otherwise the C++ side silently keeps its own defaults and any
+            # UI/JSON edits of these fields are ignored. ---
+            "tax_fail_penalty": self.tax_fail_penalty,
+            "death_penalty": self.death_penalty,
+            "base_lost_penalty": self.base_lost_penalty,
+            "born_bonus": self.born_bonus,
+            "debt_coeff": self.debt_coeff,
+            "home_overflow_penalty": self.home_overflow_penalty,
+            "housing_need_bonus": self.housing_need_bonus,
+            "food_need_bonus": self.food_need_bonus,
+            "water_need_bonus": self.water_need_bonus,
         }
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "RewardConfig":
-        """Дефолты — только из датакласса (= C++ env.h = reward.json).
-        JSON переопределяет лишь явно заданные ключи."""
+        """Дефолты — только из датакласса (= reward_v2 профиль).
+        JSON переопределяет лишь явно заданные ключи.
+
+        Принимает и вложенный формат (d["reward"]) — тогда берётся он.
+        """
+        if isinstance(d.get("reward"), dict):
+            d = d["reward"]
         base = cls()
         for k, v in d.items():
             if not hasattr(base, k):

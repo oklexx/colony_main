@@ -31,7 +31,7 @@ from train_ui.return_statistics_widget import ReturnStatisticsWidget
 from train_ui.quick_actions_widget import QuickActionsWidget
 from train_ui.dashboard_widget import TrainingDashboardWidget
 
-CONFIG_VERSION = 5
+CONFIG_VERSION = 6
 
 CONFIG_PATH = (
     Path(os.environ.get("LOCALAPPDATA", str(Path.home())))
@@ -299,6 +299,10 @@ class MainWindow(QMainWindow):
         self._watch_pid: Optional[int] = None
         self._watch_timer: Optional[QTimer] = None
         self._watch_start_time: float = 0
+        # Keys from a loaded config JSON that the UI has no widget for
+        # (difficulty, eval_seeds, unlock_ids, loop_detection_*, ...).
+        # They are preserved and merged back into the config on Start.
+        self._extra_cfg: Dict[str, Any] = {}
         self._auto_scroll = True
         self._reward_history: List[float] = []
         self.dashboard: Optional[TrainingDashboardWidget] = None
@@ -640,7 +644,11 @@ class MainWindow(QMainWindow):
 
         self.watch_visual_chk = QCheckBox("Визуализация")
         self.watch_visual_chk.setStyleSheet(STYLE_SMALL)
-        self.watch_visual_chk.setChecked(False)
+        self.watch_visual_chk.setChecked(True)
+        self.watch_visual_chk.setToolTip(
+            "Открыть графическое окно игры (raylib) и управлять им моделью.\n"
+            "Требуется sakhalin_colony_gui.exe — собирается build_gui.bat.\n"
+            "Если выключено — наблюдение идёт в текстовом виде в лог.")
         cur_lay_left.addWidget(self.watch_visual_chk)
 
         self.watch_stage_info_label = QLabel(
@@ -1109,17 +1117,26 @@ class MainWindow(QMainWindow):
                 "--episodes", "1000000",
                 "--max-steps", "1000000",
                 "--speed", "5", "--device", "cpu",
-                "--log-file", watch_msg,
-                "--visual"]
+                "--map-size", str(int(self.param_rows["map_size"].value())),
+                "--log-file", watch_msg]
+        # The "Визуализация" checkbox was dead before: --visual was hardcoded.
+        if self.watch_visual_chk.isChecked():
+            args.append("--visual")
         # Pass curriculum stage from UI
         if self.watch_use_model_stage_chk.isChecked():
             if self.watch_override_stage_chk.isChecked():
                 args.extend(["--curriculum-stage", str(self.stage_combo.currentIndex())])
         else:
             args.extend(["--curriculum-stage", str(self.stage_combo.currentIndex())])
+        # Redirect stdout/stderr into the same log file the UI tails:
+        # previously they went nowhere, so failures like "GUI exe not found"
+        # were invisible — the watch just silently ended.
+        self._watch_err_fh = open(watch_msg, "a", encoding="utf-8")
         proc = _sp.Popen(
             args,
             cwd=str(Path(__file__).resolve().parent.parent),
+            stdout=self._watch_err_fh,
+            stderr=_sp.STDOUT,
             creationflags=getattr(_sp, "CREATE_NO_WINDOW", 0))
         self._watch_pid = proc.pid
         self._watch_start_time = time.time()
@@ -1196,6 +1213,13 @@ class MainWindow(QMainWindow):
         if self._watch_timer:
             self._watch_timer.stop()
             self._watch_timer = None
+        fh = getattr(self, "_watch_err_fh", None)
+        if fh:
+            try:
+                fh.close()
+            except OSError:
+                pass
+            self._watch_err_fh = None
         if getattr(self, "_watch_log", None):
             try:
                 os.unlink(self._watch_log)
@@ -1292,14 +1316,17 @@ class MainWindow(QMainWindow):
         name = self.name_edit.text().strip()
         if not name:
             name = self._next_run_name()
-        cfg: Dict[str, Any] = {
+        # Start from keys loaded from a config file that the UI does not own,
+        # then overlay the widget values (widgets win).
+        cfg: Dict[str, Any] = dict(getattr(self, "_extra_cfg", {}))
+        cfg.update({
             "name": name,
             "use_amp": self.chk_amp.isChecked(),
             "amp_dtype": self.cmb_amp_dtype.currentText(),
             "torch_compile": self.chk_compile.isChecked(),
             "obs_mode": getattr(self, "_obs_mode", "flat"),
             "minimap_radius": int(getattr(self, "_minimap_radius", 14)),
-        }
+        })
         for k, r in self.param_rows.items():
             cfg[k] = r.value()
         for k, r in self.reward_rows.items():
@@ -1771,6 +1798,22 @@ class MainWindow(QMainWindow):
         if "name" in cfg:
             self.name_edit.setText(str(cfg["name"]))
 
+        # Keep every key the UI cannot edit in a side dict so a
+        # load → Start round-trip does not silently drop it. Previously
+        # anything without a widget (difficulty, eval_seeds, eval_use_median,
+        # unlock_ids, loop_detection_*, target_kl, save_freq, ...) was thrown
+        # away here, which is why configs had to be patched by hand.
+        known = set(DEFAULT_PARAMS) | {
+            "name", "use_amp", "amp_dtype", "torch_compile", "obs_mode",
+            "minimap_radius", "net_arch", "n_layers", "curriculum_schedule",
+            "curriculum_stage", "stage", "selected_model", "config_version",
+            "model_name",
+        }
+        self._extra_cfg = {k: v for k, v in cfg.items() if k not in known}
+        if self._extra_cfg:
+            self.log("info", f"[UI] Параметры без полей в UI (сохранены как есть): "
+                             f"{sorted(self._extra_cfg)}")
+
         if "use_amp" in cfg:
             self.chk_amp.setChecked(bool(cfg["use_amp"]))
         if "amp_dtype" in cfg:
@@ -1840,20 +1883,23 @@ class MainWindow(QMainWindow):
             if isinstance(v, (list, tuple)):
                 v = v[0] if v else DEFAULT_PARAMS.get(k, 0)
             if v is not None:
-                r.set_value(float(v))
-        cfg_ver = cfg.get("config_version", 0)
+                try:
+                    r.set_value(float(v))
+                except (TypeError, ValueError):
+                    pass
         for k, r in self.reward_rows.items():
-            # Reward params always come from code defaults (REWARD_SPECS).
-            # Saved config only overrides if config_version is HIGHER
-            # (meaning user explicitly changed them in a newer UI version).
-            if cfg_ver > CONFIG_VERSION:
-                v = cfg.get(k, DEFAULT_PARAMS.get(k))
-            else:
-                v = DEFAULT_PARAMS.get(k)
+            # FIX: saved values are always restored. Previously reward params
+            # were reset to code defaults on every UI start unless the saved
+            # config had a HIGHER config_version — i.e. user edits were lost
+            # and had to be re-entered ("params don't stick" bug).
+            v = cfg.get(k, DEFAULT_PARAMS.get(k))
             if isinstance(v, (list, tuple)):
                 v = v[0] if v else DEFAULT_PARAMS.get(k, 0)
             if v is not None:
-                r.set_value(float(v))
+                try:
+                    r.set_value(float(v))
+                except (TypeError, ValueError):
+                    pass
         stage = cfg.get("stage")
         if stage is not None:
             self.stage_combo.setCurrentIndex(int(stage))

@@ -72,6 +72,45 @@ def write_action(action_file: Path, action: int) -> None:
     action_file.write_text(str(action), encoding="utf-8")
 
 
+GUI_EXE_NAMES = (
+    "sakhalin_colony_gui.exe",
+    "SkhClny3.exe",
+    "colony_gui.exe",
+)
+
+GUI_EXE_DIRS = (
+    ".",
+    "Release",
+    "build",
+    "build/Release",
+    "x64/Release",
+    "out/build/x64-Release",
+    "python",
+)
+
+
+def find_gui_exe() -> "Path | None":
+    """Locate the raylib GUI executable.
+
+    build_gui.bat emits it to the project root, but CMake/MSBuild layouts put
+    it under Release/ or build/Release — the old single hardcoded path made
+    the visual watch fail with "GUI exe not found" even when it was built.
+    An explicit COLONY_GUI_EXE env var wins over the search.
+    """
+    import os
+    env_path = os.environ.get("COLONY_GUI_EXE", "").strip()
+    if env_path:
+        p = Path(env_path).expanduser()
+        if p.exists():
+            return p
+    for d in GUI_EXE_DIRS:
+        for name in GUI_EXE_NAMES:
+            p = (PROJECT_ROOT / d / name)
+            if p.exists():
+                return p
+    return None
+
+
 def read_state(state_file: Path) -> dict | None:
     """Read state JSON from the IPC file. Returns None if not found."""
     import json
@@ -125,7 +164,9 @@ def main():
     parser.add_argument("--episodes", type=int, default=1,
                         help="Number of episodes to run")
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--map-size", type=int, default=200)
+    parser.add_argument("--map-size", type=int, default=280,
+                        help="Map size; MUST match the value the model was "
+                             "trained with (training default is 280)")
     parser.add_argument("--device", type=str, default="cpu")
     parser.add_argument("--log-file", type=str, default=None,
                         help="Also write output to this file (for UI capture)")
@@ -253,7 +294,7 @@ def main():
         env.set_step_log(args.step_log)
         print(f"Step log (per-step reward breakdown) -> {args.step_log}")
 
-    if not args.visual:
+    if not args.visual:  # headless text mode (visual mode returns below)
         for ep in range(args.episodes):
             print(f"\n{'=' * 70}")
             print(f"EPISODE {ep + 1}/{args.episodes}")
@@ -333,11 +374,18 @@ def main():
                     print(f"\n>>> {msg}")
 
     if args.visual:
-        exe_path = str(PROJECT_ROOT / "sakhalin_colony_gui.exe")
-        if not Path(exe_path).exists():
-            print(f"ERROR: GUI exe not found: {exe_path}")
-            print("Build it first: build_gui.bat")
+        exe = find_gui_exe()
+        if exe is None:
+            msg = (f"ERROR: GUI exe not found. Searched: "
+                   f"{', '.join(str(PROJECT_ROOT / d / n) for d in GUI_EXE_DIRS[:3] for n in GUI_EXE_NAMES[:2])} ... "
+                   f"Build it with build_gui.bat (requires raylib in raylib/), "
+                   f"or set COLONY_GUI_EXE=/path/to/gui.exe")
+            print(msg)
+            if emit_log:
+                emit_log(msg, level="error")
             sys.exit(1)
+        exe_path = str(exe)
+        print(f"GUI exe: {exe_path}")
 
         import tempfile
         tmp_dir = Path(tempfile.gettempdir()) / "colony_watch"
@@ -444,19 +492,27 @@ def main():
 
                 obs = state.get("obs", [])
                 minimap_data = state.get("minimap", [])
+                action_name = ""
                 if obs:
                     try:
                         obs_arr = np.array(obs, dtype=np.float32)
                         obs_arr = env.normalizer.normalize(obs_arr)
+                        # Minimap grid size inferred from data length instead
+                        # of hardcoded 29x29 (radius may differ from 14).
+                        mm_t = None
+                        if minimap_data:
+                            n_mm = len(minimap_data)
+                            n_ch = 8
+                            grid = int(round((n_mm / n_ch) ** 0.5))
+                            if grid * grid * n_ch == n_mm:
+                                mm_t = torch.from_numpy(
+                                    np.array(minimap_data, dtype=np.float32)
+                                    .reshape(1, n_ch, grid, grid)).to(dev)
                         with torch.no_grad():
-                            if is_hybrid and minimap_data:
-                                mm_arr = np.array(minimap_data, dtype=np.float32).reshape(1, 8, 29, 29)
-                                mm_t = torch.from_numpy(mm_arr).to(dev)
+                            if is_hybrid and mm_t is not None:
                                 obs_t = torch.from_numpy(obs_arr).to(dev).reshape(1, -1)
                                 logits, _ = policy(obs_t, mm_t)
-                            elif is_cnn and minimap_data:
-                                mm_arr = np.array(minimap_data, dtype=np.float32).reshape(1, 8, 29, 29)
-                                mm_t = torch.from_numpy(mm_arr).to(dev)
+                            elif is_cnn and mm_t is not None:
                                 logits, _ = policy(mm_t)
                             else:
                                 obs_t = torch.from_numpy(obs_arr).to(dev).reshape(1, -1)
@@ -478,6 +534,16 @@ def main():
                         write_action(actions_file, 0)
                 else:
                     write_action(actions_file, 0)
+
+                # Feed the UI state panel (same JSONL protocol as text mode);
+                # without this the "Текущее состояние среды" panel stays empty
+                # in visual mode.
+                if emit_step:
+                    emit_step(
+                        step=step_count, day=day, action=action_name,
+                        reward=0.0, total_reward=0.0,
+                        people=state.get("people", 0), bases=bases, money=money,
+                    )
 
                 if args.speed > 0:
                     time.sleep(1.0 / args.speed)

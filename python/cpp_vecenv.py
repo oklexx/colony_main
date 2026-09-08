@@ -70,20 +70,31 @@ class CppVecEnv(VecEnv):
                         "born_bonus", "debt_coeff", "home_overflow_penalty",
                         "housing_need_bonus", "food_need_bonus", "water_need_bonus")
         _INT_KEYS = {"idle_build_threshold_days"}
+        _missing = []
         if reward_config:
             for k in _REWARD_KEYS:
                 if k in reward_config:
                     v = reward_config[k]
                     if k in _INT_KEYS:
                         v = int(v)
+                    if not hasattr(rc, k):
+                        # Stale colony_cpp.pyd (built before these fields were
+                        # exposed in bindings.cpp). Skip with a warning instead
+                        # of crashing — C++ will keep its compiled-in default.
+                        _missing.append(k)
+                        continue
                     setattr(rc, k, v)
+        if _missing:
+            print(f"[CppVecEnv] WARNING: colony_cpp.pyd is stale — reward keys "
+                  f"{_missing} are not settable; rebuild with build_pyext.bat.",
+                  flush=True)
         # Apply CLI flags only if explicitly provided (None = use JSON/reward_config value)
         if disable_net_worth is not None:
             rc.disable_net_worth = disable_net_worth
         if disable_daily_income is not None:
             rc.disable_daily_income = disable_daily_income
 
-        if os.environ.get("COLONY_DEBUG", ""):
+        if os.environ.get("COLONY_DEBUG", "").lower() in ("1", "true", "yes", "on"):
             print("=" * 60, flush=True)
             print("[DEBUG CppVecEnv] C++ RewardConfig after setup:", flush=True)
             for k in _REWARD_KEYS:

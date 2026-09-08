@@ -102,6 +102,32 @@ PARAM_SPECS: list[ParamSpec] = [
     ParamSpec("map_size", "Размер карты", True, 100, 500, float(_cfg.map_size),
               "Размер мира в ячейках. Диапазон: 100 – 500. Больше — сложнее задача.",
               max_width=60),
+    # ─── PPO safety / evaluation knobs. Previously absent from the UI, so
+    # they could only be set by editing JSON by hand — and the worker dropped
+    # most of them anyway. ───
+    ParamSpec("target_kl", "Target KL", False, 0.0, 0.2, float(_cfg.target_kl),
+              "Порог KL для досрочной остановки эпохи PPO. 0 = выключено. "
+              "Рекомендуется 0.02: защищает от развала политики.", step=0.005, max_width=55),
+    ParamSpec("save_freq", "Частота сохранений", True, 0, 100_000_000, float(_cfg.save_freq),
+              "Сохранять checkpoint каждые N шагов. 0 = только финальная модель.",
+              step=100000, max_width=60),
+    ParamSpec("eval_freq", "Частота eval", True, 0, 100_000_000, float(_cfg.eval_freq),
+              "Запускать оценку каждые N шагов. 0 = выключено. "
+              "Только eval сохраняет best_model.pt.", step=50000, max_width=60),
+    ParamSpec("eval_episodes", "Эпизодов в eval", True, 1, 200, float(_cfg.eval_episodes),
+              "Сколько эпизодов играет оценка. Больше — стабильнее метрики, но дольше.",
+              max_width=55),
+    ParamSpec("eval_min_days", "Eval порог дней", False, 0.0, 10000.0, float(_cfg.eval_min_days),
+              "Медиана дней выживания для сохранения best_model. "
+              "730 = колония пережила 2 годовых налога. 0 = порог выключен.",
+              step=10.0, max_width=60),
+    ParamSpec("eval_min_bases", "Eval порог баз", True, 0, 500, float(_cfg.eval_min_bases),
+              "Медиана числа баз для сохранения best_model (вторая часть порога).",
+              max_width=55),
+    ParamSpec("early_stopping_patience", "Ранний стоп (eval)", True, 0, 1000,
+              float(_cfg.early_stopping_patience),
+              "Остановить обучение после N eval подряд без улучшения best_score. "
+              "0 = выключено.", max_width=60),
 ]
 
 
@@ -154,6 +180,31 @@ REWARD_SPECS: list[ParamSpec] = [
               "Нижняя граница клиппинга сырой награды.", step=10.0, max_width=60),
     ParamSpec("clip_reward_max", "Клип макс", False, 0.0, 500.0, float(_rc.clip_reward_max),
               "Верхняя граница клиппинга сырой награды.", step=10.0, max_width=60),
+    # ─── Weights that used to be hardcoded in env.cpp. They were missing from
+    # BOTH the UI and RewardConfig.to_dict(), so they always ran with C++
+    # defaults regardless of what any config said. ───
+    ParamSpec("survival_coeff", "Коэф. net worth", False, 0.0, 1.0, float(_rc.survival_coeff),
+              "Множитель изменения чистой стоимости (net worth) в награде. "
+              "0 = выключено (v2): иначе покупка зданий 'сама себя награждает'.",
+              step=0.005, max_width=60),
+    ParamSpec("tax_fail_penalty", "Штраф неуплаты налога", False, 0.0, 100.0, float(_rc.tax_fail_penalty),
+              "Штраф за каждый день просрочки годового налога.", step=1.0, max_width=60),
+    ParamSpec("death_penalty", "Штраф за смерти", False, 0.0, 100.0, float(_rc.death_penalty),
+              "Штраф за каждого погибшего жителя.", step=1.0, max_width=60),
+    ParamSpec("base_lost_penalty", "Штраф потери базы", False, 0.0, 200.0, float(_rc.base_lost_penalty),
+              "Штраф за разрушение/потерю здания (износ без ремонта).", step=5.0, max_width=60),
+    ParamSpec("born_bonus", "Бонус рождений", False, 0.0, 20.0, float(_rc.born_bonus),
+              "Бонус за каждого родившегося жителя.", step=0.5, max_width=60),
+    ParamSpec("debt_coeff", "Коэф. долга", False, 0.0, 1.0, float(_rc.debt_coeff),
+              "Доля долга (кредита), вычитаемая из награды.", step=0.005, max_width=60),
+    ParamSpec("home_overflow_penalty", "Штраф перенаселения", False, 0.0, 50.0, float(_rc.home_overflow_penalty),
+              "Штраф когда людей больше, чем мест в домах.", step=0.5, max_width=60),
+    ParamSpec("housing_need_bonus", "Бонус жилья", False, 0.0, 20.0, float(_rc.housing_need_bonus),
+              "Бонус когда потребность в жилье закрыта.", step=0.5, max_width=60),
+    ParamSpec("food_need_bonus", "Бонус еды", False, 0.0, 20.0, float(_rc.food_need_bonus),
+              "Бонус когда потребность в еде закрыта.", step=0.5, max_width=60),
+    ParamSpec("water_need_bonus", "Бонус воды", False, 0.0, 20.0, float(_rc.water_need_bonus),
+              "Бонус когда потребность в воде закрыта.", step=0.5, max_width=60),
 ]
 
 

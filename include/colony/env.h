@@ -19,17 +19,20 @@ namespace colony {
 
 // Коэффициенты наград (аналог env-переменных COLONY_* в rl/env.py).
 struct RewardConfig {
+    // Defaults = reward_v2 profile (keep in sync with rl/config.py RewardConfig
+    // and configs/reward_v2.json). Python always passes every field explicitly,
+    // so these only matter for the console/GUI binaries and tests.
     // --- base bonuses ---
-    double build_bonus = 1.0;       // base multiplier: reward = build_bonus + log2(1 + ypv/1000)
+    double build_bonus = 2.0;       // base multiplier: reward = build_bonus + log2(1 + ypv/1000)
     double chain_bonus = 1.0;       // chain multiplier: reward = chain_bonus * log2(1 + ypv/1000) per consumer
     double chain_daily = 0.5;       // daily bonus for active chain
-    double novelty = 15.0;          // bonus for first working of new building type
+    double novelty = 5.0;           // bonus for first working of new building type
     double daily_income = 1.0;      // income multiplier: reward = daily_income * log1p(daily_total / 100)
-    double sale_bonus = 0.2;        // sale multiplier: reward = sale_bonus * log1p(sale_value / 100)
+    double sale_bonus = 0.5;        // sale multiplier: reward = sale_bonus * log1p(sale_value / 100)
     double tax_daily_bonus = 0.3;   // daily bonus when no tax due
     double survival_bonus = 0.0;    // disabled: agent must earn through actions, not passive survival
     double game_over_penalty = 10.0; // - on game over
-    double diversity_bonus = 8.0;    // bonus for each unique building type built (after first)
+    double diversity_bonus = 3.0;    // bonus for each unique building type built (after first)
 
     // --- penalties for errors / special actions ---
     double error_penalty = -1.0;      // penalty for failed action (reduced to prevent action-avoidance
@@ -37,9 +40,9 @@ struct RewardConfig {
     double demolish_penalty = -3.0;   // penalty for successful DEMOLISH (new: discourage destroying buildings)
     double manual_tax_penalty = -0.5; // cost of manual tax payment
     double build_cost_penalty = 0.0001; // fraction of build cost (subtraction)
-    double idle_build_penalty = -10.0;    // penalty for long period without builds
-    int idle_build_threshold_days = 3;    // threshold in days without builds
-    double survival_coeff = 0.01;        // net_worth change multiplier
+    double idle_build_penalty = -2.0;     // penalty for long period without builds
+    int idle_build_threshold_days = 7;    // threshold in days without builds
+    double survival_coeff = 0.0;         // net_worth change multiplier (v2: disabled)
 
     // ─── milestone-бонусы ───
     double milestone_base_bonus = 30.0;    // за каждые 5 баз
