@@ -163,7 +163,10 @@ def main():
                         help="Max steps per episode")
     parser.add_argument("--episodes", type=int, default=1,
                         help="Number of episodes to run")
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--seed", type=int, default=-1,
+                        help="Map seed. Default -1 = random map on every "
+                             "launch (the seed is printed so an interesting "
+                             "map can be re-watched with --seed N)")
     parser.add_argument("--map-size", type=int, default=280,
                         help="Map size; MUST match the value the model was "
                              "trained with (training default is 280)")
@@ -194,6 +197,19 @@ def main():
         emit_step = None
         emit_log = None
         emit_done = None
+
+    # Randomize the map unless an explicit seed was requested. Same seed =
+    # same island (Earth(seed) generates terrain/lakes/deposits), and with a
+    # fixed default seed the colony always replayed ONE map — sometimes an
+    # unwinnable one (no lake reachable from the center => no water => no food).
+    if args.seed < 0:
+        import random as _rnd
+        args.seed = _rnd.randint(1, 999_999_999)
+        _msg = (f"Random map seed: {args.seed} "
+                f"(re-watch this exact map with --seed {args.seed})")
+        print(_msg)
+        if emit_log:
+            emit_log(_msg)
 
     model_dir = Path(args.model_dir).expanduser()
     model_path = model_dir / args.model_file

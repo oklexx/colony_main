@@ -120,6 +120,7 @@ class CppColonyEnv(gym.Env):
                         "manual_tax_penalty",
                         "build_cost_penalty",
                         "idle_build_penalty", "idle_build_threshold_days",
+                        "survival_coeff",
                         "milestone_base_bonus", "milestone_people_bonus",
                         "milestone_day_bonus", "milestone_year_bonus",
                         "proximity_bonus",
@@ -129,10 +130,25 @@ class CppColonyEnv(gym.Env):
                         "tax_fail_penalty", "death_penalty", "base_lost_penalty",
                         "born_bonus", "debt_coeff", "home_overflow_penalty",
                         "housing_need_bonus", "food_need_bonus", "water_need_bonus")
+        _INT_KEYS = {"idle_build_threshold_days"}
+        _missing = []
         if reward_config:
             for k in _REWARD_KEYS:
                 if k in reward_config:
-                    setattr(rc, k, reward_config[k])
+                    v = reward_config[k]
+                    if k in _INT_KEYS:
+                        v = int(v)
+                    if not hasattr(rc, k):
+                        # Stale colony_cpp.pyd (built before these fields were
+                        # exposed in bindings.cpp) - skip with a warning so
+                        # watch/eval keep working instead of crashing.
+                        _missing.append(k)
+                        continue
+                    setattr(rc, k, v)
+        if _missing:
+            print(f"[CppColonyEnv] WARNING: colony_cpp.pyd is stale - reward "
+                  f"keys {_missing} not settable; rebuild with build_pyext.bat.",
+                  flush=True)
         rc.disable_net_worth = disable_net_worth
         rc.disable_daily_income = disable_daily_income
         
