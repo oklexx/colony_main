@@ -511,7 +511,7 @@ class AsyncTrainer:
             # Calculate top actions from history
             action_counts = self._calculate_action_distribution()
             total_actions = sum(action_counts)
-            order = sorted(range(len(action_counts)), key=lambda i: action_counts[i], reverse=True)[:5]
+            order = sorted(range(len(action_counts)), key=lambda i: action_counts[i], reverse=True)[:15]
             top_actions = {self._action_names[i]: round(action_counts[i] / max(total_actions, 1) * 100, 2)
                            for i in order if i < len(self._action_names)}
 
