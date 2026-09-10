@@ -235,7 +235,7 @@ class TestResetDefaults:
         main_window._reset_params()
         assert main_window.param_rows["n_envs"].value() == 8
         assert main_window.reward_rows["chain_daily"].value() == \
-            pytest.approx(0.5, abs=1e-3)
+            pytest.approx(1.0, abs=1e-3)
 
     def test_reset_to_defaults(self, main_window):
         main_window.param_rows["n_envs"].set_value(64)

@@ -130,7 +130,6 @@ constexpr int N_MANAGERS = 11;
 constexpr int MAX_STEPS = 10000;
 constexpr int LOT_RADIUS = 45;
 inline constexpr const char* ROAD_ID = "Road";
-constexpr int MAX_ROADS = 25;
 constexpr int TAX_GRACE_DAYS = 60;
 
 inline constexpr const char* BUILD_SUBSET[32] = {

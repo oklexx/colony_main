@@ -80,9 +80,9 @@ PARAM_SPECS: list[ParamSpec] = [
     ParamSpec("learning_rate", "Коэф. обучения", False, 1e-6, 1e-1, float(_cfg.learning_rate),
               "Шаг оптимизатора AdamW. Диапазон: 0.000001 – 0.1. "
               "Пример: 0.0003 — стандарт для PPO.", max_width=70),
-    ParamSpec("gamma", "Дисконт (gamma)", False, 0.9, 0.9999, float(_cfg.gamma),
-              "Вес будущих наград. Диапазон: 0.9 – 0.9999. "
-              "Пример: 0.995 — длинный горизонт для стратегической игры.", max_width=60),
+    ParamSpec("gamma", "Дисконт (gamma)", False, 0.9, 0.99999, float(_cfg.gamma),
+              "Вес будущих наград. Диапазон: 0.9 – 0.99999. "
+              "Пример: 0.9999 — ультра-долгий горизонт.", step=0.00001, decimals=5, max_width=60),
     ParamSpec("gae_lambda", "GAE lambda", False, 0.8, 1.0, float(_cfg.gae_lambda),
               "Баланс смещения/дисперсии в оценке преимущества. Диапазон: 0.8 – 1.0.",
               max_width=55),

@@ -31,7 +31,7 @@ from train_ui.return_statistics_widget import ReturnStatisticsWidget
 from train_ui.quick_actions_widget import QuickActionsWidget
 from train_ui.dashboard_widget import TrainingDashboardWidget
 
-CONFIG_VERSION = 6
+CONFIG_VERSION = 7
 
 CONFIG_PATH = (
     Path(os.environ.get("LOCALAPPDATA", str(Path.home())))
@@ -119,7 +119,9 @@ class ParameterRow(QWidget):
         else:
             self.spin = QDoubleSpinBox()
             self.spin.setRange(spec.min, spec.max)
-            if spec.min > 0:
+            if spec.decimals > 0:
+                decimals = spec.decimals
+            elif spec.min > 0:
                 decimals = max(
                     0, min(8, int(math.ceil(-math.log10(spec.min))) + 1))
             else:
@@ -1943,7 +1945,14 @@ def load_config() -> Dict[str, Any]:
     try:
         with open(CONFIG_PATH, encoding="utf-8") as f:
             d = json.load(f)
-        return d if isinstance(d, dict) else {}
+        if isinstance(d, dict):
+            merged = {**DEFAULT_PARAMS, **d}
+            if merged.get("gamma") in (0.99, 0.995, 0.997):
+                merged["gamma"] = 0.999
+            if merged.get("ent_coef") == 0.05:
+                merged["ent_coef"] = 0.01
+            return merged
+        return DEFAULT_PARAMS
     except (OSError, json.JSONDecodeError):
-        return {}
+        return DEFAULT_PARAMS
 
