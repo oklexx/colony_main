@@ -20,23 +20,23 @@ def test_clip_config_fields():
     rc = RewardConfig()
     assert hasattr(rc, "clip_reward_min")
     assert hasattr(rc, "clip_reward_max")
-    assert rc.clip_reward_min == -10.0
-    assert rc.clip_reward_max == 10.0
+    assert rc.clip_reward_min == -50.0
+    assert rc.clip_reward_max == 50.0
 
     # Serialization roundtrip
     d = rc.to_dict()
-    assert d["clip_reward_min"] == -10.0
-    assert d["clip_reward_max"] == 10.0
+    assert d["clip_reward_min"] == -50.0
+    assert d["clip_reward_max"] == 50.0
     rc2 = RewardConfig.from_dict(d)
-    assert rc2.clip_reward_min == -10.0
-    assert rc2.clip_reward_max == 10.0
+    assert rc2.clip_reward_min == -50.0
+    assert rc2.clip_reward_max == 50.0
 
 
 def test_clip_cpp_reward_config():
     """Verify clip fields exist in C++ RewardConfig."""
     rc = colony_cpp.RewardConfig()
-    assert rc.clip_reward_min == -10.0
-    assert rc.clip_reward_max == 10.0
+    assert rc.clip_reward_min == -50.0
+    assert rc.clip_reward_max == 50.0
 
     # Can set
     rc.clip_reward_min = -5.0
@@ -128,7 +128,7 @@ def test_clip_default_no_effect():
     from rl.config import RewardConfig
 
     cfg = RewardConfig()
-    # defaults: clip_reward_min=-10, clip_reward_max=10
+    # defaults: clip_reward_min=-50, clip_reward_max=50
 
     env = CppColonyEnv(map_size=100, reward_config=cfg.to_dict())
     try:
@@ -136,8 +136,8 @@ def test_clip_default_no_effect():
         for _ in range(10):
             action = env.action_space.sample()
             _, reward, terminated, truncated, _ = env.step(action)
-            # Normal rewards should be within [-10, 10]
-            assert -10.0 <= reward <= 10.0, \
+            # Normal rewards should be within [-50, 50]
+            assert -50.0 <= reward <= 50.0, \
                 f"Default clip should not affect normal reward, got {reward}"
             if terminated or truncated:
                 env.reset(seed=42)

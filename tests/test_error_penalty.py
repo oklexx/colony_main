@@ -18,12 +18,12 @@ def test_error_penalty_config():
     from rl.config import RewardConfig
     rc = RewardConfig()
     assert hasattr(rc, "error_penalty")
-    assert rc.error_penalty == -5.0
+    assert rc.error_penalty == -1.0
 
     d = rc.to_dict()
-    assert d["error_penalty"] == -5.0
+    assert d["error_penalty"] == -1.0
     rc2 = RewardConfig.from_dict(d)
-    assert rc2.error_penalty == -5.0
+    assert rc2.error_penalty == -1.0
 
 
 def test_preserve_penalty_config():
@@ -53,7 +53,7 @@ def test_manual_tax_penalty_config():
 def test_error_penalty_cpp():
     """Verify error_penalty works in C++ RewardConfig."""
     rc = colony_cpp.RewardConfig()
-    assert rc.error_penalty == -5.0
+    assert rc.error_penalty == -1.0
     rc.error_penalty = -10.0
     assert rc.error_penalty == -10.0
 

@@ -306,11 +306,20 @@ class MainWindow(QMainWindow):
         self._auto_scroll = True
         self._reward_history: List[float] = []
         self.dashboard: Optional[TrainingDashboardWidget] = None
+        self._status_label = QLabel("IDLE")
 
         self._build_ui()
         self._restore_state()
         self._watch_stage_mode_changed()
         self.refresh_models()
+
+    @property
+    def progress_bar(self):
+        return self.dashboard.progress_bar if self.dashboard else None
+
+    @property
+    def status_label(self):
+        return self._status_label
 
     # ────────────────────── UI ──────────────────────
 
@@ -1682,9 +1691,9 @@ class MainWindow(QMainWindow):
             self.curriculum_table.insertRow(row)
             self.curriculum_table.setItem(row, 0, QTableWidgetItem(str(th)))
 
-    def _cur_add_row(self, threshold: int = 0):
+    def _cur_add_row(self, threshold: int = 0, stage: int = 0):
         data = self._table_to_data()
-        data.append([threshold, len(data) + 1])
+        data.append([threshold, stage if stage else len(data) + 1])
         self._load_data_to_table(data)
 
     def _cur_del_row(self):

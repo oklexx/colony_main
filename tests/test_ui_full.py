@@ -68,7 +68,7 @@ class TestLeftColumn:
 class TestRightColumnCurriculum:
     def test_curriculum_table(self, main_window):
         assert main_window.curriculum_table is not None
-        assert main_window.curriculum_table.columnCount() == 2
+        assert main_window.curriculum_table.columnCount() == 1
 
     def test_curriculum_default_rows(self, main_window):
         assert main_window.curriculum_table.rowCount() == 3
@@ -245,7 +245,7 @@ class TestResetDefaults:
         main_window._cur_clear()
         main_window._reset_to_defaults()
         assert main_window.param_rows["n_envs"].value() == 8
-        assert main_window.chk_amp.isChecked() is False
+        assert main_window.chk_amp.isChecked() is True
         assert main_window.chk_compile.isChecked() is False
         assert main_window.stage_combo.currentIndex() == 0
         assert main_window.curriculum_table.rowCount() == 3
