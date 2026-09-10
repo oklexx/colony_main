@@ -158,7 +158,7 @@ with tempfile.TemporaryDirectory() as td:
     check("save/load round-trip preserves weights", same)
 
 # ── 6. UI specs ──────────────────────────────────────────────────────────
-from train_ui.parameter_widget import PARAM_SPECS, REWARD_SPECS, spec_for
+from train_ui2.parameter_widget import PARAM_SPECS, REWARD_SPECS, spec_for
 
 need_params = {"target_kl", "save_freq", "eval_freq", "eval_episodes",
                "eval_min_days", "eval_min_bases", "early_stopping_patience"}

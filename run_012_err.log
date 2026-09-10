@@ -1,2 +1,0 @@
-C:\Users\oklex\OneDrive\Documentos\sakhalin_colony_main\rl\async_trainer.py:136: UserWarning: To copy construct from a tensor, it is recommended to use sourceTensor.detach().clone() or sourceTensor.detach().clone().requires_grad_(True), rather than torch.tensor(sourceTensor).
-  last_done = torch.tensor(rollout["last_done"], dtype=torch.bool, device=self.device)

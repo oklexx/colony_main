@@ -12,7 +12,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QGridLayout, QWidget
 
 from train_ui2 import theme as T
-from train_ui.parameter_widget import PARAM_SPECS, REWARD_SPECS, ParamSpec
+from train_ui2.parameter_widget import PARAM_SPECS, REWARD_SPECS, ParamSpec
 
 SPECS: Dict[str, ParamSpec] = {s.key: s for s in PARAM_SPECS + REWARD_SPECS}
 

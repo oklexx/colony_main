@@ -153,7 +153,7 @@ def test_eval_and_best_model_saving(tmp_path):
         eval_call_count[0] += 1
         return eval_results[idx]
 
-    import train_ui.evaluator as ev
+    import train_ui2.evaluator as ev
     original_run_eval = ev.run_eval
     ev.run_eval = mock_run_eval
 
@@ -204,7 +204,7 @@ def test_min_bases_threshold(tmp_path):
             "episode_returns": [-100.0],
         }
 
-    import train_ui.evaluator as ev
+    import train_ui2.evaluator as ev
     original_run_eval = ev.run_eval
     ev.run_eval = mock_run_eval
 
@@ -266,7 +266,7 @@ def test_curriculum_stage_in_meta(tmp_path):
     trainer._curriculum_stage = 2
     trainer.best_score = None
 
-    with patch("train_ui.evaluator.run_eval") as mock_run_eval:
+    with patch("train_ui2.evaluator.run_eval") as mock_run_eval:
         mock_run_eval.return_value = {
             "days": 100.0, "bases": 10.0, "people": 50.0,
             "avg_return": 1000.0,
@@ -318,7 +318,7 @@ def test_multi_seed_eval(tmp_path):
             "episode_returns": [80.0, 120.0],
         }
 
-    import train_ui.evaluator as ev
+    import train_ui2.evaluator as ev
     original_run_eval = ev.run_eval
     ev.run_eval = mock_run_eval
 

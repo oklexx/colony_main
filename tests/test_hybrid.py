@@ -108,7 +108,7 @@ def test_hybrid_gradient_flow(hybrid_model):
 
 def test_hybrid_load_policy_detection(tmp_path):
     from rl.actor_critic_hybrid import ActorCriticHybrid
-    from train_ui.evaluator import _load_policy
+    from train_ui2.evaluator import _load_policy
 
     m = ActorCriticHybrid(
         obs_size=203, n_channels=8, grid_size=29,

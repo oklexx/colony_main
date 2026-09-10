@@ -33,8 +33,8 @@ _PROJECT = Path(__file__).resolve().parent.parent
 if str(_PROJECT) not in sys.path:
     sys.path.insert(0, str(_PROJECT))
 
-from train_ui import protocol as P
-from train_ui.models import ModelInfo, ModelRegistry
+from train_ui2 import protocol as P
+from train_ui2.models import ModelInfo, ModelRegistry
 from rl.config import RewardConfig as _RC
 
 from train_ui2 import theme as T
@@ -596,7 +596,7 @@ class MainWindow2(QMainWindow):
         self._cmd_file = cmd_file
 
         args = [sys.executable, "-u",
-                str(_PROJECT / "train_ui" / "worker.py"),
+                str(_PROJECT / "train_ui2" / "worker.py"),
                 "--config", tmp.name, "--name", name,
                 "--output", msg_file, "--command-file", cmd_file]
         if resume_model:

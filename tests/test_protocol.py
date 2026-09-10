@@ -7,7 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from train_ui import protocol as P
+from train_ui2 import protocol as P
 
 
 def test_roundtrip_ready():

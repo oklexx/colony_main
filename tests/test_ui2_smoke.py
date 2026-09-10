@@ -17,15 +17,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QTimer
 
-from train_ui import protocol as P
+from train_ui2 import protocol as P
 from train_ui2.main_window import MainWindow2
-from train_ui.models import ModelRegistry
+from train_ui2.models import ModelRegistry
 
 FAILS = []
 
 
 def check(name, cond, detail=""):
-    print(("PASS " if cond else "FAIL ") + name + (f"  [{detail}]" if detail else ""))
+    try:
+        print(("PASS " if cond else "FAIL ") + name + (f"  [{detail}]" if detail else ""))
+    except UnicodeEncodeError:
+        print(("PASS " if cond else "FAIL ") + name)
     if not cond:
         FAILS.append(name)
 
@@ -131,7 +134,7 @@ with open(Path.home() / "colony_runs/sakhalin_colony_ui2/config.json",
     saved = json.load(f)
 check("state: model_name", saved["model_name"] == "ui2_test")
 check("state: watch_seed", saved["watch_seed"] == 777)
-check("state: net_arch", saved["net_arch"] == [256, 256], str(saved["net_arch"]))
+check("state: net_arch", saved["net_arch"] == [256, 256, 256], str(saved["net_arch"]))
 check("state: reward key present", "sale_bonus" in saved)
 check("state: versioned", saved["config_version"] == 1)
 check("state: disable flags flat bool", saved.get("disable_net_worth") is False

@@ -274,7 +274,7 @@ class AsyncTrainer:
         Saves best_model.pt if composite score improves AND thresholds are met.
         """
         import json
-        from train_ui.evaluator import run_eval
+        from train_ui2.evaluator import run_eval
 
         save_dir = Path(self.cfg.model_dir)
         save_dir.mkdir(parents=True, exist_ok=True)
@@ -655,7 +655,7 @@ class AsyncTrainer:
 
         # End-of-Training Tournament: evaluate all candidates and ensure best_model.pt is the true champion
         try:
-            from train_ui.evaluator import run_eval
+            from train_ui2.evaluator import run_eval
             self._log("[Tournament] Running end-of-training model tournament across checkpoints & final...")
             best_cand_path = None
             best_cand_score = -1e9
