@@ -456,7 +456,7 @@ static int ai_read_action() {
     return action;
 }
 
-static void ai_write_state(const Game& g, const std::vector<float>& obs, int action, bool terminated, const std::vector<float>& mask, const std::vector<float>& minimap) {
+static void ai_write_state(const Game& g, const std::vector<float>& obs, int action, bool terminated, const std::vector<float>& mask, const std::vector<float>& minimap, double reward = 0.0) {
     // Write state JSON to file (includes obs, action_mask, and minimap for Python policy)
     std::ofstream f(ai_state_path);
     if (!f.is_open()) return;
@@ -467,6 +467,7 @@ static void ai_write_state(const Game& g, const std::vector<float>& obs, int act
       << "\"people\":" << g.people << ","
       << "\"bases\":" << g.bases.size() << ","
       << "\"money\":" << g.money << ","
+      << "\"reward\":" << reward << ","
       << "\"action\":" << action << ","
       << "\"terminated\":" << (terminated ? "true" : "false") << ","
       << "\"obs\":[";
@@ -513,7 +514,7 @@ static void ai_reset_env(ColonyEnvCpp& env) {
     // Clear action file so Python knows to send a new one
     std::filesystem::remove(ai_actions_path);
     // Write fresh state so Python sends a new action
-    ai_write_state(env.game(), env.obs(), -1, false, env.action_mask(), env.minimap());
+    ai_write_state(env.game(), env.obs(), -1, false, env.action_mask(), env.minimap(), 0.0);
 }
 
 static bool btn(int x, int y, int w, int h, const char* label, bool enabled = true) {
@@ -801,12 +802,14 @@ int main(int argc, char* argv[]) {
     int64_t seed = 42;
     int map_size = 280;
     int curriculum_stage = 0;
+    int minimap_radius = -1;
     std::string reward_config_path;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         if (a == "--seed" && i+1 < argc) seed = std::stoll(argv[++i]);
         else if (a == "--map-size" && i+1 < argc) map_size = std::stoi(argv[++i]);
         else if (a == "--stage" && i+1 < argc) curriculum_stage = std::stoi(argv[++i]);
+        else if (a == "--minimap-radius" && i+1 < argc) minimap_radius = std::stoi(argv[++i]);
         else if (a == "--headless-ai") headless_ai = true;
         else if (a == "--actions-file" && i+1 < argc) ai_actions_path = argv[++i];
         else if (a == "--state-file" && i+1 < argc) ai_state_path = argv[++i];
@@ -878,6 +881,9 @@ int main(int argc, char* argv[]) {
     }
 
     ColonyEnvCpp env(bd, ed, seed, map_size, curriculum_stage, {}, rc, "normal", gui_no_city_game_over, gui_no_people_days);
+    if (minimap_radius > 0) {
+        env.set_minimap_radius(minimap_radius);
+    }
     env.reset(seed);
     const Game& g = env.game();
     prev_season = g.season;
@@ -986,7 +992,7 @@ int main(int argc, char* argv[]) {
                         ai_terminated = true;
                     }
                     // Write state including obs, action_mask, and minimap for Python policy
-                    ai_write_state(env.game(), out.obs, action, out.terminated, env.action_mask(), env.minimap());
+                    ai_write_state(env.game(), out.obs, action, out.terminated, env.action_mask(), env.minimap(), out.rew);
                 } else {
                     // No action available yet - log once
                     if (!ai_debug_log) {

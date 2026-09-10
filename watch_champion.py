@@ -132,6 +132,7 @@ def launch_visual_watch(
     map_size: int,
     curriculum_stage: int | None = None,
     reward_config_path: str | None = None,
+    minimap_radius: int | None = None,
 ) -> "subprocess.Popen":
     """Launch the GUI exe in headless-ai mode."""
     import subprocess
@@ -147,6 +148,8 @@ def launch_visual_watch(
         args.extend(["--stage", str(curriculum_stage)])
     if reward_config_path:
         args.extend(["--reward-config", reward_config_path])
+    if minimap_radius is not None:
+        args.extend(["--minimap-radius", str(minimap_radius)])
     workdir = str(PROJECT_ROOT)
     return subprocess.Popen(args, cwd=workdir)
 
@@ -290,6 +293,10 @@ def main():
     # Match the env's minimap grid to the policy's (see train_ui/evaluator.py).
     # Without this, watching a hybrid/minimap model trained with
     # minimap_radius != 14 dies with a shape mismatch on the first step.
+    resolved_minimap_radius = args.minimap_radius
+    if resolved_minimap_radius is None and hasattr(policy, "grid_size"):
+        resolved_minimap_radius = int(policy.grid_size) // 2
+
     if args.minimap_radius is not None:
         env.cpp_env.set_minimap_radius(int(args.minimap_radius))
         print(f"Minimap radius: {args.minimap_radius} (grid {2*args.minimap_radius+1})")
@@ -440,6 +447,7 @@ def main():
             map_size=args.map_size,
             curriculum_stage=stage,
             reward_config_path=reward_cfg_path,
+            minimap_radius=resolved_minimap_radius,
         )
 
         for f in (actions_file, state_file):
@@ -467,6 +475,7 @@ def main():
                 map_size=args.map_size,
                 curriculum_stage=stage,
                 reward_config_path=reward_cfg_path,
+                minimap_radius=resolved_minimap_radius,
             )
             write_action(actions_file, 0)
             return p
@@ -474,6 +483,7 @@ def main():
         try:
             step_count = 0
             episode = 0
+            total_reward = 0.0
             total_episodes = max(1, args.episodes)
             while episode < total_episodes:
                 # Restart if process died
@@ -490,6 +500,7 @@ def main():
 
                 if state.get("terminated"):
                     episode += 1
+                    total_reward = 0.0
                     print(f"  [Game Over at day {state.get('day')}] "
                           f"episode {episode}/{total_episodes}")
                     if episode >= total_episodes:
@@ -564,13 +575,15 @@ def main():
                 else:
                     write_action(actions_file, 0)
 
+                reward = state.get("reward", 0.0)
+                total_reward += reward
                 # Feed the UI state panel (same JSONL protocol as text mode);
                 # without this the "Текущее состояние среды" panel stays empty
                 # in visual mode.
                 if emit_step:
                     emit_step(
                         step=step_count, day=day, action=action_name,
-                        reward=0.0, total_reward=0.0,
+                        reward=reward, total_reward=round(total_reward, 2),
                         people=state.get("people", 0), bases=bases, money=money,
                     )
 

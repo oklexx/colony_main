@@ -343,13 +343,19 @@ class AsyncTrainer:
             people_agg = float(np.mean(all_people))
             return_agg = float(np.mean(all_returns))
 
+        bases_std = float(np.std(all_bases)) if all_bases else 0.0
+        bases_p25 = float(np.percentile(all_bases, 25)) if all_bases else 0.0
+        days_std = float(np.std(all_days)) if all_days else 0.0
+
         w1, w2, w3, w4 = getattr(self.cfg, "eval_score_weights", (0.10, 1.0, 0.10, 0.0001))
+        variance_penalty = 0.2 * bases_std + 0.001 * days_std
         score = (days_agg * w1 + bases_agg * w2
-                 + people_agg * w3 + max(0.0, return_agg) * w4)
+                 + people_agg * w3 + max(0.0, return_agg) * w4
+                 - variance_penalty)
 
         min_bases = getattr(self.cfg, "eval_min_bases", 5)
         min_days = getattr(self.cfg, "eval_min_days", 730.0)
-        thresholds_met = (bases_agg >= min_bases) and (days_agg >= min_days)
+        thresholds_met = (bases_agg >= min_bases) and (bases_p25 >= min_bases * 0.7) and (days_agg >= min_days)
 
         ci95 = {}
         if len(all_days) >= 4:
@@ -646,6 +652,55 @@ class AsyncTrainer:
         norm_path = str(final_path).replace(".pt", ".norm.json")
         self.em.env.venv.save_normalization(norm_path)
         self._log(f"[Save] Final model: {final_path}")
+
+        # End-of-Training Tournament: evaluate all candidates and ensure best_model.pt is the true champion
+        try:
+            from train_ui.evaluator import run_eval
+            self._log("[Tournament] Running end-of-training model tournament across checkpoints & final...")
+            best_cand_path = None
+            best_cand_score = -1e9
+            cand_paths = sorted(save_dir.glob("checkpoint_*_steps.pt")) + [final_path]
+            if (save_dir / "best_model.pt").exists():
+                cand_paths.append(save_dir / "best_model.pt")
+
+            for cp in set(cand_paths):
+                if not cp.exists():
+                    continue
+                try:
+                    cp_norm = Path(str(cp).replace(".pt", ".norm.json"))
+                    cp_norm_str = str(cp_norm) if cp_norm.exists() else norm_str
+                    res = run_eval(
+                        model_path=str(cp),
+                        episodes=max(10, getattr(self.cfg, "eval_episodes", 20)),
+                        max_days=10000,
+                        seed=42,
+                        device=str(self.device),
+                        normalization_path=cp_norm_str,
+                        map_size=self.em.cfg.map_size,
+                        mode=getattr(self.cfg, "obs_mode", "flat"),
+                        minimap_radius=getattr(self.cfg, "minimap_radius", 14),
+                        difficulty=getattr(self.cfg, "difficulty", "normal"),
+                    )
+                    sc = res.get("avg_return", 0)
+                    bs = res.get("bases", 0)
+                    dys = res.get("days", 0)
+                    min_b = getattr(self.cfg, "eval_min_bases", 5)
+                    min_d = getattr(self.cfg, "eval_min_days", 730.0)
+                    if bs >= min_b and dys >= min_d and sc > best_cand_score:
+                        best_cand_score = sc
+                        best_cand_path = cp
+                except Exception as ex:
+                    self._log(f"[Tournament] Candidate {cp.name} evaluation error: {ex}")
+
+            if best_cand_path is not None:
+                self._log(f"[Tournament] Winner: {best_cand_path.name} (score={best_cand_score:.1f})")
+                import shutil
+                shutil.copy(str(best_cand_path), str(save_dir / "best_model.pt"))
+                cp_norm = Path(str(best_cand_path).replace(".pt", ".norm.json"))
+                if cp_norm.exists():
+                    shutil.copy(str(cp_norm), str(save_dir / "best_model.norm.json"))
+        except Exception as te:
+            self._log(f"[Tournament] Error during tournament: {te}")
 
         self.metrics.total_timesteps = total_done
         self.metrics.fps = final_fps
