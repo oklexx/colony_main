@@ -295,6 +295,13 @@ def _run_train_inner(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_
         em.model.load_state_dict(clean)
         log("info", f"[Worker] loaded weights from {resume_model}")
 
+        if "optimizer_state" in ckpt:
+            try:
+                em.ppo.optimizer.load_state_dict(ckpt["optimizer_state"])
+                log("info", "[Worker] loaded optimizer state")
+            except Exception as e:
+                log("warn", f"[Worker] optimizer state not loaded: {e}")
+
         norm_candidates = [
             rm_path.with_name(rm_path.name.replace(".pt", ".norm.json")),
             rm_path.parent / "normalization.json",

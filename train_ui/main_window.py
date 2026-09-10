@@ -1359,11 +1359,13 @@ class MainWindow(QMainWindow):
 
         self.log("info", "[UI] Starting training session")
 
-        self._randomize_seed()
-        cfg = self._collect_config()
         if resume_model:
             self.log("info", f"[UI] Resuming training from {resume_model}")
+            cfg = self._collect_config()
             cfg["name"] = cfg["name"] + "_ft"
+        else:
+            self._randomize_seed()
+            cfg = self._collect_config()
 
         existing = self.registry.get(cfg["name"])
         if existing and not resume_model:
@@ -1401,6 +1403,8 @@ class MainWindow(QMainWindow):
                [str(Path(__file__).resolve().parent / "worker.py")] + \
                ["--config", tmp.name, "--name", cfg["name"],
                 "--output", msg_file, "--command-file", cmd_file]
+        if resume_model:
+            cmd += ["--resume-model", str(resume_model)]
 
         self.log("info", f"[UI] Worker command: {' '.join(cmd)}")
 
