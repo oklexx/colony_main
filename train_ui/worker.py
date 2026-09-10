@@ -282,7 +282,8 @@ def _run_train_inner(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_
     log("info", f"[Worker] env ready: obs={em.obs_size} actions={em.n_actions}")
 
     if resume_model and resume_model.strip():
-        ckpt = torch.load(resume_model, map_location=device, weights_only=False)
+        rm_path = Path(resume_model)
+        ckpt = torch.load(rm_path, map_location=device, weights_only=False)
         if "model_state" in ckpt:
             state = ckpt["model_state"]
         else:
@@ -293,6 +294,24 @@ def _run_train_inner(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_
             clean[ck] = v
         em.model.load_state_dict(clean)
         log("info", f"[Worker] loaded weights from {resume_model}")
+
+        norm_candidates = [
+            rm_path.with_name(rm_path.name.replace(".pt", ".norm.json")),
+            rm_path.parent / "normalization.json",
+            rm_path.parent / "best_model.norm.json",
+        ]
+        norm_loaded = False
+        for nc in norm_candidates:
+            if nc.exists():
+                try:
+                    em.env.venv.load_normalization(str(nc))
+                    log("info", f"[Worker] loaded normalization stats from {nc}")
+                    norm_loaded = True
+                    break
+                except Exception as ex:
+                    log("warn", f"[Worker] failed to load normalization from {nc}: {ex}")
+        if not norm_loaded:
+            log("warn", f"[Worker] WARNING: no normalization file found for resume_model {resume_model}!")
 
     trainer = AsyncTrainer(
         cfg=cfg,

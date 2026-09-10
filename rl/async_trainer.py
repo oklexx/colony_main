@@ -663,30 +663,61 @@ class AsyncTrainer:
             if (save_dir / "best_model.pt").exists():
                 cand_paths.append(save_dir / "best_model.pt")
 
+            import random
+            seeds = [random.randint(1, 999999) for _ in range(5)]
+            use_median = getattr(self.cfg, "eval_use_median", True)
+            w1, w2, w3, w4 = getattr(self.cfg, "eval_score_weights", (0.10, 1.0, 0.10, 0.0001))
+            min_b = getattr(self.cfg, "eval_min_bases", 5)
+            min_d = getattr(self.cfg, "eval_min_days", 730.0)
+
             for cp in set(cand_paths):
                 if not cp.exists():
                     continue
                 try:
                     cp_norm = Path(str(cp).replace(".pt", ".norm.json"))
                     cp_norm_str = str(cp_norm) if cp_norm.exists() else norm_str
-                    res = run_eval(
-                        model_path=str(cp),
-                        episodes=max(10, getattr(self.cfg, "eval_episodes", 20)),
-                        max_days=10000,
-                        seed=42,
-                        device=str(self.device),
-                        normalization_path=cp_norm_str,
-                        map_size=self.em.cfg.map_size,
-                        mode=getattr(self.cfg, "obs_mode", "flat"),
-                        minimap_radius=getattr(self.cfg, "minimap_radius", 14),
-                        difficulty=getattr(self.cfg, "difficulty", "normal"),
-                    )
-                    sc = res.get("avg_return", 0)
-                    bs = res.get("bases", 0)
-                    dys = res.get("days", 0)
-                    min_b = getattr(self.cfg, "eval_min_bases", 5)
-                    min_d = getattr(self.cfg, "eval_min_days", 730.0)
-                    if bs >= min_b and dys >= min_d and sc > best_cand_score:
+
+                    all_days = []
+                    all_bases = []
+                    all_people = []
+                    all_returns = []
+                    for seed in seeds:
+                        res = run_eval(
+                            model_path=str(cp),
+                            episodes=max(10, getattr(self.cfg, "eval_episodes", 20)),
+                            max_days=10000,
+                            seed=seed,
+                            device=str(self.device),
+                            normalization_path=cp_norm_str,
+                            map_size=self.em.cfg.map_size,
+                            mode=getattr(self.cfg, "obs_mode", "flat"),
+                            minimap_radius=getattr(self.cfg, "minimap_radius", 14),
+                            difficulty=getattr(self.cfg, "difficulty", "normal"),
+                        )
+                        all_days.extend(res.get("episode_days", [res["days"]]))
+                        all_bases.extend(res.get("episode_bases", [res["bases"]]))
+                        all_people.extend(res.get("episode_people", [res["people"]]))
+                        all_returns.extend(res.get("episode_returns", [res["avg_return"]]))
+
+                    if use_median:
+                        days_agg = float(np.median(all_days))
+                        bases_agg = float(np.median(all_bases))
+                        people_agg = float(np.median(all_people))
+                        return_agg = float(np.median(all_returns))
+                    else:
+                        days_agg = float(np.mean(all_days))
+                        bases_agg = float(np.mean(all_bases))
+                        people_agg = float(np.mean(all_people))
+                        return_agg = float(np.mean(all_returns))
+
+                    bases_std = float(np.std(all_bases)) if all_bases else 0.0
+                    days_std = float(np.std(all_days)) if all_days else 0.0
+                    variance_penalty = 0.2 * bases_std + 0.001 * days_std
+                    sc = (days_agg * w1 + bases_agg * w2
+                             + people_agg * w3 + max(0.0, return_agg) * w4
+                             - variance_penalty)
+
+                    if bases_agg >= min_b and days_agg >= min_d and sc > best_cand_score:
                         best_cand_score = sc
                         best_cand_path = cp
                 except Exception as ex:
