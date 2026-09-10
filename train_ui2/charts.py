@@ -162,14 +162,14 @@ def _fmt(v: float) -> str:
 class Bars(QWidget):
     """Horizontal percentage bars (top actions)."""
 
-    def __init__(self, height: int = 96, parent=None):
+    def __init__(self, height: int = 240, parent=None):
         super().__init__(parent)
         self.items: List[tuple] = []  # (name, pct)
         self.setMinimumHeight(height)
-        self.setMaximumHeight(height)
+        self.setMaximumHeight(height + 40)
 
     def set_items(self, items: Dict[str, float]):
-        self.items = sorted(items.items(), key=lambda kv: -kv[1])[:5]
+        self.items = sorted(items.items(), key=lambda kv: -kv[1])[:15]
         self.update()
 
     def paintEvent(self, _ev):

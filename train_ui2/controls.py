@@ -31,8 +31,9 @@ class ParamRow(QWidget):
         lay.setColumnMinimumWidth(0, 96)
         lay.setColumnStretch(1, 1)
         lay.addWidget(T.field_label(spec.label, spec.tooltip), 0, 0)
+        decimals = spec.decimals if spec.decimals > 0 else T.decimals_for(spec.min)
         self.spin = T.spin(spec.min, spec.max, spec.default, spec.is_int,
-                           step=spec.step, decimals=T.decimals_for(spec.min),
+                           step=spec.step, decimals=decimals,
                            tooltip=spec.tooltip)
         self.spin.valueChanged.connect(self._emit)
         lay.addWidget(self.spin, 0, 1, Qt.AlignLeft)
