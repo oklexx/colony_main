@@ -75,7 +75,7 @@ sakhalin_colony_main/
 │   ├── thread_pool.h         #   Пул потоков для параллельного step N сред
 │   ├── bindings.cpp          #   pybind11-биндинги (colony_cpp)
 │   ├── gui.cpp, main.cpp     #   Нативный GUI/демо (не нужны для RL)
-│   └── constants.h           #   Все константы: MAX_STEPS=10000, TAX_GRACE_DAYS=60, MAX_ROADS=25, ...
+│   └── constants.h           #   Все константы: MAX_STEPS=10000, TAX_GRACE_DAYS=60, ...
 │
 ├── configs/
 │   ├── bases.json            #   33 здания: цена, время стройки, рабочие, сезоны, потребление/прибыль

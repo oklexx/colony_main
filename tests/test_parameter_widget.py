@@ -5,7 +5,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from train_ui.parameter_widget import (FLOAT_MIN, INT_MIN, ParamSpec,
+from train_ui2.parameter_widget import (FLOAT_MIN, INT_MIN, ParamSpec,
                                        PARAM_SPECS, scale_value, spec_for)
 
 

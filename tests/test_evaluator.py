@@ -79,7 +79,7 @@ def _fake_env_class():
 def test_load_policy_with_meta(tmp_path):
     if not ENV_OK:
         pytest.skip("env not available")
-    from train_ui.evaluator import _load_policy
+    from train_ui2.evaluator import _load_policy
 
     ckpt = _make_actor_critic_checkpoint(tmp_path)
     policy = _load_policy(ckpt, torch.device("cpu"))
@@ -90,7 +90,7 @@ def test_load_policy_with_meta(tmp_path):
 def test_load_policy_probes_env_when_meta_missing(tmp_path):
     if not ENV_OK:
         pytest.skip("env not available")
-    from train_ui.evaluator import _load_policy
+    from train_ui2.evaluator import _load_policy
 
     from rl.actor_critic import ActorCritic
     m = ActorCritic(obs_size=203, n_actions=45, hidden_sizes=[256, 256],
@@ -104,7 +104,7 @@ def test_load_policy_probes_env_when_meta_missing(tmp_path):
 
 
 def test_load_policy_rejects_incompatible(tmp_path):
-    from train_ui.evaluator import _load_policy
+    from train_ui2.evaluator import _load_policy
 
     ckpt = _make_legacy_checkpoint(tmp_path)
     with pytest.raises(ValueError):
@@ -114,7 +114,7 @@ def test_load_policy_rejects_incompatible(tmp_path):
 def test_run_eval_returns_stats(tmp_path, monkeypatch):
     if not ENV_OK:
         pytest.skip("env not available")
-    import train_ui.evaluator as ev
+    import train_ui2.evaluator as ev
 
     ckpt = _make_actor_critic_checkpoint(tmp_path)
     fake_env = _fake_env_class()
@@ -138,7 +138,7 @@ def test_run_eval_returns_stats(tmp_path, monkeypatch):
 @pytest.mark.skipif(not ENV_OK, reason="env not available")
 def test_run_eval_with_normalization(tmp_path, monkeypatch):
     """Test that run_eval loads normalization when provided."""
-    import train_ui.evaluator as ev
+    import train_ui2.evaluator as ev
     import numpy as np
 
     ckpt = _make_actor_critic_checkpoint(tmp_path)
@@ -185,7 +185,7 @@ def test_run_eval_with_normalization(tmp_path, monkeypatch):
 
 
 def test_run_eval_missing_model(tmp_path):
-    from train_ui.evaluator import run_eval
+    from train_ui2.evaluator import run_eval
     with pytest.raises(FileNotFoundError):
         run_eval(tmp_path / "nope.pt", episodes=1, max_days=1)
 
@@ -214,7 +214,7 @@ def test_run_eval_hybrid_pushes_policy_grid_into_env(tmp_path, monkeypatch):
     "mat1 and mat2 shapes cannot be multiplied (1x3136 and 12544x256)" because the
     eval env kept the default radius 14 (grid 29) while the CNN expected grid 57.
     """
-    import train_ui.evaluator as ev
+    import train_ui2.evaluator as ev
     import cpp_env as cpp_env_mod
 
     ckpt = _make_hybrid_checkpoint(tmp_path, grid_size=57)
@@ -241,7 +241,7 @@ def test_run_eval_hybrid_pushes_policy_grid_into_env(tmp_path, monkeypatch):
 @pytest.mark.skipif(not ENV_OK, reason="env not available")
 def test_run_eval_flat_untouched_by_radius_fix(tmp_path, monkeypatch):
     """The flat path must not touch minimap radius (no minimap wrapper there)."""
-    import train_ui.evaluator as ev
+    import train_ui2.evaluator as ev
     import cpp_env as cpp_env_mod
 
     real_obs = int(cpp_env_mod.CppColonyEnv(map_size=100).observation_space.shape[0])

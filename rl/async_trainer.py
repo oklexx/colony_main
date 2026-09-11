@@ -274,7 +274,7 @@ class AsyncTrainer:
         Saves best_model.pt if composite score improves AND thresholds are met.
         """
         import json
-        from train_ui.evaluator import run_eval
+        from train_ui2.evaluator import run_eval
 
         save_dir = Path(self.cfg.model_dir)
         save_dir.mkdir(parents=True, exist_ok=True)
@@ -511,7 +511,7 @@ class AsyncTrainer:
             # Calculate top actions from history
             action_counts = self._calculate_action_distribution()
             total_actions = sum(action_counts)
-            order = sorted(range(len(action_counts)), key=lambda i: action_counts[i], reverse=True)[:5]
+            order = sorted(range(len(action_counts)), key=lambda i: action_counts[i], reverse=True)[:15]
             top_actions = {self._action_names[i]: round(action_counts[i] / max(total_actions, 1) * 100, 2)
                            for i in order if i < len(self._action_names)}
 
@@ -655,7 +655,7 @@ class AsyncTrainer:
 
         # End-of-Training Tournament: evaluate all candidates and ensure best_model.pt is the true champion
         try:
-            from train_ui.evaluator import run_eval
+            from train_ui2.evaluator import run_eval
             self._log("[Tournament] Running end-of-training model tournament across checkpoints & final...")
             best_cand_path = None
             best_cand_score = -1e9

@@ -15,7 +15,7 @@ class RewardConfig:
     # --- base bonuses ---
     build_bonus: float = 2.0
     chain_bonus: float = 1.0
-    chain_daily: float = 0.5
+    chain_daily: float = 1.0
     novelty: float = 5.0
     daily_income: float = 1.0
     sale_bonus: float = 0.5
@@ -24,7 +24,7 @@ class RewardConfig:
     game_over_penalty: float = 10.0
     diversity_bonus: float = 3.0
     # --- penalties for errors / special actions ---
-    error_penalty: float = -1.0
+    error_penalty: float = -2.0
     preserve_penalty: float = 0.0
     demolish_penalty: float = -3.0
     manual_tax_penalty: float = -0.5
@@ -48,14 +48,15 @@ class RewardConfig:
     disable_provider_bonus: bool = False
     # --- hardcoded weights (from env.cpp, now configurable) ---
     tax_fail_penalty: float = 5.0
-    death_penalty: float = 20.0
+    death_penalty: float = 30.0
     base_lost_penalty: float = 30.0
     born_bonus: float = 1.0
-    debt_coeff: float = 0.02
+    debt_coeff: float = 0.1
     home_overflow_penalty: float = 2.0
     housing_need_bonus: float = 3.0
-    food_need_bonus: float = 2.0
+    food_need_bonus: float = 0.0
     water_need_bonus: float = 2.0
+    buy_food_penalty: float = 3.0
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -99,6 +100,7 @@ class RewardConfig:
             "housing_need_bonus": self.housing_need_bonus,
             "food_need_bonus": self.food_need_bonus,
             "water_need_bonus": self.water_need_bonus,
+            "buy_food_penalty": self.buy_food_penalty,
         }
 
     @classmethod
@@ -136,10 +138,10 @@ class Config:
     n_steps: int = 4096
     batch_size: int = 8192
     n_epochs: int = 10
-    gamma: float = 0.997
+    gamma: float = 0.999
     gae_lambda: float = 0.98
     clip_range: float = 0.2
-    ent_coef: float = 0.05  # Increased to prevent policy collapse / action loops
+    ent_coef: float = 0.01  # P1: ent_coef 0.01 with annealing down to 0.001
     vf_coef: float = 0.5
     max_grad_norm: float = 0.5
     target_kl: float = 0.02          # 0 = early-stop по KL выключен

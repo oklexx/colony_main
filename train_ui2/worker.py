@@ -26,7 +26,7 @@ if str(PROJECT_ROOT) not in sys.path:
 if str(PROJECT_ROOT / "python") not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT / "python"))
 
-from train_ui import protocol as P
+from train_ui2 import protocol as P
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -201,7 +201,7 @@ def _run_train_inner(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_
     # Build the FULL config via Config.from_dict so that every supported field
     # (eval_seeds, eval_score_weights, early_stopping_patience, unlock_ids,
     # loop_detection_*, target_kl, difficulty, ...) is honoured. The previous
-    # hand-written field list silently dropped ~10 fields — anything the UI or
+    # hand-written field list silently dropped ~10 fields ??? anything the UI or
     # a JSON profile set for them was ignored ("params don't stick" bug).
     work = dict(cfg_dict)
     work.pop("name", None)
@@ -360,7 +360,7 @@ def _run_train_inner(cfg_dict: Dict[str, Any], run_name: str, mf: MsgFile, stop_
 
 def run_eval(model_path: str, episodes: int, max_days: int, seed: int,
              device: str, mf: MsgFile, normalization_path: str = "") -> int:
-    from train_ui.evaluator import run_eval as _run_eval
+    from train_ui2.evaluator import run_eval as _run_eval
 
     def log(level: str, message: str) -> None:
         mf.write(P.LogMsg(level=level, message=message))

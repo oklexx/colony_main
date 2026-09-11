@@ -19,7 +19,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "python"))
 
 from cpp_env import CppColonyEnv
-from train_ui.evaluator import _load_policy
+from train_ui2.evaluator import _load_policy
 
 
 class TeeWriter:

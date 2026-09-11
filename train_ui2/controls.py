@@ -12,7 +12,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QGridLayout, QWidget
 
 from train_ui2 import theme as T
-from train_ui.parameter_widget import PARAM_SPECS, REWARD_SPECS, ParamSpec
+from train_ui2.parameter_widget import PARAM_SPECS, REWARD_SPECS, ParamSpec
 
 SPECS: Dict[str, ParamSpec] = {s.key: s for s in PARAM_SPECS + REWARD_SPECS}
 
@@ -31,8 +31,9 @@ class ParamRow(QWidget):
         lay.setColumnMinimumWidth(0, 96)
         lay.setColumnStretch(1, 1)
         lay.addWidget(T.field_label(spec.label, spec.tooltip), 0, 0)
+        decimals = spec.decimals if spec.decimals > 0 else T.decimals_for(spec.min)
         self.spin = T.spin(spec.min, spec.max, spec.default, spec.is_int,
-                           step=spec.step, decimals=T.decimals_for(spec.min),
+                           step=spec.step, decimals=decimals,
                            tooltip=spec.tooltip)
         self.spin.valueChanged.connect(self._emit)
         lay.addWidget(self.spin, 0, 1, Qt.AlignLeft)

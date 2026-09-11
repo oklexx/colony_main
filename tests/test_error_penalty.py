@@ -18,12 +18,12 @@ def test_error_penalty_config():
     from rl.config import RewardConfig
     rc = RewardConfig()
     assert hasattr(rc, "error_penalty")
-    assert rc.error_penalty == -1.0
+    assert rc.error_penalty == -2.0
 
     d = rc.to_dict()
-    assert d["error_penalty"] == -1.0
+    assert d["error_penalty"] == -2.0
     rc2 = RewardConfig.from_dict(d)
-    assert rc2.error_penalty == -1.0
+    assert rc2.error_penalty == -2.0
 
 
 def test_preserve_penalty_config():

@@ -33,8 +33,8 @@ _PROJECT = Path(__file__).resolve().parent.parent
 if str(_PROJECT) not in sys.path:
     sys.path.insert(0, str(_PROJECT))
 
-from train_ui import protocol as P
-from train_ui.models import ModelInfo, ModelRegistry
+from train_ui2 import protocol as P
+from train_ui2.models import ModelInfo, ModelRegistry
 from rl.config import RewardConfig as _RC
 
 from train_ui2 import theme as T
@@ -69,7 +69,8 @@ REWARD_GROUPS = {
     "Выживание": ["survival_bonus", "survival_coeff", "game_over_penalty",
                   "death_penalty", "tax_fail_penalty", "base_lost_penalty",
                   "born_bonus", "home_overflow_penalty"],
-    "Потребности": ["housing_need_bonus", "food_need_bonus", "water_need_bonus"],
+    "Потребности": ["housing_need_bonus", "food_need_bonus", "water_need_bonus",
+                    "buy_food_penalty"],
     "Дисциплина": ["error_penalty", "preserve_penalty", "demolish_penalty",
                    "idle_build_penalty", "idle_build_threshold_days"],
     "Milestones и клип": ["milestone_base_bonus", "milestone_people_bonus",
@@ -100,7 +101,7 @@ class MainWindow2(QMainWindow):
     def __init__(self, models_dir: Optional[Path] = None):
         super().__init__()
         self.setWindowTitle("Sakhalin Colony — Training UI 2.0")
-        self.resize(1180, 760)
+        self.resize(1180, 900)
         self.registry = ModelRegistry(models_dir)
         self.config: Dict[str, Any] = self._load_state()
 
@@ -183,19 +184,19 @@ class MainWindow2(QMainWindow):
         self.progress.setFormat("%v / %m шагов  (%p%)")
         root.addWidget(self.progress)
 
-        # parameter groups in 3 columns
+        # parameter groups in 2 columns
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.NoFrame)
         cols = QHBoxLayout()
         cols.setSpacing(8)
-        col_w: List[QVBoxLayout] = [QVBoxLayout(), QVBoxLayout(), QVBoxLayout()]
+        col_w: List[QVBoxLayout] = [QVBoxLayout(), QVBoxLayout()]
         self.pgroups: Dict[str, ParamGroup] = {}
         for i, (title, keys) in enumerate(PARAM_GROUPS.items()):
             g = ParamGroup(title, keys)
             g.value_changed.connect(self._on_param_changed)
             self.pgroups[title] = g
-            col_w[i % 3].addWidget(g)
+            col_w[i % 2].addWidget(g)
         # difficulty / obs_mode / stage rows appended into the Среда group
         env_box = self.pgroups["Среда"]
         grp_grid = env_box.layout()  # QVBoxLayout (outer)
@@ -253,7 +254,7 @@ class MainWindow2(QMainWindow):
         self.spn_cpp_threads = QSpinBox(); self.spn_cpp_threads.setRange(0, 64)
         self.spn_cpp_threads.setValue(0); self.spn_cpp_threads.setFixedWidth(92)
         pg.addWidget(self.spn_cpp_threads, 4, 1, Qt.AlignLeft)
-        col_w[2].addWidget(perf)
+        col_w[1].addWidget(perf)
         for c in col_w:
             c.addStretch(1)
             w = QWidget(); w.setLayout(c)
@@ -452,7 +453,16 @@ class MainWindow2(QMainWindow):
         try:
             with open(CONFIG_PATH, encoding="utf-8") as f:
                 d = json.load(f)
-            return d if isinstance(d, dict) else {}
+            if isinstance(d, dict):
+                from rl.config import Config
+                default_cfg = Config().to_dict()
+                merged = {**default_cfg, **d}
+                if merged.get("gamma") in (0.99, 0.995, 0.997):
+                    merged["gamma"] = 0.999
+                if merged.get("ent_coef") == 0.05:
+                    merged["ent_coef"] = 0.01
+                return merged
+            return {}
         except (OSError, json.JSONDecodeError):
             return {}
 
@@ -587,7 +597,7 @@ class MainWindow2(QMainWindow):
         self._cmd_file = cmd_file
 
         args = [sys.executable, "-u",
-                str(_PROJECT / "train_ui" / "worker.py"),
+                str(_PROJECT / "train_ui2" / "worker.py"),
                 "--config", tmp.name, "--name", name,
                 "--output", msg_file, "--command-file", cmd_file]
         if resume_model:

@@ -349,7 +349,8 @@ PYBIND11_MODULE(colony_cpp, m) {
         .def_readwrite("home_overflow_penalty", &RewardConfig::home_overflow_penalty)
         .def_readwrite("housing_need_bonus", &RewardConfig::housing_need_bonus)
         .def_readwrite("food_need_bonus", &RewardConfig::food_need_bonus)
-        .def_readwrite("water_need_bonus", &RewardConfig::water_need_bonus);
+        .def_readwrite("water_need_bonus", &RewardConfig::water_need_bonus)
+        .def_readwrite("buy_food_penalty", &RewardConfig::buy_food_penalty);
 
     py::class_<ColonyEnvCpp::EpisodeMetrics>(m, "EpisodeMetrics")
         .def_readonly("total_reward", &ColonyEnvCpp::EpisodeMetrics::total_reward)

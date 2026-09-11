@@ -28,7 +28,7 @@ def objective(trial: optuna.Trial, base_args: dict) -> float:
     batch_size = trial.suggest_categorical("batch_size", [8192, 16384, 32768, 65536])
     ent_coef = trial.suggest_float("ent_coef", 0.005, 0.05, log=True)
     vf_coef = trial.suggest_float("vf_coef", 0.3, 1.0)
-    gamma = trial.suggest_float("gamma", 0.99, 0.999)
+    gamma = trial.suggest_float("gamma", 0.99, 0.99999)
     clip_range = trial.suggest_float("clip_range", 0.1, 0.3)
     net_arch_choice = trial.suggest_categorical("net_arch", ["256x256", "512x512", "512x512x512"])
     net_arch = [int(x) for x in net_arch_choice.split("x")]

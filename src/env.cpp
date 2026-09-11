@@ -597,9 +597,6 @@ std::vector<float> ColonyEnvCpp::action_mask() {
         if (has_unlocked_ && !unlocked_.count(d->id))
             continue;
 
-        // Road cap check
-        if (d->id == ROAD_ID && road_count() >= MAX_ROADS)
-            continue;
 
         // Money check
         if (g.money < d->price)
@@ -768,8 +765,6 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
         std::optional<std::pair<int, int>> cell;
         if (has_unlocked_ && !unlocked_.count(d->id)) {
             rew += cfg_.error_penalty; c_error += cfg_.error_penalty;
-        } else if (d->id == ROAD_ID && road_count() >= MAX_ROADS) {
-            rew += cfg_.error_penalty; c_error += cfg_.error_penalty;
         } else {
             cell = find_lot(d->need_earth, d->no_near_base);
         }
@@ -897,6 +892,8 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
         else { double sb = cfg_.sale_bonus * std::log1p((double)r.total / 100.0); rew += sb; c_sale += sb; }
     } else if (action == manager_base_ + 7) {
         action_name = "MGR:buy_food";
+        // Люди не едят (еда не нужна): покупка еды — чистый слив денег, штраф.
+        rew += cfg_.buy_food_penalty; c_error += cfg_.buy_food_penalty;
         int64_t need = std::max<int64_t>(0, 400 - g.sunduk[FOOD]);
         if (need > 0) {
             Sunduk counts; counts[FOOD] = need;
@@ -1138,7 +1135,6 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
         for (int i = 0; i < n_build_; ++i) {
             const BaseData* d = build_data_[i];
             if (has_unlocked_ && !unlocked_.count(d->id)) continue;
-            if (d->id == ROAD_ID && road_count() >= MAX_ROADS) continue;
             if (g.money < d->price) continue;
             any_build_available = true;
             break;

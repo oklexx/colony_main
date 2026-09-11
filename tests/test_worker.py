@@ -10,7 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from train_ui import worker as W
+from train_ui2 import worker as W
 
 
 def test_build_parser_train_mode():
