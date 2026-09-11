@@ -68,7 +68,8 @@ class CppVecEnv(VecEnv):
                         "disable_provider_bonus",
                         "tax_fail_penalty", "death_penalty", "base_lost_penalty",
                         "born_bonus", "debt_coeff", "home_overflow_penalty",
-                        "housing_need_bonus", "food_need_bonus", "water_need_bonus")
+                        "housing_need_bonus", "food_need_bonus", "water_need_bonus",
+                        "buy_food_penalty")
         _INT_KEYS = {"idle_build_threshold_days"}
         _missing = []
         if reward_config:

@@ -70,8 +70,9 @@ struct RewardConfig {
     double debt_coeff = 0.02;
     double home_overflow_penalty = 2.0;
     double housing_need_bonus = 3.0;
-    double food_need_bonus = 2.0;
+    double food_need_bonus = 0.0;   // 0: люди не едят (еда не нужна) — не стимулировать фермы
     double water_need_bonus = 2.0;
+    double buy_food_penalty = 3.0;  // - за BUY_FOOD: еда не нужна, покупка = слив денег
 };
 
 // RL-среда: точная копия ColonyEnv из rl/env.py (награды и наблюдения).

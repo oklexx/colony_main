@@ -865,6 +865,7 @@ int main(int argc, char* argv[]) {
             if (rj.contains("housing_need_bonus")) rc.housing_need_bonus = rj["housing_need_bonus"].get<double>();
             if (rj.contains("food_need_bonus")) rc.food_need_bonus = rj["food_need_bonus"].get<double>();
             if (rj.contains("water_need_bonus")) rc.water_need_bonus = rj["water_need_bonus"].get<double>();
+            if (rj.contains("buy_food_penalty")) rc.buy_food_penalty = rj["buy_food_penalty"].get<double>();
         }
     }
 

@@ -14,6 +14,91 @@ from PySide6.QtWidgets import QWidget
 
 from train_ui2.theme import DIM, FIELD, LINE, color_for
 
+# Русские названия действий модели (ключ — английское имя из action_names).
+_ACTION_RU = {
+    "DAY": "День",
+    "WEEK": "Неделя",
+    "IMPROVE_LAND": "Улучш. землю",
+    "REPAIR": "Ремонт",
+    "REPAIR_ALL": "Ремонт всех",
+    "DEMOLISH": "Снос",
+    "PRESERVE": "Законсерв.",
+    "UNPRESERVE": "Расконсерв.",
+    "SELL_SURPLUS": "Продать излишки",
+    "BUY_FOOD": "Купить еду",
+    "TAKE_LOAN": "Кредит",
+    "REPAY_LOAN": "Погасить кредит",
+    "PAY_TAX": "Налог",
+    "BUILD_CITY": "Город",
+    "BUILD_FARM": "Ферма",
+    "BUILD_GARDEN": "Сад",
+    "BUILD_WATERCHANNEL": "Водоканал",
+    "BUILD_SAWMILL": "Лесопилка",
+    "BUILD_COALMINE": "Шахта",
+    "BUILD_IRONMINE": "Карьер",
+    "BUILD_REFINERY": "Нефтедобыча",
+    "BUILD_GOLDMINE": "Золотой прииск",
+    "BUILD_POWERSTATION": "Электростанция",
+    "BUILD_HYDROSTATION": "Гидростанция",
+    "BUILD_ROAD": "Дорога",
+    "BUILD_FISH": "Рыбный промысел",
+    "BUILD_COALCUT": "Угольный разрез",
+    "BUILD_HUNTINGLAND": "Охотничьи угодья",
+    "BUILD_COWFARM": "Животноводч. ферма",
+    "BUILD_MUSHROOM": "Грибная плантация",
+    "BUILD_BIGHOUSE": "Жилой район",
+    "BUILD_BIGFARM": "Хозяйство",
+    "BUILD_APIARY": "Пасека",
+    "BUILD_TORCHLIGHT": "Факел",
+    "BUILD_HOthouse": "Теплица",
+    "BUILD_SUPERHOUSE": "Жилой центр",
+    "BUILD_BIGSAWMILL": "Лесоповал",
+    "BUILD_WATERMILL": "Водокачка",
+    "BUILD_BIGREFINARY": "Нефтенасос",
+    "BUILD_PUERPERAL": "Дом матери и ребёнка",
+    "BUILD_BIGIRONMINE": "Катакомбы",
+    "BUILD_AIRSTATION": "Ветряная электростанция",
+    "BUILD_SMALLATOMSTATION": "Малая АЭС",
+    "BUILD_ATOMSTATION": "АЭС",
+}
+
+# Заполняется лениво из configs/bases.json (captions на русском).
+_BUILD_CAPTION: Dict[str, str] = {}
+
+
+def _load_build_captions() -> None:
+    global _BUILD_CAPTION
+    if _BUILD_CAPTION:
+        return
+    try:
+        import json as _json
+        from pathlib import Path as _Path
+        root = _Path(__file__).resolve().parent.parent
+        data = _json.loads((root / "configs" / "bases.json").read_text(encoding="utf-8"))
+        for d in data:
+            cap = d.get("caption")
+            bid = d.get("id")
+            if cap and bid:
+                _BUILD_CAPTION[bid.upper()] = cap
+    except Exception:
+        pass
+
+
+def action_ru(name: str) -> str:
+    """Русское название действия (по англ. имени), с fallback на исходное."""
+    if name in _ACTION_RU:
+        return _ACTION_RU[name]
+    n = name.upper()
+    if n in _ACTION_RU:
+        return _ACTION_RU[n]
+    if n.startswith("BUILD_"):
+        b = n[len("BUILD_"):]
+        if not _BUILD_CAPTION:
+            _load_build_captions()
+        if b in _BUILD_CAPTION:
+            return _BUILD_CAPTION[b]
+    return name
+
 
 class Chart(QWidget):
     """Multi-series rolling line chart."""
@@ -169,7 +254,8 @@ class Bars(QWidget):
         self.setMaximumHeight(height + 40)
 
     def set_items(self, items: Dict[str, float]):
-        self.items = sorted(items.items(), key=lambda kv: -kv[1])[:15]
+        ru = {action_ru(k): v for k, v in items.items()}
+        self.items = sorted(ru.items(), key=lambda kv: -kv[1])[:15]
         self.update()
 
     def paintEvent(self, _ev):

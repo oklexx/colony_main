@@ -54,8 +54,9 @@ class RewardConfig:
     debt_coeff: float = 0.1
     home_overflow_penalty: float = 2.0
     housing_need_bonus: float = 3.0
-    food_need_bonus: float = 2.0
+    food_need_bonus: float = 0.0
     water_need_bonus: float = 2.0
+    buy_food_penalty: float = 3.0
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -99,6 +100,7 @@ class RewardConfig:
             "housing_need_bonus": self.housing_need_bonus,
             "food_need_bonus": self.food_need_bonus,
             "water_need_bonus": self.water_need_bonus,
+            "buy_food_penalty": self.buy_food_penalty,
         }
 
     @classmethod
