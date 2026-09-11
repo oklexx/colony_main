@@ -92,8 +92,8 @@ class RewardConfig:
     debt_coeff: float = 0.1  # v3 профиль: 0.1 (было 0.02 в v2) — ломает кредитный луп
     home_overflow_penalty: float = 2.0
     housing_need_bonus: float = 3.0
-    food_need_bonus: float = 2.0
-    water_need_bonus: float = 2.0
+    food_need_bonus: float = 0.8   # снижено чтобы не перевешивало buy_food_penalty (3.0)
+    water_need_bonus: float = 0.8
     buy_food_penalty: float = 3.0
 
     def to_dict(self) -> Dict[str, Any]:

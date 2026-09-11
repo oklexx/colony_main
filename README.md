@@ -2,7 +2,7 @@
 
 Обучение агента PPO игре в экономическую стратегию «колония на Сахалине» (1890 год): агент строит здания, manages ресурсы, платит налоги и выживает до 10 000 игровых дней. Среда — C++ (`colony_cpp.pyd` через pybind11), обучение — PyTorch на GPU, есть GUI-дашборд на PySide6.
 
-> **Документы по качеству кода:** [PROJECT_AUDIT_FULL.md](PROJECT_AUDIT_FULL.md) — полный аудит (RL + C++ + evaluator); [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) — пошаговый план исправлений; [FIXES_P0_P3.md](FIXES_P0_P3.md) — код фиксов; [RL_TRAINING_AUDIT.md](RL_TRAINING_AUDIT.md) — аудит RL-обвязки.
+> **Отчёты по проекту:** [REPORT.md](REPORT.md), [REPORT_2026_09.md](REPORT_2026_09.md), [TRAINING_REPORT.md](TRAINING_REPORT.md), [REVIEW_REPORT.md](REVIEW_REPORT.md).
 
 ---
 
@@ -24,7 +24,7 @@ python train.py --steps 2000000 --envs 8 --n-epochs 4 --ent-coef 0.015 \
     --obs-mode flat --eval-freq 500000 --eval-episodes 10 --name my_run
 
 # 5. GUI-дашборд обучения
-python -m train_ui.app
+python run_train_ui2.py
 
 # 6. Посмотреть, как играет чемпион
 python watch_champion.py --model-dir ~/colony_runs/models/my_run
@@ -39,16 +39,16 @@ python watch_champion.py --model-dir ~/colony_runs/models/my_run
 ```
 sakhalin_colony_main/
 ├── train.py                  # CLI-точка входа обучения (аргументы -> Config -> EnvManager -> AsyncTrainer)
-├── auto_trainer.py           # Optuna-поиск гиперпараметров (objective = best_score из meta.json!)
+├── auto_trainer.py           # Optuna-поиск гиперпараметров (objective = best_score из best_model.meta.json)
 ├── training_cycle.py         # Пакетный цикл: 30 прогонов × 10M шагов с отчётом
 ├── observe.py                # Прогон чекпойнта с подробным логом шагов/наблюдений
 ├── watch_champion.py         # Визуальный просмотр игры чемпиона в реальном времени
-├── fix_01..fix_06_*.py       # Исторические одноразовые скрипты-фиксы (архив, не запускать)
+├── sweep2..sweep7_*.py, reward_sweep.py  # Пакетные свипы наград через train_ui2/worker.py
 ├── CMakeLists.txt            # Сборка colony_cpp (.pyd кладётся в python/)
 ├── requirements.txt
 │
 ├── rl/                       # ★ Python-слой обучения
-│   ├── config.py             #   Config + RewardConfig (29 весов наград; ДЕФОЛТЫ = C++ = reward.json)
+│   ├── config.py             #   Config + RewardConfig (42 поля наград; ДЕФОЛТЫ = C++ = reward_v3.json)
 │   ├── actor_critic.py       #   MLP 256×256 для flat-obs (131K параметров)
 │   ├── actor_critic_cnn.py   #   CNN для minimap-obs
 │   ├── actor_critic_hybrid.py#   CNN+MLP для hybrid-obs
@@ -80,15 +80,17 @@ sakhalin_colony_main/
 ├── configs/
 │   ├── bases.json            #   33 здания: цена, время стройки, рабочие, сезоны, потребление/прибыль
 │   ├── events.json           #   Случайные события (аварии на шахтах/нефтянках)
-│   ├── reward.json           #   Канонический полный набор весов наград (= дефолты кода)
+│   ├── reward_v3.json        #   ★ Канонический профиль наград (= дефолты кода)
+│   ├── reward.json, reward_v2.json  # Исторические профили (только явный --reward-config)
 │   └── exp_25/26/27_*.json   #   Экспериментальные наборы гиперпараметров (minimap/hybrid)
 │
-├── train_ui/                 # PySide6-дашборд
-│   ├── app.py, main_window.py, worker.py, protocol.py, models.py
-│   ├── evaluator.py          #   ★ run_eval(): оценка чекпойнта (детерминированная, с нормализацией)
-│   ├── dashboard_widget.py, learning_metrics_widget.py, return_statistics_widget.py
-│   ├── action_loop_widget.py, curriculum_progress_widget.py, kl_status_widget.py
-│   ├── parameter_widget.py, quick_actions_widget.py, dark_theme.qss
+├── train_ui2/                # PySide6-дашборд 2.0 (запуск: python run_train_ui2.py)
+│   ├── app.py, main_window.py  #   Вкладки Обучение/Мониторинг/Награды/Модели/Наблюдение
+│   ├── worker.py             #   Обучение в отдельном процессе (JSONL-протокол)
+│   ├── protocol.py           #   Сообщения ready/log/progress/saved/done/error/command
+│   ├── evaluator.py          #   ★ run_eval(): оценка чекпойнта (argmax, с нормализацией)
+│   ├── parameter_widget.py   #   ParamSpec всех параметров (дефолты = rl/config.py)
+│   ├── controls.py, charts.py, theme.py, models.py
 │
 └── tests/                    # 28 файлов: test_gae, test_ppo_smoke, test_evaluator, test_reward_clip,
                               # test_milestones, test_curriculum, test_normalizer, bench_per_step, ...
@@ -170,7 +172,7 @@ gold, food, water, coal, iron, oil, stone, wood, energy. Здания потре
 ```
 **Маски:** `DAY`/`WEEK` доступны всегда (env.cpp:562-564); BUILD — если разблокировано curriculum, есть деньги, есть участок (BFS с учётом дорог/соседства), для Road — лимит 25.
 
-### 5.2 Наблюдение flat — 209 чисел (env.cpp:461-556)
+### 5.2 Наблюдение flat — 246 чисел (env.cpp, формула в env.h: obs_size())
 Категории (все нормализованы масштабом, затем RunningMeanStd, клип ±10):
 время (год/месяц/день/сезон) → деньги/кредит/население/занятые → 9 ресурсов → жильё/рабочие/свободные/переполнение → флаги и суммы налогов → days_alive → curriculum_stage → **32 счётчика зданий** → статистика износа/стройки/preserve → 9 цен продажи → категории → **9 балансов ресурсов** (производство−потребление) → 32 флага простоя по типам.
 
@@ -181,47 +183,53 @@ gold, food, water, coal, iron, oil, stone, wood, energy. Здания потре
 
 ## 6. Система наград — ПОЛНАЯ карта
 
-### 6.1 Конфигурируемые веса (RewardConfig: rl/config.py, src/env.h:21-61, configs/reward.json — все три источника СОГЛАСОВАНЫ)
+### 6.1 Конфигурируемые веса (RewardConfig: rl/config.py, src/env.h, configs/reward_v3.json — все источники СОГЛАСОВАНЫ; номера строк env.cpp приблизительные)
 
 | Вес | Дефолт | Где применяется (env.cpp) | Формула |
 |---|---|---|---|
-| build_bonus | 1.0 | :802 | `1 + log2(1 + ypv/1000)` за постройку |
+| build_bonus | 2.0 | step() | `2 + log2(1 + ypv/1000)` за постройку |
 | build_cost_penalty | 0.0001 | :804 | `−0.0001 × цена` |
-| diversity_bonus | 8.0 | :808 | за каждый новый тип здания |
+| diversity_bonus | 3.0 | step() | за каждый новый тип здания |
 | proximity_bonus | 0.5 | :824 | рядом с ресурсом |
 | provider/prereq бонусы | (вкл/выкл флагом) | :828-835 | за обеспечение цепочек |
 | chain_bonus | 1.0 | :1037 | `× log2(1 + prod/1000)` потребителю |
-| chain_daily | 0.5 | :1040 | ежедневно за активную цепочку |
+| chain_daily | 0.5 | step() | ежедневно за активную цепочку |
+| first_extraction_bonus | 3.0 | step() | разово за первую добычу типа ресурса (×вес) |
+| extraction_daily | 0.3 | step() | ежедневно за активную добычу (×вес×насыщение) |
+| need_fill_bonus | 1.5 | step() | за производителя «голодающего» ресурса |
+| loan_penalty | 0.5 | step() | стоимость TAKE_LOAN (вычитается) |
+| preserve_penalty | 0.3 | step() | плата preserve/unpreserve (вычитается) |
+| buy_food_penalty | 3.0 | step() | штраф за BUY_FOOD (вычитается) |
 | daily_income | 1.0 | :1045 | `× log1p(daily_total/100)` |
-| novelty | 15.0 | :1061 | первый ЗАРАБОТАВШИЙอาคาร нового типа |
-| sale_bonus | 0.2 | :892 | `× log1p(sale/100)` |
+| novelty | 5.0 | step() | первый ЗАРАБОТАВШИЙ нового типа |
+| sale_bonus | 0.5 | step() | `× log1p(sale/100)` |
 | tax_daily_bonus | 0.3 | :726 | день без налогов |
-| error_penalty | −1.0 | ~15 мест | любое неудачное действие |
+| error_penalty | −2.0 | ~15 мест | любое неудачное действие |
 | demolish_penalty | −3.0 | :861 | за снос |
-| manual_tax_penalty | −0.5 | :909 | ⚠ знак инвертирован багом N1 — см. аудит |
+| manual_tax_penalty | −0.5 | step() | ручная уплата налога (штраф) |
 | survival_bonus | 0.0 | :1106 | пассивное выживание (выключено) |
-| survival_coeff | 0.01 | :936 | `× Δnet_worth` за день |
-| idle_build_penalty | −10.0 | :1107 | каждые 3 действия без стройки |
+| survival_coeff | 0.0 | step() | `× Δnet_worth` (выключено) |
+| idle_build_penalty | −2.0 | step() | простой без стройки дольше 7 дней |
 | milestone_* | 30/2/2/5 | :951 | каждые 5 баз / 50 людей / 100 дней / год |
 | game_over_penalty | 10.0 | :1095-1101 | `rew −= 10` при game over |
 | clip_reward_min/max | ±50 | :1146 | клип сырой награды |
 
-### 6.2 Хардкоженные веса (env.cpp, НЕ в конфиге — кандидаты на вынос, N3)
-Налог без денег −5 (:716,722) · долг −0.02×credit/1000 (:940) · рождение/прибытие +1 (:941) · **смерть −20** (:942) · потеря базы −30 (:943) · переполнение жилья −2 (:944) · бонус дома при нехватке жилья 3×log1p (:973) · бонус фермы/канала при нехватке еды/воды 2×log1p (:985,998).
+### 6.2 Бывшие хардкоды — теперь настраиваются (RewardConfig)
+Неуплата налога −5/день (tax_fail_penalty) · долг −0.1×credit/1000 (debt_coeff) · рождение/прибытие +1 (born_bonus) · **смерть −20** (death_penalty) · потеря базы −30 (base_lost_penalty) · переполнение жилья −2 (home_overflow_penalty) · жильё при нехватке 3×log1p (housing_need_bonus) · еда/вода от нехватки 2×log1p (food/water_need_bonus).
 
 ### 6.3 Пайплайн награды
 ```
 сырая награда (таблицы выше) → клип ±50 (env.cpp:1146)
 → rew_rms_.normalize_reward, клип ±10 (env.cpp:1303-1310, SB3-конвенция)
-→ RolloutBuffer → GAE (gamma=0.995, lambda=0.98 по дефолту)
+→ RolloutBuffer → GAE (gamma=0.999, lambda=0.98 по дефолту)
 ```
-Настройка весов: `configs/reward.json` → `train.py --reward-config configs/reward.json` (всегда передавать ПОЛНЫЙ JSON).
+Настройка весов: дефолт — `configs/reward_v3.json` (подхватывается автоматически); кастомный — `train.py --reward-config <файл>` (можно частичный: отсутствующие ключи берутся из v3).
 
 ---
 
 ## 7. Curriculum (rl/env_manager.py:280-345)
 
-Стадия задаёт список разрешённых построек (маски в C++): **0 = все 32** · 1 = 9 базовых (дорога/дома/ферма/сад/канал) · 2 = +Puerperal/Refinery · 3 = +промышленность · 4 = +продвинутые · 5 = всё. Переключение: `--curriculum-schedule '200000:1,400000:2'` (внимание: сужение пространства по ходу обучения — см. находку B4 аудита; для расширения стартовать с `--curriculum-stage 1` и вести расписание к 0).
+Стадия задаёт список разблокированных построек (маски в C++, накопительно): **0 = все 32** · 1 = 14 базовых (дома/фермы/еда/вода/Refinery/Puerperal/Road…) · 2 = +11 (Sawmill/шахты/энергия…) · 3 = +7 (Big*/Atom/SuperHouse) = все 32. Стадий 4–5 в C++ нет (эквивалентны 3). Переключение: `--curriculum-schedule '200000:1,400000:2'`.
 
 ---
 
@@ -232,9 +240,9 @@ gold, food, water, coal, iron, oil, stone, wood, energy. Здания потре
 |---|---|---|
 | n_envs / n_steps | 8 / 4096 | буфер = 32 768 шагов (flat ≈ 35 МБ VRAM) |
 | batch_size / n_epochs | 8192 / 10 | 10 эпох — много; рекомендуется 4–6 + target_kl |
-| learning_rate | 3e-4 | ⚠ decay не работал (B7) — см. план фиксов |
-| gamma / gae_lambda | 0.995 / 0.98 | |
-| ent_coef / vf_coef | 0.05 / 0.5 | |
+| learning_rate | 3e-4 | cosine decay до ~10% (LambdaLR в PPO) |
+| gamma / gae_lambda | 0.999 / 0.98 | |
+| ent_coef / vf_coef | 0.01 / 0.5 | |
 | use_amp / amp_dtype | true / bfloat16 | для MLP 131K выгоды нет, можно off |
 | eval_freq / eval_episodes | 100 000 / 20 | рекомендуется 500 000 / 10×3 сида |
 
@@ -245,29 +253,29 @@ gold, food, water, coal, iron, oil, stone, wood, energy. Здания потре
 checkpoint_<steps>.pt          # модель + optimizer (+ .norm.json рядом)
 final_model.pt / .norm.json
 best_model.pt / .norm.json / .meta.json   # чемпион по composite score
-_eval_temp.pt                  # временный (удаляется)
-normalization.json             # ⚠ не создавался до фикса B2 — eval шёл без нормализации
+_eval/_eval_temp.pt            # временный (удаляется)
+normalization.json             # пишется при старте и каждом чекпойнте
 ```
 
-### 8.3 Оценка и выбор чемпиона (rl/async_trainer.py::_eval → train_ui/evaluator.py::run_eval)
+### 8.3 Оценка и выбор чемпиона (rl/async_trainer.py::_eval → train_ui2/evaluator.py::run_eval)
 * Политика грузится из чекпойнта (auto-detect MLP/CNN/Hybrid), **детерминированный argmax** с масками; нормализация obs загружается из файла и **замораживается** (`set_update(False)`).
-* `episodes × max_days=10000`, сиды `seed+ep`; метрики: days/people/bases/return (медиана по эпизодам).
-* Score (async_trainer.py:376): `days×0.4 + bases×3.0 + people×0.2 + return×1e-4` — ⚠ days даёт ~76% (F3, фикс в плане).
-* Пороги: `bases ≥ 5` и `return ≥ 0`; при улучшении score — сохранение best_model + meta.
-* `auto_trainer.py` (Optuna) использует best_score как objective — корректен только после фиксов B2/F3/N8.
+* `episodes × max_days=10000`, сиды `seed+500000+ep`; метрики: days/people/bases/return (медиана по эпизодам и сидам).
+* Score: `days×0.10 + bases×1.0 + people×0.10 + max(0,return)×1e-4 − штраф за дисперсию` (веса — `eval_score_weights`).
+* Пороги: медиана `bases ≥ 5` (и p25 ≥ 70% от порога) и `days ≥ 730`; при улучшении score — сохранение best_model + meta. В конце обучения — турнир всех чекпойнтов.
+* `auto_trainer.py` (Optuna) использует best_score как objective (fallback: best_reward).
 
 ---
 
-## 9. UI-дашборд (train_ui/)
+## 9. UI-дашборд (train_ui2/)
 
-`python -m train_ui.app` → главное окно (main_window.py) с воркером обучения (worker.py, протокол команд protocol.py: boost_entropy / pause / resume / stop / reset_curriculum). Виджеты: dashboard (основные метрики), learning_metrics (loss/KL/entropy), return_statistics (avg/median/min/max), action_loop (частоты действий), curriculum_progress, kl_status, parameter (ParamSpec из дефолтов rl.config — единый источник).
+`python run_train_ui2.py` → главное окно (вкладки Обучение/Мониторинг/Награды/Модели/Наблюдение). Обучение идёт в отдельном процессе `train_ui2/worker.py`, протокол — JSONL (protocol.py: progress/log/saved/done/error; команды boost_entropy / pause_training / resume_training / stop_training / reset_curriculum). Все параметры — ParamSpec из дефолтов rl/config.py (единый источник); награды редактируются на вкладке «Награды» (группы + абляции disable_*).
 
 ---
 
 ## 10. Тесты
 
 ```bash
-python -m pytest                      # Запуск всех 218 тестов (все проходят успешно)
+python -m pytest                      # Все тесты (полный прогон требует torch + собранный colony_cpp.pyd)
 python tests/test_gae.py            # GAE против референса
 python tests/test_ppo_smoke.py      # PPO update без падений
 python tests/test_evaluator.py      # run_eval end-to-end
@@ -281,7 +289,7 @@ python tests/bench_per_step.py      # бенчмарк шага среды
 
 ---
 
-## 11. Известные проблемы (подробности и фиксы — в отчётах)
+## 11. Известные проблемы (историческая таблица старых аудитов — файлы PROJECT_AUDIT_FULL.md и др. в репозиторий не входят)
 
 | ID | Кратко | Статус |
 |---|---|---|
@@ -302,14 +310,14 @@ python tests/bench_per_step.py      # бенчмарк шага среды
 
 | Хочу… | Файл |
 |---|---|
-| поменять веса наград | configs/reward.json → rl/config.py (датакласс) → src/env.h:21 (C++) — держать синхронно |
+| поменять веса наград | configs/reward_v3.json → rl/config.py (датакласс) → include/colony/env.h (C++) — держать синхронно |
 | добавить здание | configs/bases.json (+ порядок = индекс действия!) |
 | понять, за что начислена награда | src/env.cpp:700-1150 (step), лог STEP с компонентами (:1112) |
 | изменить наблюдение | src/env.cpp:461 (obs) / :651 (minimap) + пересборка |
 | изменить гиперпараметры | rl/config.py (дефолты) / CLI train.py / configs/exp_*.json |
-| логика eval/чемпиона | rl/async_trainer.py:316 (_eval) + train_ui/evaluator.py |
+| логика eval/чемпиона | rl/async_trainer.py (_eval) + train_ui2/evaluator.py |
 | маски действий | src/env.cpp:557 (action_mask), python/cpp_vecenv.py:184 |
 | GAE/буфер | rl/rollout_buffer.py (compute_gae) |
-| константы игры | src/constants.h |
+| константы игры | include/colony/constants.h |
 | сиды/детерминизм | python/cpp_vecenv.py:140, src/rng.cpp |
-| почему обучение нестабильно | PROJECT_AUDIT_FULL.md → IMPLEMENTATION_PLAN.md |
+| почему обучение нестабильно | REPORT.md / REPORT_2026_09.md |

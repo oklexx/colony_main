@@ -1032,7 +1032,8 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
                 const int build_idx = action - A_BUILD0;
                 const std::string& build_id = build_ids_[build_idx];
                 if (build_id == "Farm" || build_id == "Garden" || build_id == "BigFarm") {
-                    double food_bonus = cfg_.food_need_bonus * std::log1p((double)(days_since_last_build_) / 5.0);
+                    double food_shortage = std::max<double>(0.0, 200.0 - (double)food);
+                    double food_bonus = cfg_.food_need_bonus * std::log1p(food_shortage / 10.0);
                     rew += food_bonus;
                     c_build += food_bonus;
                 }
@@ -1045,7 +1046,8 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
                 const int build_idx = action - A_BUILD0;
                 const std::string& build_id = build_ids_[build_idx];
                 if (build_id == "WaterChannel") {
-                    double water_bonus = cfg_.water_need_bonus * std::log1p((double)(days_since_last_build_) / 5.0);
+                    double water_shortage = std::max<double>(0.0, 100.0 - (double)water);
+                    double water_bonus = cfg_.water_need_bonus * std::log1p(water_shortage / 10.0);
                     rew += water_bonus;
                     c_build += water_bonus;
                 }
