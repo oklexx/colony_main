@@ -54,6 +54,8 @@ class CppVecEnv(VecEnv):
         # Reward configuration
         rc = colony_cpp.RewardConfig()
         _REWARD_KEYS = ("build_bonus", "chain_bonus", "chain_daily",
+                        "first_extraction_bonus", "extraction_daily",
+                        "need_fill_bonus", "loan_penalty",
                         "novelty", "daily_income", "sale_bonus", "tax_daily_bonus",
                         "survival_bonus", "game_over_penalty", "diversity_bonus",
                         "error_penalty", "preserve_penalty", "demolish_penalty",

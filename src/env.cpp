@@ -215,6 +215,15 @@ void ColonyEnvCpp::set_step_log(const std::string& path) {
                 catalog_by_season_[s][i * 4 + 3] = season_mask[s][i];
             }
         }
+
+        std::vector<int> n_consumers(SUNDUK_SIZE, 0);
+        for (int i = 0; i < n_build_; i++)
+            for (int j = 0; j < SUNDUK_SIZE; j++)
+                if (build_data_[i]->consume[j] > 0)
+                    n_consumers[j]++;
+        extract_weight_.resize(SUNDUK_SIZE);
+        for (int j = 0; j < SUNDUK_SIZE; j++)
+            extract_weight_[j] = std::min(1.0, 0.25 * (double)n_consumers[j]);
     }
 
 void ColonyEnvCpp::reset(int64_t seed) {
@@ -235,6 +244,7 @@ void ColonyEnvCpp::reset(int64_t seed) {
     building_before_.clear();
     chain_done_.clear();
     first_working_.clear();
+    extracted_.clear();
 }
 
 std::vector<Season> ColonyEnvCpp::step_seasons(int y, int m, int d, int n_days) const {
@@ -718,6 +728,7 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
     double c_error = 0, c_tax = 0, c_tax_bonus = 0, c_novelty = 0, c_daily = 0, c_chain = 0;
     double c_milestone = 0, c_sale = 0, c_preserve = 0, c_manual_tax = 0, c_gameover = 0;
     double c_survival = 0, c_idle = 0;
+    double c_extract = 0, c_loan = 0;  // v3
     std::string action_name = "?";
 
     // Update episode metrics peaks
@@ -834,6 +845,20 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
                 double prb = prerequisite_bonus(g, *d, build_data_);
                 rew += prb; c_prereq += prb;
             }
+            if (!is_road && cfg_.need_fill_bonus > 0.0) {
+                double nf = 0.0;
+                for (int r = 0; r < SUNDUK_SIZE && nf == 0.0; r++) {
+                    if (d->profit[r] <= 0 || extract_weight_[r] <= 0.0) continue;
+                    for (const Base& bb : g.bases) {
+                        if (!bb.need_sunduk) continue;
+                        if (bb.data->consume[r] > 0 && g.sunduk[r] < bb.data->consume[r]) {
+                            nf = cfg_.need_fill_bonus * extract_weight_[r];
+                            break;
+                        }
+                    }
+                }
+                if (nf > 0.0) { rew += nf; c_extract += nf; }
+            }
             invalidate_net_worth();
         }
     } else if (action == manager_base_ + 0) {
@@ -869,6 +894,7 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
         }
         if (best == nullptr || !g.preserve(best->x, best->y).first) { rew += cfg_.error_penalty; c_error += cfg_.error_penalty; }
         else {
+            rew -= cfg_.preserve_penalty; c_preserve -= cfg_.preserve_penalty;
             invalidate_net_worth();
         }
     } else if (action == manager_base_ + 5) {
@@ -880,6 +906,7 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
         if (first_preserved == nullptr ||
             !g.preserve(first_preserved->x, first_preserved->y).first) { rew += cfg_.error_penalty; c_error += cfg_.error_penalty; }
         else {
+            rew -= cfg_.preserve_penalty; c_preserve -= cfg_.preserve_penalty;
             invalidate_net_worth();
         }
     } else if (action == manager_base_ + 6) {
@@ -902,6 +929,9 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
     } else if (action == manager_base_ + 8) {
         action_name = "MGR:credit_take";
         if (g.credit >= 100000 || !g.bank_take(50000).first) { rew += cfg_.error_penalty; c_error += cfg_.error_penalty; }
+        else {
+            rew -= cfg_.loan_penalty; c_loan -= cfg_.loan_penalty;
+        }
     } else if (action == manager_base_ + 9) {
         action_name = "MGR:credit_give";
         int64_t give = std::min<int64_t>(50000, g.credit);
@@ -1061,6 +1091,44 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
             }
         }
     }
+
+    std::vector<char> ever_produced(SUNDUK_SIZE, 0);
+    std::vector<int> day_producers(SUNDUK_SIZE, 0);
+    // Note: re-evaluating production over seasons for first_extraction / extraction_daily
+    for (Season season : seasons) {
+        std::vector<std::vector<std::pair<int, int>>> producers(SUNDUK_SIZE);
+        for (const Base& b : g.bases) {
+            if (b.build_days == 0 && !b.preserved && b.state_empty() &&
+                b.data->season_works(season)) {
+                auto pos = std::make_pair(b.x, b.y);
+                const BaseData& d = *b.data;
+                for (int j = 0; j < SUNDUK_SIZE; j++) {
+                    if (d.profit[j] > 0) producers[j].push_back(pos);
+                }
+            }
+        }
+        for (int j = 0; j < SUNDUK_SIZE; j++) {
+            if (!producers[j].empty()) ever_produced[j] = 1;
+            day_producers[j] = (int)producers[j].size();
+        }
+    }
+
+    if (cfg_.first_extraction_bonus > 0.0 || cfg_.extraction_daily > 0.0) {
+        for (int r = 0; r < SUNDUK_SIZE; r++) {
+            double w = extract_weight_[r];
+            if (w <= 0.0) continue;
+            if (ever_produced[r] && !extracted_.count(r)) {
+                extracted_.insert(r);
+                double b = cfg_.first_extraction_bonus * w;
+                rew += b; c_extract += b;
+            }
+            if (cfg_.extraction_daily > 0.0 && day_producers[r] > 0) {
+                double sat = std::min(1.0, (double)day_producers[r] / 3.0);
+                double b = cfg_.extraction_daily * w * sat * (double)seasons.size();
+                rew += b; c_extract += b;
+            }
+        }
+    }
     if (!cfg_.disable_daily_income) {
         double di = cfg_.daily_income * std::log1p(daily_total / 100.0);
         rew += di; c_daily += di;
@@ -1155,7 +1223,7 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
           << " pres=" << f2(c_preserve) << " sale=" << f2(c_sale) << " mtax=" << f2(c_manual_tax)
           << " chain=" << f2(c_chain) << " daily=" << f2(c_daily) << " nov=" << f2(c_novelty)
           << " mile=" << f2(c_milestone) << " surv=" << f2(c_survival) << " idle=" << f2(c_idle)
-          << " gover=" << f2(c_gameover)
+          << " gover=" << f2(c_gameover) << " extr=" << f2(c_extract) << " loan=" << f2(c_loan)
           << " | nw=" << net_worth() << " nw_delta=" << f2(net_worth() - net0)
           << " pop=" << g.people << " bases=" << (int)g.bases.size()
           << " money=" << g.money << " credit=" << g.credit << " day=" << g.days_alive
@@ -1183,6 +1251,7 @@ ColonyEnvCpp::StepOut ColonyEnvCpp::step(int action) {
 
     // Fill episode metrics
     episode_metrics_.total_reward = ep_return_;
+    episode_metrics_.reached_resources = (int64_t)extracted_.size();
     episode_metrics_.days_survived = g.days_alive;
     episode_metrics_.net_worth = net_worth();
     if (g.people > episode_metrics_.population_peak)

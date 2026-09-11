@@ -1,21 +1,57 @@
 from __future__ import annotations
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Единственный канонический профиль наград по умолчанию.
+#
+#   configs/reward_v3.json  —  ОДИН источник значений по умолчанию для
+#   наград во ВСЕХ местах: UI (дефолт полей «Награды»), train.py (CLI без
+#   --reward-config), worker (отсутствие ключа в конфиге), C++ gui-бинарь.
+#
+# Дефолты датакласса RewardConfig НИЖЕ зеркалят этот профиль (keep in sync).
+# Если профиль-файл существует и валиден — он побеждает (load_default_reward_config).
+# reward.json / reward_v2.json — исторические профили старых экспериментов,
+# автозагрузка их НИГДЕ не происходит (только явный --reward-config).
+# ─────────────────────────────────────────────────────────────────────────────
+
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+DEFAULT_REWARD_PROFILE = "reward_v3.json"
+
+
+def default_reward_profile_path() -> Optional[Path]:
+    """Путь к каноническому профилю наград (или None, если файла нет)."""
+    p = Path(__file__).resolve().parent.parent / "configs" / DEFAULT_REWARD_PROFILE
+    return p if p.exists() else None
 
 
 @dataclass
 class RewardConfig:
-    # ─── Defaults = reward_v2 profile (see configs/reward_v2.json). ───
+    # ─── Defaults = зеркало канонического профиля configs/reward_v3.json ───
+    # (единый источник — профиль-файл; при его наличии load_default_reward_config
+    #  отдаёт его значения, а отсюда берутся только «запасные» дефолты).
     # v1 values (build 1.0 / novelty 15 / diversity 8 / idle -10@3d /
     # survival_coeff 0.01) let the agent drain cash into one-off bonuses and
     # die at the first annual tax (day 365) — see REPORT_2026_09.md §2.
     # --- base bonuses ---
     build_bonus: float = 2.0
     chain_bonus: float = 1.0
-    chain_daily: float = 1.0
+    chain_daily: float = 0.5
+    # --- v3: добыча ресурсов / стоимость действий (см. ANALYSIS_TRAINING_REPORT.md §5-P1) ---
+    # first_extraction_bonus: разово за эпизод, первый раз добыт тип ресурса
+    #   (×вес ресурса = min(1, 0.25*число типов-потребителей); еда/золото = 0)
+    # extraction_daily: ежедневно за ресурс с активной добычей
+    #   (×вес×насыщение: 1 производитель = 100%, 3+ = всё те же 100%)
+    # need_fill_bonus: бонус за постройку производителя ресурса, которого
+    #   прямо сейчас «голодает» работающее здание
+    # loan_penalty: стоимость успешного TAKE_LOAN (ломает кредитный луп)
+    # preserve_penalty ниже поднят до 0.3: PRESERVE/UNPRESERVE становятся
+    #   строго хуже «просто прожить день» (ключ раньше не применялся в C++)
+    first_extraction_bonus: float = 3.0
+    extraction_daily: float = 0.3
+    need_fill_bonus: float = 1.5
+    loan_penalty: float = 0.5
     novelty: float = 5.0
     daily_income: float = 1.0
     sale_bonus: float = 0.5
@@ -24,8 +60,10 @@ class RewardConfig:
     game_over_penalty: float = 10.0
     diversity_bonus: float = 3.0
     # --- penalties for errors / special actions ---
-    error_penalty: float = -2.0
-    preserve_penalty: float = 0.0
+    error_penalty: float = -2.0  # v3 профиль: −2.0 (было −1.0 в v2)
+    # v3: preserve/unpreserve теперь реально штрафуется (C++ применяет ключ):
+    # «жонглирование» сохранением строго дороже, чем просто прожить день
+    preserve_penalty: float = 0.3
     demolish_penalty: float = -3.0
     manual_tax_penalty: float = -0.5
     build_cost_penalty: float = 0.0001
@@ -48,13 +86,13 @@ class RewardConfig:
     disable_provider_bonus: bool = False
     # --- hardcoded weights (from env.cpp, now configurable) ---
     tax_fail_penalty: float = 5.0
-    death_penalty: float = 30.0
+    death_penalty: float = 20.0
     base_lost_penalty: float = 30.0
     born_bonus: float = 1.0
-    debt_coeff: float = 0.1
+    debt_coeff: float = 0.1  # v3 профиль: 0.1 (было 0.02 в v2) — ломает кредитный луп
     home_overflow_penalty: float = 2.0
     housing_need_bonus: float = 3.0
-    food_need_bonus: float = 0.0
+    food_need_bonus: float = 2.0
     water_need_bonus: float = 2.0
     buy_food_penalty: float = 3.0
 
@@ -63,6 +101,10 @@ class RewardConfig:
             "build_bonus": self.build_bonus,
             "chain_bonus": self.chain_bonus,
             "chain_daily": self.chain_daily,
+            "first_extraction_bonus": self.first_extraction_bonus,
+            "extraction_daily": self.extraction_daily,
+            "need_fill_bonus": self.need_fill_bonus,
+            "loan_penalty": self.loan_penalty,
             "novelty": self.novelty,
             "daily_income": self.daily_income,
             "sale_bonus": self.sale_bonus,
@@ -104,15 +146,19 @@ class RewardConfig:
         }
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "RewardConfig":
-        """Дефолты — только из датакласса (= reward_v2 профиль).
-        JSON переопределяет лишь явно заданные ключи.
+    def from_dict(cls, d: Dict[str, Any], base: Optional["RewardConfig"] = None) -> "RewardConfig":
+        """JSON переопределяет лишь явно заданные ключи.
+
+        База (дефолты для отсутствующих ключей) — канонический профиль
+        configs/reward_v3.json (load_default_reward_config); передаётся
+        аргументом base, чтобы избежать рекурсии при загрузке самого профиля.
 
         Принимает и вложенный формат (d["reward"]) — тогда берётся он.
         """
         if isinstance(d.get("reward"), dict):
             d = d["reward"]
-        base = cls()
+        if base is None:
+            base = load_default_reward_config()
         for k, v in d.items():
             if not hasattr(base, k):
                 continue
@@ -120,6 +166,28 @@ class RewardConfig:
                 v = int(v)
             setattr(base, k, v)
         return base
+
+
+def load_default_reward_config() -> "RewardConfig":
+    """Канонический профиль наград по умолчанию.
+
+    Возвращает RewardConfig, заполненный из configs/reward_v3.json
+    (единственный источник дефолтов). Если файла нет или он невалиден —
+    дефолты датакласса (зеркало того же профиля).
+
+    Используется везде, где нужен «дефолт наград»: UI, train.py без
+    --reward-config, RewardConfig.from_dict при отсутствующих ключах.
+    """
+    p = default_reward_profile_path()
+    if p is not None:
+        try:
+            with open(p, encoding="utf-8") as f:
+                d = json.load(f)
+            if isinstance(d, dict) and d:
+                return RewardConfig.from_dict(d, base=RewardConfig())
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            pass
+    return RewardConfig()
 
 
 @dataclass

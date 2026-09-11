@@ -20,7 +20,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "python"))
 
-from rl.config import Config, RewardConfig
+from rl.config import (
+    Config, RewardConfig, load_default_reward_config, default_reward_profile_path,
+)
 from rl.env_manager import EnvManager
 from rl.async_trainer import AsyncTrainer
 
@@ -71,6 +73,12 @@ def parse_args():
     p.add_argument("--model-dir", type=str, default="")
     p.add_argument("--name", type=str, default="colony_run")
     p.add_argument("--reward-config", type=str, default="", help="Path to reward JSON")
+    p.add_argument("--resume-model", type=str, default="",
+                   help="Model .pt to load (fine-tuning). Also loads optimizer state; "
+                        "normalization is taken from <model>.norm.json / normalization.json "
+                        "next to the checkpoint.")
+    p.add_argument("--resume-lr", type=float, default=0.0,
+                   help="Override LR for fine-tuning (0 = keep --lr). Recommended: 10x lower than original.")
     p.add_argument("--disable-net-worth", action="store_true", default=None)
     p.add_argument("--disable-daily-income", action="store_true", default=None)
     p.add_argument("--log-actions", action="store_true",
@@ -96,15 +104,22 @@ def main():
         print(f"[Config] VRAM: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
         print(f"[Config] bf16: {torch.cuda.is_bf16_supported()}")
 
-    reward = RewardConfig()
-    if args.disable_net_worth is not None:
-        reward.disable_net_worth = args.disable_net_worth
-    if args.disable_daily_income is not None:
-        reward.disable_daily_income = args.disable_daily_income
     if args.reward_config:
         with open(args.reward_config) as f:
             rd = json.load(f)
         reward = RewardConfig.from_dict(rd)
+        print(f"[Config] Reward: {args.reward_config}")
+    else:
+        reward = load_default_reward_config()
+        _prof = default_reward_profile_path()
+        if _prof is not None:
+            print(f"[Config] Reward: default profile {_prof}")
+        else:
+            print("[Config] Reward: rl.config defaults (profile reward_v3.json not found)")
+    if args.disable_net_worth is not None:
+        reward.disable_net_worth = args.disable_net_worth
+    if args.disable_daily_income is not None:
+        reward.disable_daily_income = args.disable_daily_income
 
     cfg = Config(
         map_size=args.map_size,
@@ -166,6 +181,38 @@ def main():
     em = EnvManager(cfg, device)
     t_env = time.time() - t0
     print(f"[Env] Created in {t_env:.1f}s (obs={em.obs_size}, actions={em.n_actions})")
+
+    # ── Fine-tuning (resume) ─────────────────────────────────────────────
+    if args.resume_model:
+        ckpt = torch.load(args.resume_model, map_location=device, weights_only=False)
+        state = ckpt.get("model_state", ckpt)
+        clean = {k.replace("_orig_mod.", ""): v for k, v in state.items()}
+        em.model.load_state_dict(clean)
+        if "optimizer_state" in ckpt:
+            try:
+                em.ppo.optimizer.load_state_dict(ckpt["optimizer_state"])
+                print("[Resume] optimizer state loaded")
+            except Exception as e:
+                print(f"[Resume] optimizer state NOT loaded: {e}")
+        if args.resume_lr > 0:
+            em.ppo.lr = args.resume_lr
+            for g in em.ppo.optimizer.param_groups:
+                g["lr"] = args.resume_lr
+        norm_candidates = [
+            Path(args.resume_model).with_suffix(".norm.json"),
+            Path(args.resume_model).parent / "normalization.json",
+        ]
+        norm_loaded = False
+        for cand in norm_candidates:
+            if cand.exists():
+                em.env.venv.load_normalization(str(cand))
+                print(f"[Resume] normalization loaded from {cand}")
+                norm_loaded = True
+                break
+        if not norm_loaded:
+            print("[Resume] WARNING: normalization file not found — the model will "
+                  "see UNNORMALIZED observations; fine-tuning will be incorrect.")
+        print(f"[Resume] weights loaded from {args.resume_model}")
 
     log_dir = Path(cfg.log_dir) / args.name
     log_dir.mkdir(parents=True, exist_ok=True)

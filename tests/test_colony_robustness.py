@@ -8,7 +8,7 @@ from rl.config import RewardConfig, Config
 def test_reward_config_completeness():
     cfg = RewardConfig()
     d = cfg.to_dict()
-    assert len(d) == 37, f"Expected 37 reward keys, got {len(d)}"
+    assert len(d) == 42, f"Expected 42 reward keys, got {len(d)}"
 
 
 def test_curriculum_stage_progression():

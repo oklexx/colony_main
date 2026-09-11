@@ -19,13 +19,22 @@ namespace colony {
 
 // Коэффициенты наград (аналог env-переменных COLONY_* в rl/env.py).
 struct RewardConfig {
-    // Defaults = reward_v2 profile (keep in sync with rl/config.py RewardConfig
-    // and configs/reward_v2.json). Python always passes every field explicitly,
-    // so these only matter for the console/GUI binaries and tests.
+    // Defaults = ЗЕРКАЛО канонического профиля configs/reward_v3.json
+    // (keep in sync с rl/config.py RewardConfig и configs/reward_v3.json).
+    // Python всегда передаёт каждое поле явно, поэтому эти дефолты важны
+    // только для console/GUI-бинарей и тестов.
     // --- base bonuses ---
     double build_bonus = 2.0;       // base multiplier: reward = build_bonus + log2(1 + ypv/1000)
     double chain_bonus = 1.0;       // chain multiplier: reward = chain_bonus * log2(1 + ypv/1000) per consumer
     double chain_daily = 0.5;       // daily bonus for active chain
+    // --- v3: бонус за ДОБЫЧУ ресурса (событие производства, не уровень склада) ---
+    // Вес ресурса = min(1, 0.25 * число типов зданий-потребителей ресурса):
+    // промежуточные ресурсы (вода/дерево/нефть/уголь) ценятся, «мёртвый груз»
+    // (еда/золото — в порту их никто не потребляет) вес 0 → спам-фермы не выгодно.
+    double first_extraction_bonus = 3.0;  // разово за эпизод: первый раз добыт тип ресурса (×вес)
+    double extraction_daily = 0.3;        // ежедневно за ресурс с активной добычей (×вес×насыщение: 1 прод.=1.0/3)
+    double need_fill_bonus = 1.5;         // бонус за постройку производителя ресурса, которого «голодает» здание
+    double loan_penalty = 0.5;            // стоимость успешного TAKE_LOAN (ломает кредитный луп)
     double novelty = 5.0;           // bonus for first working of new building type
     double daily_income = 1.0;      // income multiplier: reward = daily_income * log1p(daily_total / 100)
     double sale_bonus = 0.5;        // sale multiplier: reward = sale_bonus * log1p(sale_value / 100)
@@ -35,8 +44,8 @@ struct RewardConfig {
     double diversity_bonus = 3.0;    // bonus for each unique building type built (after first)
 
     // --- penalties for errors / special actions ---
-    double error_penalty = -1.0;      // penalty for failed action (reduced to prevent action-avoidance
-    double preserve_penalty = 0.0;    // preserve/unpreserve is free (matches game logic)
+    double error_penalty = -2.0;      // v3 профиль (was -1.0 in v2)
+    double preserve_penalty = 0.3;    // v3 профиль: preserve/unpreserve стоит 0.3 (в v2 был мёртвым ключом)
     double demolish_penalty = -3.0;   // penalty for successful DEMOLISH (new: discourage destroying buildings)
     double manual_tax_penalty = -0.5; // cost of manual tax payment
     double build_cost_penalty = 0.0001; // fraction of build cost (subtraction)
@@ -67,10 +76,10 @@ struct RewardConfig {
     double death_penalty = 20.0;
     double base_lost_penalty = 30.0;
     double born_bonus = 1.0;
-    double debt_coeff = 0.02;
+    double debt_coeff = 0.1;          // v3 профиль (was 0.02 in v2) — ломает кредитный луп
     double home_overflow_penalty = 2.0;
     double housing_need_bonus = 3.0;
-    double food_need_bonus = 0.0;   // 0: люди не едят (еда не нужна) — не стимулировать фермы
+    double food_need_bonus = 2.0;   // v3 профиль: 2.0
     double water_need_bonus = 2.0;
     double buy_food_penalty = 3.0;  // - за BUY_FOOD: еда не нужна, покупка = слив денег
 };
@@ -238,6 +247,10 @@ private:
     std::unordered_set<int64_t> building_before_;
     std::unordered_set<std::pair<std::string, int>, ChainKeyHash> chain_done_;
     std::unordered_set<std::string> first_working_;
+    // v3: типы ресурсов, уже «добытые» в этом эпизоде (для first_extraction_bonus)
+    std::unordered_set<int> extracted_;
+    // v3: вес ресурса для бонусов добычи (min(1, 0.25*n_consumer_types))
+    std::vector<double> extract_weight_;
     EpisodeMetrics episode_metrics_;
     std::unordered_set<std::string> unique_build_ids_;
     mutable std::pair<int, int> cell_cache_;

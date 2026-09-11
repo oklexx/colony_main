@@ -834,6 +834,10 @@ int main(int argc, char* argv[]) {
             if (rj.contains("novelty")) rc.novelty = rj["novelty"].get<double>();
             if (rj.contains("chain_bonus")) rc.chain_bonus = rj["chain_bonus"].get<double>();
             if (rj.contains("chain_daily")) rc.chain_daily = rj["chain_daily"].get<double>();
+            if (rj.contains("first_extraction_bonus")) rc.first_extraction_bonus = rj["first_extraction_bonus"].get<double>();
+            if (rj.contains("extraction_daily")) rc.extraction_daily = rj["extraction_daily"].get<double>();
+            if (rj.contains("need_fill_bonus")) rc.need_fill_bonus = rj["need_fill_bonus"].get<double>();
+            if (rj.contains("loan_penalty")) rc.loan_penalty = rj["loan_penalty"].get<double>();
             if (rj.contains("daily_income")) rc.daily_income = rj["daily_income"].get<double>();
             if (rj.contains("survival_bonus")) rc.survival_bonus = rj["survival_bonus"].get<double>();
             if (rj.contains("game_over_penalty")) rc.game_over_penalty = rj["game_over_penalty"].get<double>();
