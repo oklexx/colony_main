@@ -90,6 +90,7 @@ public:
     // Клетка допустима для строительства: примыкает (4-связность) к зданию
     // (не дороге) или соединена с колонией цепочкой дорог.
     bool cell_connected(int x, int y) const;
+    bool is_terrain_suitable(const BaseData* d, int8_t lot) const;
     bool is_good(int x, int y) const { return good_lots[(size_t)y * map_size_ + x] != 0; }
     int64_t now_home_places() const;
     int64_t now_need_workers() const;
