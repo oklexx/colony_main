@@ -189,11 +189,11 @@ static int sel_bx = -1, sel_by = -1;
 // build a building (id = A_BUILD0 + i) into either a committed selection area
 // or a single cell; called from the right-click building popup
 static bool has_neighbor_building(const Game& g, int x, int y) {
-    for (int dy = -1; dy <= 1; dy++)
-        for (int dx = -1; dx <= 1; dx++) {
-            if (dx == 0 && dy == 0) continue;
-            if (g.base_in_box(x + dx, y + dy)) return true;
-        }
+    const int dx4[4] = {1, -1, 0, 0};
+    const int dy4[4] = {0, 0, 1, -1};
+    for (int i = 0; i < 4; i++) {
+        if (g.base_in_box(x + dx4[i], y + dy4[i]) != nullptr) return true;
+    }
     return false;
 }
 static void do_build_area(ColonyEnvCpp& env, Game& g, int action, bool area,
@@ -204,27 +204,66 @@ static void do_build_area(ColonyEnvCpp& env, Game& g, int action, bool area,
     const BaseData* bd = env.build_data()[id];
     const std::string bid = bd->id;
     int msz = g.map_size();
+
+    // Special handling for Road: build a clean orthogonal connected line (no rectangular fill)
+    if (bid == ROAD_ID && area && (x0 != x1 || y0 != y1)) {
+        struct Cell { int x, y; };
+        std::vector<Cell> line_cells;
+        int cur_x = x0, cur_y = y0;
+        int step_x = (x1 > x0) ? 1 : (x1 < x0 ? -1 : 0);
+        int step_y = (y1 > y0) ? 1 : (y1 < y0 ? -1 : 0);
+        while (cur_x != x1) {
+            line_cells.push_back({cur_x, cur_y});
+            cur_x += step_x;
+        }
+        while (cur_y != y1) {
+            line_cells.push_back({cur_x, cur_y});
+            cur_y += step_y;
+        }
+        line_cells.push_back({x1, y1});
+
+        int built = 0, skipped = 0;
+        for (const auto& c : line_cells) {
+            if (c.x < 0 || c.y < 0 || c.x >= msz || c.y >= msz) continue;
+            if (g.base_in_box(c.x, c.y) != nullptr) continue;
+            auto r = g.build(bid, c.x, c.y);
+            if (r.first) {
+                built++;
+                stat_built[bd->caption]++;
+            } else {
+                skipped++;
+                status = r.second;
+            }
+        }
+        if (built > 0 && skipped > 0)
+            status = TextFormat("Построено дорог: %d, пропущено: %d (%s)", built, skipped, status.c_str());
+        else if (built > 0)
+            status = TextFormat("Построено дорог: %d", built);
+        return;
+    }
+
     int ax0, ay0, ax1, ay1;
     if (area) { ax0 = std::min(x0, x1); ay0 = std::min(y0, y1); ax1 = std::max(x0, x1); ay1 = std::max(y0, y1); }
     else { ax0 = ax1 = px; ay0 = ay1 = py; }
-    // Gather all empty cells in the area
+    // Gather all empty cells in the area that match terrain suitability
     struct Cell { int x, y; };
     std::vector<Cell> cells;
     for (int y = ay0; y <= ay1; y++)
         for (int x = ax0; x <= ax1; x++) {
             if (x < 0 || y < 0 || x >= msz || y >= msz) continue;
             if (g.base_in_box(x, y)) continue;
+            if (!g.is_terrain_suitable(bd, g.earth.lot(x, y))) continue;
             cells.push_back({x, y});
         }
-    if (cells.empty()) { status = "Место занято"; return; }
-    // If buildings exist, start from cells adjacent to existing buildings
+    if (cells.empty()) { status = "Нет подходящих свободных клеток"; return; }
+    // If buildings exist, start from cells adjacent (4-connected) to existing buildings
     // Otherwise start from top-left corner
     std::vector<Cell> frontier, remaining;
     if (!g.bases.empty()) {
         for (auto& c : cells)
             if (has_neighbor_building(g, c.x, c.y)) frontier.push_back(c);
             else remaining.push_back(c);
-        if (frontier.empty()) { status = "Нужно строить рядом с существующими зданиями"; return; }
+        if (frontier.empty()) { status = "Нужно строить рядом с существующими зданиями или дорогой"; return; }
     } else {
         frontier.push_back(cells[0]);
         for (size_t i = 1; i < cells.size(); i++) remaining.push_back(cells[i]);
@@ -426,7 +465,7 @@ static long long market_qty[9] = {0};
 static char bank_buf[32] = {0};
 static int dlg_season = 0;
 static char mess_title[64] = "Сообщение";
-static char mess_text[256] = "";
+static char mess_text[1024] = "";
 static bool want_close = false;
 
 // ═══ Headless AI mode (policy-driven) ═══
@@ -649,10 +688,20 @@ static void draw_about() {
 
 // ─── MESS ───
 static void draw_mess() {
-    int w = 320, h = 140, x = (WIN_W - w)/2, y = (WIN_H - h)/2;
+    int w = 680, h = 260, x = (WIN_W - w)/2, y = (WIN_H - h)/2;
     panel(x, y, w, h, mess_title);
-    text(mess_text, x + 16, y + 44, 16, WHITE);
-    if (btn(x + (w - 80)/2, y + h - 40, 80, 30, "OK")) cur_dlg = DLG_NONE;
+    std::string text_str(mess_text);
+    size_t start = 0;
+    int line_y = y + 44;
+    while (start < text_str.size()) {
+        size_t end = text_str.find('\n', start);
+        std::string line = (end == std::string::npos) ? text_str.substr(start) : text_str.substr(start, end - start);
+        text(line.c_str(), x + 16, line_y, 16, WHITE);
+        line_y += 24;
+        if (end == std::string::npos) break;
+        start = end + 1;
+    }
+    if (btn(x + (w - 100)/2, y + h - 38, 100, 30, "OK")) cur_dlg = DLG_NONE;
 }
 
 static void list_box(int x, int y, int w, int h, const std::vector<std::string>& items,
@@ -765,7 +814,11 @@ static void draw_top_menu(ColonyEnvCpp& env) {
             Rectangle r = {(float)tx[2], (float)(dy + i*CH), 240, CH};
             bool h = CheckCollisionPointRec(mp, r);
             if (h && IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                if (i == 0) { strcpy(mess_title,"Помощь"); strcpy(mess_text,"Стрелки — сдвиг карты, Пробел — день, W — неделя,\nB — купить, S — продать, K — банк, G — улучшить,\nF — поиск, R — восстановить, P — блок, D — разобрать,\nU — отмена, ЛКМ по карте — зажать и выделить область, ПКМ — меню зданий (выбор ЛКМ строит)."); cur_dlg = DLG_MESS; }
+                if (i == 0) {
+                    strcpy(mess_title, "Управление и помощь");
+                    strcpy(mess_text, "WASD / Стрелки — навигация активной клетки (с авто-скроллом)\nЛКМ — построить выбранное / выбрать клетку, ПКМ / Esc — отмена / меню\nПробел / Enter — ход (1 день) или постройка, T — неделя, G — сетка, H — Город\nR — ремонт, Shift+R — ремонт всех, X/Del — снос, P — консервация, E — улучшить\nB / M — купить / продать, K — банк, U — отмена, F — поиск изношенных.");
+                    cur_dlg = DLG_MESS;
+                }
                 else cur_dlg = DLG_ABOUT;
                 open_menu = -1;
             }
@@ -901,7 +954,12 @@ int main(int argc, char* argv[]) {
         cam.zoom = 0.8f;
     }
 
-    static int sel_action = A_BUILD0;
+    static int sel_action = -1;
+    static int active_build_id = -1;  // -1 = selection mode, >= 0 = building stamp mode
+    static int active_cx = g.earth.init_sel_x;
+    static int active_cy = g.earth.init_sel_y;
+    static int last_drag_cx = -1, last_drag_cy = -1;
+    static bool show_grid = true;
     static bool selecting = false;
     static int sel_x0 = 0, sel_y0 = 0, sel_x1 = 0, sel_y1 = 0;
     static bool has_sel = false;
@@ -909,7 +967,7 @@ int main(int argc, char* argv[]) {
     static int popup_x = 0, popup_y = 0, prc_x = 0, prc_y = 0;
     static Rectangle g_mini_rect = {0, 0, 0, 0};
     static Rectangle g_popup_rect = {0, 0, 0, 0};
-    std::string status = "";
+    std::string status = "Готово. WASD/Стрелки — выбор клетки, ЛКМ — постройка/выбор, ПКМ — меню";
 
     SetConfigFlags(FLAG_VSYNC_HINT);
     InitWindow(WIN_W, WIN_H, "Сахалинская колония 3.47");
@@ -930,7 +988,7 @@ int main(int argc, char* argv[]) {
         int n = 0;
         for (int c = 32; c < 127; c++) cps[n++] = c;          // ASCII
         for (int c = 0x0400; c <= 0x04FF; c++) cps[n++] = c;   // Cyrillic
-        cps[n++] = (int)'ё'; cps[n++] = (int)'Ё';
+        cps[n++] = 0x0451; cps[n++] = 0x0401; // Cyrillic ё and Ё
         gFont = LoadFontEx("C:/Windows/Fonts/arial.ttf", 32, cps, n);
         if (gFont.texture.id == 0) gFont = GetFontDefault();
     }
@@ -945,20 +1003,16 @@ int main(int argc, char* argv[]) {
         // ─── Headless AI mode: read action from file, step env ───
         if (headless_ai) {
             if (IsKeyPressed(KEY_ESCAPE)) { want_close = true; }
-            // Update build notification timer
             if (ai_build_msg_timer > 0.0f) {
                 ai_build_msg_timer -= GetFrameTime();
                 if (ai_build_msg_timer <= 0.0f) ai_build_msg[0] = '\0';
             }
 
             if (game_over) {
-                // Auto-reset after 5 seconds
                 ai_reset_timer += GetFrameTime();
                 if (ai_reset_timer > 5.0f) {
                     ai_reset_env(env);
                 }
-                // Draw game-over screen (reuse existing code below)
-                // ... fall through to draw ...
             } else {
                 int action = ai_read_action();
                 if (action >= 0) {
@@ -973,8 +1027,7 @@ int main(int argc, char* argv[]) {
                         fflush(ai_debug_log);
                     }
                     ai_last_action = action;
-                    sel_action = action;  // highlight in palette
-                    // Track bases before step to detect new buildings
+                    sel_action = action;
                     Game& gstep = env.game();
                     std::unordered_set<int64_t> uids_before_ai;
                     for (const Base& b : gstep.bases) uids_before_ai.insert(b.uid);
@@ -984,7 +1037,6 @@ int main(int argc, char* argv[]) {
                                 (long long)gstep.money, (int)gstep.bases.size(), out.terminated);
                         fflush(ai_debug_log);
                     }
-                    // Update stat_built for any new buildings added by AI
                     for (const Base& b : gstep.bases) {
                         if (uids_before_ai.find(b.uid) == uids_before_ai.end()) {
                             stat_built[b.data->caption]++;
@@ -996,22 +1048,10 @@ int main(int argc, char* argv[]) {
                         game_over = true;
                         ai_terminated = true;
                     }
-                    // Write state including obs, action_mask, and minimap for Python policy
                     ai_write_state(env.game(), out.obs, action, out.terminated, env.action_mask(), env.minimap(), out.rew);
-                } else {
-                    // No action available yet - log once
-                    if (!ai_debug_log) {
-                        ai_debug_log = fopen("ai_debug_gui.log", "a");
-                    }
-                    if (ai_debug_log && ai_step_count == 0) {
-                        fprintf(ai_debug_log, "WAITING: no action yet, path='%s' headless=%d\n",
-                                ai_actions_path.c_str(), headless_ai);
-                        fflush(ai_debug_log);
-                    }
                 }
             }
         }
-
 
         // ─── Экран завершения: статистика + новая игра / выход ───
         if (game_over) {
@@ -1042,8 +1082,9 @@ int main(int argc, char* argv[]) {
                 int64_t new_seed = (int64_t)GetRandomValue(1, 999999999);
                 env.reset(new_seed); sel_bx = sel_by = -1; cur_dlg = DLG_NONE;
                 tax_from_dialog = false;
-                cam.target = {(float)env.game().earth.init_sel_x * TILE,
-                              (float)env.game().earth.init_sel_y * TILE};
+                active_cx = env.game().earth.init_sel_x;
+                active_cy = env.game().earth.init_sel_y;
+                cam.target = {(float)active_cx * TILE, (float)active_cy * TILE};
                 cam.zoom = 1.0f;
                 stat_built.clear(); stat_earned = 0; stat_spent = 0;
                 stat_started = false; stat_tax_over = false;
@@ -1054,8 +1095,9 @@ int main(int argc, char* argv[]) {
                 int64_t same_seed = (int64_t)env.game().earth.seed();
                 env.reset(same_seed); sel_bx = sel_by = -1; cur_dlg = DLG_NONE;
                 tax_from_dialog = false;
-                cam.target = {(float)env.game().earth.init_sel_x * TILE,
-                              (float)env.game().earth.init_sel_y * TILE};
+                active_cx = env.game().earth.init_sel_x;
+                active_cy = env.game().earth.init_sel_y;
+                cam.target = {(float)active_cx * TILE, (float)active_cy * TILE};
                 cam.zoom = 1.0f;
                 stat_built.clear(); stat_earned = 0; stat_spent = 0;
                 stat_started = false; stat_tax_over = false;
@@ -1068,244 +1110,384 @@ int main(int argc, char* argv[]) {
             continue;
         }
 
-        // cursor cell
+        // cursor cell from mouse
         Vector2 wp = GetScreenToWorld2D(mpos, cam);
         int cx = (int)floor(wp.x / TILE), cy = (int)floor(wp.y / TILE);
         int nb = (int)env.build_data().size();
         Game& gm = env.game();
+        int msz = gm.map_size();
+
+        // Update active cell when mouse moves over the map
+        if (over_map && cx >= 0 && cy >= 0 && cx < msz && cy < msz) {
+            active_cx = cx;
+            active_cy = cy;
+        }
 
         if (!headless_ai) {
-        // ── Esc closes any open dialog ──
-        if (cur_dlg != DLG_NONE && IsKeyPressed(KEY_ESCAPE)) {
-            cur_dlg = DLG_NONE;
-        }
-
-        // drag-pan (middle button only; LMB is reserved for area selection)
-        static bool panning = false;
-        if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) panning = true;
-        if (panning && IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
-            Vector2 d = GetMouseDelta();
-            cam.target.x -= d.x / cam.zoom;
-            cam.target.y -= d.y / cam.zoom;
-        }
-        if (IsMouseButtonReleased(MOUSE_BUTTON_MIDDLE)) panning = false;
-
-        float wh = GetMouseWheelMove();
-        if (wh != 0) {
-            cam.zoom *= (wh > 0) ? 1.1f : 0.9f;
-            if (cam.zoom < 0.4f) cam.zoom = 0.4f;
-            if (cam.zoom > 3.0f) cam.zoom = 3.0f;
-        }
-
-        // ── Keyboard arrow panning ──
-        {
-            float ps = 14.0f / cam.zoom;
-            if (IsKeyDown(KEY_RIGHT)) cam.target.x += ps;
-            if (IsKeyDown(KEY_LEFT))  cam.target.x -= ps;
-            if (IsKeyDown(KEY_DOWN))  cam.target.y += ps;
-            if (IsKeyDown(KEY_UP))    cam.target.y -= ps;
-        }
-
-        // ── Edge-scroll when mouse approaches map border (with small delay) ──
-        {
-            float ed = 28.0f;
-            bool in_edge = over_map &&
-                (mpos.x - MAP_X < ed || MAP_X + MAP_W - mpos.x < ed ||
-                 mpos.y - MAP_Y < ed || MAP_Y + MAP_H - mpos.y < ed);
-            static float edge_hold = 0.0f;
-            if (in_edge) edge_hold += GetFrameTime();
-            else edge_hold = 0.0f;
-            if (in_edge && edge_hold > 0.3f) {
-                float ps = 14.0f / cam.zoom;
-                if (mpos.x - MAP_X < ed)         cam.target.x -= ps;
-                if (MAP_X + MAP_W - mpos.x < ed) cam.target.x += ps;
-                if (mpos.y - MAP_Y < ed)         cam.target.y -= ps;
-                if (MAP_Y + MAP_H - mpos.y < ed) cam.target.y += ps;
-            }
-        }
-
-        // ─── Bank text input ───
-        if (cur_dlg == DLG_BANK) {
-            int k = GetCharPressed();
-            while (k > 0) {
-                if (isdigit((char)k) && strlen(bank_buf) < 31) {
-                    int l = (int)strlen(bank_buf); bank_buf[l] = (char)k; bank_buf[l + 1] = 0;
+            // ── Esc closes any open dialog or cancels build mode ──
+            if (IsKeyPressed(KEY_ESCAPE)) {
+                if (cur_dlg != DLG_NONE) {
+                    cur_dlg = DLG_NONE;
+                } else if (popup_open) {
+                    popup_open = false;
+                } else if (active_build_id >= 0) {
+                    active_build_id = -1;
+                    sel_action = -1;
+                    status = "Режим выбора";
+                } else if (has_sel) {
+                    has_sel = false;
+                    status = "Выделение снято";
                 }
-                k = GetCharPressed();
             }
-            if (IsKeyPressed(KEY_BACKSPACE) && strlen(bank_buf) > 0)
-                bank_buf[strlen(bank_buf) - 1] = 0;
-        }
 
-        if (cur_dlg == DLG_NONE) {
-            // build palette click
-            for (int i = 0; i < nb && i < PAL_ROWS * PAL_COLS; i++) {
-                int col = i % PAL_COLS, row = i / PAL_COLS;
-                int ix = col * BSTEP, iy = PAL_Y0 + row * BSTEP;
-                if (mpos.x >= ix && mpos.x < ix + BS && mpos.y >= iy && mpos.y < iy + BS) {
-                    if (pressed) {
-                        sel_action = A_BUILD0 + i;
-                        status = env.build_data()[i]->caption;
-                        if (has_sel) {
-                            do_build_area(env, gm, A_BUILD0 + i, true,
-                                          sel_x0, sel_y0, sel_x1, sel_y1, prc_x, prc_y, status);
-                            has_sel = false;
+            // ── Drag-pan (middle mouse button or shift+LMB) ──
+            static bool panning = false;
+            if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) panning = true;
+            if (panning && IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
+                Vector2 d = GetMouseDelta();
+                cam.target.x -= d.x / cam.zoom;
+                cam.target.y -= d.y / cam.zoom;
+            }
+            if (IsMouseButtonReleased(MOUSE_BUTTON_MIDDLE)) panning = false;
+
+            // ── Zoom towards cursor position ──
+            float wh = GetMouseWheelMove();
+            if (wh != 0 && over_map) {
+                Vector2 mouse_world_before = GetScreenToWorld2D(mpos, cam);
+                cam.zoom *= (wh > 0) ? 1.15f : (1.0f / 1.15f);
+                if (cam.zoom < 0.35f) cam.zoom = 0.35f;
+                if (cam.zoom > 3.5f) cam.zoom = 3.5f;
+                Vector2 mouse_world_after = GetScreenToWorld2D(mpos, cam);
+                cam.target.x += (mouse_world_before.x - mouse_world_after.x);
+                cam.target.y += (mouse_world_before.y - mouse_world_after.y);
+            }
+
+            // ── WASD and Arrow Keys move the active cell + auto-scroll camera at edge ──
+            if (cur_dlg == DLG_NONE) {
+                int dcx = 0, dcy = 0;
+                bool moved = false;
+                if (IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP))    { dcy -= 1; moved = true; }
+                if (IsKeyPressed(KEY_S) || IsKeyPressed(KEY_DOWN))  { dcy += 1; moved = true; }
+                if (IsKeyPressed(KEY_A) || IsKeyPressed(KEY_LEFT))  { dcx -= 1; moved = true; }
+                if (IsKeyPressed(KEY_D) || IsKeyPressed(KEY_RIGHT)) { dcx += 1; moved = true; }
+
+                // Key repeat for continuous smooth movement
+                static float hold_timer = 0.0f;
+                static float repeat_timer = 0.0f;
+                if (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP) ||
+                    IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN) ||
+                    IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT) ||
+                    IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT)) {
+                    hold_timer += GetFrameTime();
+                    if (hold_timer > 0.22f) {
+                        repeat_timer += GetFrameTime();
+                        if (repeat_timer > 0.05f) {
+                            repeat_timer = 0.0f;
+                            if (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP))    dcy -= 1;
+                            if (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN))  dcy += 1;
+                            if (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT))  dcx -= 1;
+                            if (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT)) dcx += 1;
+                            moved = true;
                         }
                     }
-                }
-            }
-            // tool button click
-            for (int i = 0; i < 12; i++) {
-                if (pressed && CheckCollisionPointRec(mpos, g_tool_rect[i])) {
-                    static const int acts[12] = {1,2,3,4,5,6,7,8,9,10,11,12};
-                    int act = acts[i];
-                    if (act == 7) cur_dlg = DLG_BANK;
-                    else if (act == 9) { dlg_mode = 0; cur_dlg = DLG_MARKET; }
-                    else if (act == 10) { dlg_mode = 1; cur_dlg = DLG_MARKET; }
-                    else if (act == 11) { auto o = env.step(A_DAY); if (o.terminated) game_over = true; }
-                    else if (act == 12) { auto o = env.step(A_WEEK); if (o.terminated) game_over = true; }
-                    else if (over_map && cx >= 0 && cy >= 0 && cx < g.map_size() && cy < g.map_size()) {
-                        if (act == 1) { auto r = gm.good_earth(cx, cy); if (!r.first) status = r.second; }
-                        else if (act == 2) {
-                            Base* b = gm.find_slowest_base();
-                            if (b) { cam.target.x = (float)b->x*TILE; cam.target.y = (float)b->y*TILE; status = "Слабейшее: " + b->data->caption; }
-                            else status = "Нет изношенных построек";
-                        }
-                        else if (act == 3) { auto r = gm.restore(cx, cy); if (!r.ok) status = r.msg; }
-                        else if (act == 4) { auto r = gm.restore_all(); if (!r.ok) status = r.msg; }
-                        else if (act == 5) { auto r = gm.destroy(cx, cy); if (!r.first) status = r.second; }
-                        else if (act == 6) { if (!gm.undo()) status = "Нечего отменять"; }
-                        else if (act == 8) { auto r = gm.preserve(cx, cy); if (!r.first) status = r.second; }
-                    }
-                }
-            }
-            // ── LMB drag = select area ONLY (no build yet) ──
-            if (!popup_open) {
-                if (pressed && over_map) {
-                    selecting = true; has_sel = false; sel_bx = -1; sel_by = -1;
-                    sel_x0 = sel_x1 = cx; sel_y0 = sel_y1 = cy;
-                }
-                if (selecting && IsMouseButtonDown(MOUSE_BUTTON_LEFT) && over_map) {
-                    sel_x1 = cx; sel_y1 = cy;
-                }
-                if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && selecting) {
-                    selecting = false;
-                    if (sel_x0 == sel_x1 && sel_y0 == sel_y1) {
-                        // single-cell click: if a building is there, select it for info
-                        const Base* b = (cx >= 0 && cy >= 0 && cx < g.map_size() && cy < g.map_size())
-                                           ? g.base_in_box(cx, cy) : nullptr;
-                        if (b) { sel_bx = cx; sel_by = cy; has_sel = false; status = b->data->caption; }
-                        else   { sel_bx = -1; sel_by = -1; has_sel = true; sel_x0 = sel_x1 = cx; sel_y0 = sel_y1 = cy; }
-                    } else {
-                        has_sel = true; sel_bx = -1; sel_by = -1;
-                    }
-                }
-            }
-
-            // ── Minimap LMB click = recenter big map to that point ──
-            if (pressed && g_mini_rect.width > 0 && CheckCollisionPointRec(mpos, g_mini_rect)) {
-                float fx = (mpos.x - g_mini_rect.x) / g_mini_rect.width;
-                float fy = (mpos.y - g_mini_rect.y) / g_mini_rect.height;
-                int msz = gm.map_size();
-                cam.target.x = fx * msz * TILE;
-                cam.target.y = fy * msz * TILE;
-            }
-
-            // ── ПКМ = open building popup (or close if already open) ──
-            if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
-                if (popup_open) {
-                    popup_open = false;
-                } else if (over_map) {
-                    int pcols = 6, pcell = 44;
-                    int prows = (nb + pcols - 1) / pcols;
-                    int pw = pcols * pcell, ph = prows * pcell;
-                    int bx = (int)mpos.x, by = (int)mpos.y;
-                    bx = std::max(4, std::min(bx, WIN_W - pw - 4));
-                    by = std::max(4, std::min(by, WIN_H - ph - 4));
-                    g_popup_rect = {(float)bx, (float)by, (float)pw, (float)ph};
-                    popup_x = bx; popup_y = by;
-                    prc_x = cx; prc_y = cy;
-                    popup_open = true;
-                }
-            }
-            if (popup_open && IsKeyPressed(KEY_ESCAPE)) popup_open = false;
-
-            // ── Popup: LMB on an icon selects & builds (in area or at ПКМ cell) ──
-            if (popup_open && pressed) {
-                int lx = (int)mpos.x - (int)g_popup_rect.x;
-                int ly = (int)mpos.y - (int)g_popup_rect.y;
-                if (lx >= 0 && ly >= 0 && lx <= (int)g_popup_rect.width && ly <= (int)g_popup_rect.height) {
-                    int pcell = 44, pcols = (int)g_popup_rect.width / pcell;
-                    int cc = lx / pcell; if (cc >= pcols) cc = pcols - 1;
-                    int ci = (ly / pcell) * pcols + cc;
-                    if (ci >= 0 && ci < nb) {
-                        do_build_area(env, gm, A_BUILD0 + ci, has_sel,
-                                      sel_x0, sel_y0, sel_x1, sel_y1, prc_x, prc_y, status);
-                        sel_action = A_BUILD0 + ci;
-                        has_sel = false;
-                    }
-                    popup_open = false;
                 } else {
-                    popup_open = false;
+                    hold_timer = 0.0f;
+                    repeat_timer = 0.0f;
                 }
-            }
-            // mini-map click -> recenter
-            // (rect computed in draw; approximate using panel coords)
-            // time buttons
-            for (int i = 0; i < 3; i++) {
-                if (pressed && CheckCollisionPointRec(mpos, g_time_btn[i])) {
-                    if (i == 0) { auto o = env.step(A_DAY); if (o.terminated) game_over = true; }
-                    else if (i == 1) { auto o = env.step(A_WEEK); if (o.terminated) game_over = true; }
-                    else advance_month(env);
+
+                if (moved) {
+                    active_cx = std::max(0, std::min(msz - 1, active_cx + dcx));
+                    active_cy = std::max(0, std::min(msz - 1, active_cy + dcy));
+
+                    // Auto-scroll camera if active cell reaches edge of visible view
+                    float vw = (float)MAP_W / cam.zoom;
+                    float vh = (float)MAP_H / cam.zoom;
+                    float min_vx = cam.target.x - vw / 2.0f;
+                    float max_vx = cam.target.x + vw / 2.0f;
+                    float min_vy = cam.target.y - vh / 2.0f;
+                    float max_vy = cam.target.y + vh / 2.0f;
+
+                    float margin_x = std::max(2.0f * TILE, vw * 0.12f);
+                    float margin_y = std::max(2.0f * TILE, vh * 0.12f);
+
+                    float cell_x = active_cx * TILE + TILE / 2.0f;
+                    float cell_y = active_cy * TILE + TILE / 2.0f;
+
+                    if (cell_x - margin_x < min_vx) cam.target.x -= (min_vx - (cell_x - margin_x));
+                    if (cell_x + margin_x > max_vx) cam.target.x += ((cell_x + margin_x) - max_vx);
+                    if (cell_y - margin_y < min_vy) cam.target.y -= (min_vy - (cell_y - margin_y));
+                    if (cell_y + margin_y > max_vy) cam.target.y += ((cell_y + margin_y) - max_vy);
                 }
-            }
-            // date strip click -> jump
-            if (pressed && g_date_strip.width > 0 && CheckCollisionPointRec(mpos, g_date_strip)) {
-                int leap = is_leap(g.year);
-                int days_year = leap ? 365 : 364;
-                int target = (int)((mpos.x - g_date_strip.x) * days_year / g_date_strip.width);
-                target = std::max(0, std::min(days_year, target));
-                jump_to_day(env, target);
             }
 
-            // ─── Keyboard ───
-            if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER)) {
-                auto out = env.step(A_DAY); if (out.terminated) game_over = true;
-            }
-            if (IsKeyPressed(KEY_W)) { auto out = env.step(A_WEEK); if (out.terminated) game_over = true; }
-            if (over_map && cx >= 0 && cy >= 0 && cx < g.map_size() && cy < g.map_size()) {
-                if (IsKeyPressed(KEY_G)) { auto r = gm.good_earth(cx, cy); if (!r.first) status = r.second; }
-                if (IsKeyPressed(KEY_F)) {
-                    Base* b = gm.find_slowest_base();
-                    if (b) { cam.target.x = (float)b->x*TILE; cam.target.y = (float)b->y*TILE; status = "Слабейшее: " + b->data->caption; }
-                    else status = "Нет изношенных построек";
+            // ── Edge-scroll when mouse approaches map border ──
+            {
+                float ed = 28.0f;
+                bool in_edge = over_map &&
+                    (mpos.x - MAP_X < ed || MAP_X + MAP_W - mpos.x < ed ||
+                     mpos.y - MAP_Y < ed || MAP_Y + MAP_H - mpos.y < ed);
+                static float edge_hold = 0.0f;
+                if (in_edge) edge_hold += GetFrameTime();
+                else edge_hold = 0.0f;
+                if (in_edge && edge_hold > 0.3f) {
+                    float ps = 14.0f / cam.zoom;
+                    if (mpos.x - MAP_X < ed)         cam.target.x -= ps;
+                    if (MAP_X + MAP_W - mpos.x < ed) cam.target.x += ps;
+                    if (mpos.y - MAP_Y < ed)         cam.target.y -= ps;
+                    if (MAP_Y + MAP_H - mpos.y < ed) cam.target.y += ps;
                 }
-                if (IsKeyPressed(KEY_R)) { auto r = gm.restore(cx, cy); if (!r.ok) status = r.msg; }
-                if (IsKeyPressed(KEY_A)) { auto r = gm.restore_all(); if (!r.ok) status = r.msg; }
-                if (IsKeyPressed(KEY_P)) { auto r = gm.preserve(cx, cy); if (!r.first) status = r.second; }
-                if (IsKeyPressed(KEY_D)) { auto r = gm.destroy(cx, cy); if (!r.first) status = r.second; }
-                if (IsKeyPressed(KEY_U)) { if (!gm.undo()) status = "Нечего отменять"; }
             }
-            if (IsKeyPressed(KEY_B)) { dlg_mode = 0; cur_dlg = DLG_MARKET; }
-            if (IsKeyPressed(KEY_S)) { dlg_mode = 1; cur_dlg = DLG_MARKET; }
-            if (IsKeyPressed(KEY_K)) cur_dlg = DLG_BANK;
-            if (IsKeyPressed(KEY_N)) { auto o = env.step(A_DAY); if (o.terminated) game_over = true; }
 
-            // ─── Menu shortcuts ───
-            if (IsKeyPressed(KEY_F4)) cur_dlg = DLG_NEW;
-            if (IsKeyPressed(KEY_F5)) cur_dlg = DLG_OPEN;
-            if (IsKeyPressed(KEY_F2)) cur_dlg = DLG_SAVE;
-            if (IsKeyPressed(KEY_F1)) {
-                strcpy(mess_title, "Помощь");
-                strcpy(mess_text, "Стрелки — сдвиг карты, Пробел — день, W — неделя,\nB — купить, S — продать, K — банк, G — улучшить,\nF — поиск, R — восстановить, P — блок, D — разобрать,\nU — отмена, ЛКМ по карте — зажать и выделить область, ПКМ — меню зданий (выбор ЛКМ строит).");
-                cur_dlg = DLG_MESS;
+            // ─── Bank text input ───
+            if (cur_dlg == DLG_BANK) {
+                int k = GetCharPressed();
+                while (k > 0) {
+                    if (isdigit((char)k) && strlen(bank_buf) < 31) {
+                        int l = (int)strlen(bank_buf); bank_buf[l] = (char)k; bank_buf[l + 1] = 0;
+                    }
+                    k = GetCharPressed();
+                }
+                if (IsKeyPressed(KEY_BACKSPACE) && strlen(bank_buf) > 0)
+                    bank_buf[strlen(bank_buf) - 1] = 0;
             }
-            if (IsKeyPressed(KEY_F7)) sound_on = !sound_on;
-            if (IsKeyPressed(KEY_F9)) { fullscreen = !fullscreen; ToggleFullscreen(); }
+
+            if (cur_dlg == DLG_NONE) {
+                // ── Build palette click ──
+                for (int i = 0; i < nb && i < PAL_ROWS * PAL_COLS; i++) {
+                    int col = i % PAL_COLS, row = i / PAL_COLS;
+                    int ix = col * BSTEP, iy = PAL_Y0 + row * BSTEP;
+                    if (mpos.x >= ix && mpos.x < ix + BS && mpos.y >= iy && mpos.y < iy + BS) {
+                        if (pressed) {
+                            if (active_build_id == i && !has_sel) {
+                                // clicking again toggles off
+                                active_build_id = -1;
+                                sel_action = -1;
+                                status = "Режим выбора";
+                            } else {
+                                active_build_id = i;
+                                sel_action = A_BUILD0 + i;
+                                status = TextFormat("Выбрано: %s (ЛКМ — строить, ПКМ/Esc — отмена)", env.build_data()[i]->caption.c_str());
+                                if (has_sel) {
+                                    do_build_area(env, gm, A_BUILD0 + i, true,
+                                                  sel_x0, sel_y0, sel_x1, sel_y1, prc_x, prc_y, status);
+                                    has_sel = false;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Tool button click ──
+                for (int i = 0; i < 12; i++) {
+                    if (pressed && CheckCollisionPointRec(mpos, g_tool_rect[i])) {
+                        static const int acts[12] = {1,2,3,4,5,6,7,8,9,10,11,12};
+                        int act = acts[i];
+                        if (act == 7) cur_dlg = DLG_BANK;
+                        else if (act == 9) { dlg_mode = 0; cur_dlg = DLG_MARKET; }
+                        else if (act == 10) { dlg_mode = 1; cur_dlg = DLG_MARKET; }
+                        else if (act == 11) { auto o = env.step(A_DAY); if (o.terminated) game_over = true; }
+                        else if (act == 12) { auto o = env.step(A_WEEK); if (o.terminated) game_over = true; }
+                        else if (active_cx >= 0 && active_cy >= 0 && active_cx < g.map_size() && active_cy < g.map_size()) {
+                            if (act == 1) { auto r = gm.good_earth(active_cx, active_cy); if (!r.first) status = r.second; else status = "Земля улучшена"; }
+                            else if (act == 2) {
+                                Base* b = gm.find_slowest_base();
+                                if (b) { cam.target.x = (float)b->x*TILE; cam.target.y = (float)b->y*TILE; active_cx = b->x; active_cy = b->y; status = "Слабейшее: " + b->data->caption; }
+                                else status = "Нет изношенных построек";
+                            }
+                            else if (act == 3) { auto r = gm.restore(active_cx, active_cy); if (!r.ok) status = r.msg; else status = TextFormat("Отремонтировано (-%lld)", (long long)r.price); }
+                            else if (act == 4) { auto r = gm.restore_all(); if (!r.ok) status = r.msg; else status = "Все постройки отремонтированы"; }
+                            else if (act == 5) { auto r = gm.destroy(active_cx, active_cy); if (!r.first) status = r.second; else status = "Постройка снесена"; }
+                            else if (act == 6) { if (!gm.undo()) status = "Нечего отменять"; else status = "Действие отменено"; }
+                            else if (act == 8) { auto r = gm.preserve(active_cx, active_cy); if (!r.first) status = r.second; else status = "Консервация изменена"; }
+                        }
+                    }
+                }
+
+                // ── Map interaction: Build Stamp Mode vs Select Mode ──
+                if (!popup_open) {
+                    if (active_build_id >= 0) {
+                        // In build stamp mode: LMB clicks/drags build the selected structure
+                        const BaseData* bd = env.build_data()[active_build_id];
+                        if (over_map && (pressed || (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && (active_cx != last_drag_cx || active_cy != last_drag_cy)))) {
+                            last_drag_cx = active_cx;
+                            last_drag_cy = active_cy;
+                            auto r = gm.build(bd->id, active_cx, active_cy);
+                            if (r.first) {
+                                stat_built[bd->caption]++;
+                                status = TextFormat("Построено: %s (-%lld)", bd->caption.c_str(), (long long)bd->price);
+                            } else {
+                                status = r.second;
+                            }
+                        }
+                        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+                            last_drag_cx = -1;
+                            last_drag_cy = -1;
+                        }
+                    } else {
+                        // In selection mode: LMB drags area selection, click selects building/cell
+                        if (pressed && over_map) {
+                            selecting = true; has_sel = false; sel_bx = -1; sel_by = -1;
+                            sel_x0 = sel_x1 = active_cx; sel_y0 = sel_y1 = active_cy;
+                        }
+                        if (selecting && IsMouseButtonDown(MOUSE_BUTTON_LEFT) && over_map) {
+                            sel_x1 = active_cx; sel_y1 = active_cy;
+                        }
+                        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && selecting) {
+                            selecting = false;
+                            if (sel_x0 == sel_x1 && sel_y0 == sel_y1) {
+                                const Base* b = (active_cx >= 0 && active_cy >= 0 && active_cx < g.map_size() && active_cy < g.map_size())
+                                                   ? g.base_in_box(active_cx, active_cy) : nullptr;
+                                if (b) { sel_bx = active_cx; sel_by = active_cy; has_sel = false; status = b->data->caption; }
+                                else   { sel_bx = -1; sel_by = -1; has_sel = true; sel_x0 = sel_x1 = active_cx; sel_y0 = sel_y1 = active_cy; }
+                            } else {
+                                has_sel = true; sel_bx = -1; sel_by = -1;
+                            }
+                        }
+                    }
+                }
+
+                // ── Minimap LMB click = recenter big map to that point ──
+                if (pressed && g_mini_rect.width > 0 && CheckCollisionPointRec(mpos, g_mini_rect)) {
+                    float fx = (mpos.x - g_mini_rect.x) / g_mini_rect.width;
+                    float fy = (mpos.y - g_mini_rect.y) / g_mini_rect.height;
+                    cam.target.x = fx * msz * TILE;
+                    cam.target.y = fy * msz * TILE;
+                    active_cx = std::max(0, std::min(msz - 1, (int)(fx * msz)));
+                    active_cy = std::max(0, std::min(msz - 1, (int)(fy * msz)));
+                }
+
+                // ── ПКМ = cancel stamp OR open building popup (or close if open) ──
+                if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+                    if (active_build_id >= 0) {
+                        active_build_id = -1;
+                        sel_action = -1;
+                        status = "Режим выбора";
+                    } else if (popup_open) {
+                        popup_open = false;
+                    } else if (over_map) {
+                        int pcols = 6, pcell = 44;
+                        int prows = (nb + pcols - 1) / pcols;
+                        int pw = pcols * pcell, ph = prows * pcell;
+                        int bx = (int)mpos.x, by = (int)mpos.y;
+                        bx = std::max(4, std::min(bx, WIN_W - pw - 4));
+                        by = std::max(4, std::min(by, WIN_H - ph - 4));
+                        g_popup_rect = {(float)bx, (float)by, (float)pw, (float)ph};
+                        popup_x = bx; popup_y = by;
+                        prc_x = active_cx; prc_y = active_cy;
+                        popup_open = true;
+                    }
+                }
+
+                // ── Popup: LMB on an icon selects & builds ──
+                if (popup_open && pressed) {
+                    int lx = (int)mpos.x - (int)g_popup_rect.x;
+                    int ly = (int)mpos.y - (int)g_popup_rect.y;
+                    if (lx >= 0 && ly >= 0 && lx <= (int)g_popup_rect.width && ly <= (int)g_popup_rect.height) {
+                        int pcell = 44, pcols = (int)g_popup_rect.width / pcell;
+                        int cc = lx / pcell; if (cc >= pcols) cc = pcols - 1;
+                        int ci = (ly / pcell) * pcols + cc;
+                        if (ci >= 0 && ci < nb) {
+                            active_build_id = ci;
+                            sel_action = A_BUILD0 + ci;
+                            if (has_sel) {
+                                do_build_area(env, gm, A_BUILD0 + ci, true,
+                                              sel_x0, sel_y0, sel_x1, sel_y1, prc_x, prc_y, status);
+                                has_sel = false;
+                            } else {
+                                auto r = gm.build(env.build_data()[ci]->id, prc_x, prc_y);
+                                if (r.first) {
+                                    stat_built[env.build_data()[ci]->caption]++;
+                                    status = TextFormat("Построено: %s", env.build_data()[ci]->caption.c_str());
+                                } else {
+                                    status = r.second;
+                                }
+                            }
+                        }
+                        popup_open = false;
+                    } else {
+                        popup_open = false;
+                    }
+                }
+
+                // ── Time buttons ──
+                for (int i = 0; i < 3; i++) {
+                    if (pressed && CheckCollisionPointRec(mpos, g_time_btn[i])) {
+                        if (i == 0) { auto o = env.step(A_DAY); if (o.terminated) game_over = true; }
+                        else if (i == 1) { auto o = env.step(A_WEEK); if (o.terminated) game_over = true; }
+                        else advance_month(env);
+                    }
+                }
+                // Date strip click -> jump
+                if (pressed && g_date_strip.width > 0 && CheckCollisionPointRec(mpos, g_date_strip)) {
+                    int leap = is_leap(g.year);
+                    int days_year = leap ? 365 : 364;
+                    int target = (int)((mpos.x - g_date_strip.x) * days_year / g_date_strip.width);
+                    target = std::max(0, std::min(days_year, target));
+                    jump_to_day(env, target);
+                }
+
+                // ─── Keyboard Hotkeys ───
+                if (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ENTER)) {
+                    if (active_build_id >= 0) {
+                        const BaseData* bd = env.build_data()[active_build_id];
+                        auto r = gm.build(bd->id, active_cx, active_cy);
+                        if (r.first) {
+                            stat_built[bd->caption]++;
+                            status = TextFormat("Построено: %s (-%lld)", bd->caption.c_str(), (long long)bd->price);
+                        } else {
+                            status = r.second;
+                        }
+                    } else {
+                        auto out = env.step(A_DAY); if (out.terminated) game_over = true;
+                    }
+                }
+                if (IsKeyPressed(KEY_T)) { auto out = env.step(A_WEEK); if (out.terminated) game_over = true; }
+                if (IsKeyPressed(KEY_G)) { show_grid = !show_grid; status = show_grid ? "Сетка: Включена" : "Сетка: Выключена"; }
+                if (IsKeyPressed(KEY_H) || IsKeyPressed(KEY_HOME)) {
+                    cam.target.x = (float)gm.earth.init_sel_x * TILE;
+                    cam.target.y = (float)gm.earth.init_sel_y * TILE;
+                    active_cx = gm.earth.init_sel_x;
+                    active_cy = gm.earth.init_sel_y;
+                    status = "Камера центрирована на Городе";
+                }
+                if (active_cx >= 0 && active_cy >= 0 && active_cx < g.map_size() && active_cy < g.map_size()) {
+                    if (IsKeyPressed(KEY_E)) { auto r = gm.good_earth(active_cx, active_cy); if (!r.first) status = r.second; else status = "Земля улучшена"; }
+                    if (IsKeyPressed(KEY_F)) {
+                        Base* b = gm.find_slowest_base();
+                        if (b) { cam.target.x = (float)b->x*TILE; cam.target.y = (float)b->y*TILE; active_cx = b->x; active_cy = b->y; status = "Слабейшее: " + b->data->caption; }
+                        else status = "Нет изношенных построек";
+                    }
+                    if (IsKeyPressed(KEY_R)) {
+                        if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
+                            auto r = gm.restore_all(); if (!r.ok) status = r.msg; else status = "Все постройки отремонтированы";
+                        } else {
+                            auto r = gm.restore(active_cx, active_cy); if (!r.ok) status = r.msg; else status = TextFormat("Отремонтировано (-%lld)", (long long)r.price);
+                        }
+                    }
+                    if (IsKeyPressed(KEY_P)) { auto r = gm.preserve(active_cx, active_cy); if (!r.first) status = r.second; else status = "Консервация изменена"; }
+                    if (IsKeyPressed(KEY_DELETE) || IsKeyPressed(KEY_X)) { auto r = gm.destroy(active_cx, active_cy); if (!r.first) status = r.second; else status = "Постройка снесена"; }
+                    if (IsKeyPressed(KEY_U) || (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_Z))) { if (!gm.undo()) status = "Нечего отменять"; else status = "Действие отменено"; }
+                }
+                if (IsKeyPressed(KEY_B)) { dlg_mode = 0; cur_dlg = DLG_MARKET; }
+                if (IsKeyPressed(KEY_M)) { dlg_mode = 1; cur_dlg = DLG_MARKET; }
+                if (IsKeyPressed(KEY_K)) cur_dlg = DLG_BANK;
+                if (IsKeyPressed(KEY_N)) { auto o = env.step(A_DAY); if (o.terminated) game_over = true; }
+
+                // ─── Menu shortcuts ───
+                if (IsKeyPressed(KEY_F4)) cur_dlg = DLG_NEW;
+                if (IsKeyPressed(KEY_F5)) cur_dlg = DLG_OPEN;
+                if (IsKeyPressed(KEY_F2)) cur_dlg = DLG_SAVE;
+                if (IsKeyPressed(KEY_F1)) {
+                    strcpy(mess_title, "Управление и помощь");
+                    strcpy(mess_text, "WASD / Стрелки — навигация активной клетки (с авто-скроллом)\nЛКМ — построить выбранное / выбрать клетку, ПКМ / Esc — отмена / меню\nПробел / Enter — ход (1 день) или постройка, T — неделя, G — сетка, H — Город\nR — ремонт, Shift+R — ремонт всех, X/Del — снос, P — консервация, E — улучшить\nB / M — купить / продать, K — банк, U — отмена, F — поиск изношенных.");
+                    cur_dlg = DLG_MESS;
+                }
+                if (IsKeyPressed(KEY_F7)) sound_on = !sound_on;
+                if (IsKeyPressed(KEY_F9)) { fullscreen = !fullscreen; ToggleFullscreen(); }
+            }
         }
-        }
 
-        // ─── Auto-pay tax if player has enough money (no dialog needed) ───
+        // ─── Auto-pay tax if player has enough money ───
         if (g.annual_tax_due() && g.money >= g.annual_tax_amount()) {
             gm.pay_annual_tax();
         } else if (g.main_tax_due() && g.money >= g.main_tax_amount()) {
@@ -1320,7 +1502,6 @@ int main(int argc, char* argv[]) {
             } else if (g.main_tax_due() && g.money >= g.main_tax_amount()) {
                 gm.pay_main_tax();
             }
-            // if still can't pay, dialog will re-appear below
         }
 
         // ─── Auto dialogs (season change / tax due) ───
@@ -1350,7 +1531,7 @@ int main(int argc, char* argv[]) {
             for (int i = 0; i < nb && i < PAL_ROWS * PAL_COLS; i++) {
                 int col = i % PAL_COLS, row = i / PAL_COLS;
                 int ix = col * BSTEP, iy = PAL_Y0 + row * BSTEP;
-                bool sel = (sel_action == A_BUILD0 + i);
+                bool sel = (active_build_id == i || sel_action == A_BUILD0 + i);
                 DrawRectangle(ix, iy, BS, BS, sel ? C_PAL_SEL : C_PAL_NORM);
                 if (sel) DrawRectangleLines(ix, iy, BS, BS, C_ACCENT);
                 draw_build_pixel(ix, iy, BS, env.build_data()[i]->id, false);
@@ -1361,6 +1542,7 @@ int main(int argc, char* argv[]) {
         // ─── Tool buttons ───
         draw_tools(env);
 
+        // Palette tooltips
         {
             Vector2 mp = GetMousePosition();
             const colony::BaseData* info_bd = nullptr;
@@ -1396,7 +1578,6 @@ int main(int argc, char* argv[]) {
             BeginScissorMode(vx, vy, vw, vh);
             DrawRectangle(vx, vy, vw, vh, C_LAND);
             cam.offset = {(float)vx + vw/2.0f, (float)vy + vh/2.0f};
-            int msz = g.map_size();
             float halfW = (vw/2.0f)/cam.zoom, halfH = (vh/2.0f)/cam.zoom;
             int x0 = (int)floor((cam.target.x - halfW)/TILE) - 1;
             int x1 = (int)ceil((cam.target.x + halfW)/TILE) + 1;
@@ -1405,6 +1586,8 @@ int main(int argc, char* argv[]) {
             x0 = std::max(0, x0); y0 = std::max(0, y0);
             x1 = std::min(msz - 1, x1); y1 = std::min(msz - 1, y1);
             BeginMode2D(cam);
+
+            // 1. Terrain tiles
             for (int y = y0; y <= y1; y++) {
                 for (int x = x0; x <= x1; x++) {
                     int8_t lot = g.earth.lot(x, y);
@@ -1421,6 +1604,19 @@ int main(int argc, char* argv[]) {
                     }
                 }
             }
+
+            // 2. Grid lines overlay (if enabled)
+            if (show_grid) {
+                Color grid_c = {255, 255, 255, 26};
+                for (int x = x0; x <= x1 + 1; x++) {
+                    DrawLine(x * TILE, y0 * TILE, x * TILE, (y1 + 1) * TILE, grid_c);
+                }
+                for (int y = y0; y <= y1 + 1; y++) {
+                    DrawLine(x0 * TILE, y * TILE, (x1 + 1) * TILE, y * TILE, grid_c);
+                }
+            }
+
+            // 3. Buildings
             for (const Base& b : g.bases) {
                 int bi = base_icon_index(b.data->id);
                 int bx = b.x * TILE, by = b.y * TILE;
@@ -1438,20 +1634,44 @@ int main(int argc, char* argv[]) {
                 if (b.build_days == 0 && !b.data->season_works(g.season)) draw_tex(iconTex[5], bx + 14, by + 4, 14);
                 if (b.is_alarm())        draw_tex(iconTex[0], bx + 14, by + 14, 14);
             }
-            // cursor = animated selection frame (only when no build menu is open)
-            if (!popup_open && over_map && cx >= 0 && cy >= 0 && cx < msz && cy < msz) {
-                int px = cx * TILE, py = cy * TILE;
+
+            // 4. Ghost Preview when building stamp is active
+            if (active_build_id >= 0 && active_cx >= 0 && active_cy >= 0 && active_cx < msz && active_cy < msz) {
+                const BaseData* gbd = env.build_data()[active_build_id];
+                int8_t lot = g.earth.lot(active_cx, active_cy);
+                bool empty = (g.base_in_box(active_cx, active_cy) == nullptr);
+                bool terrain_ok = g.is_terrain_suitable(gbd, lot);
+                bool conn_ok = g.cell_connected(active_cx, active_cy);
+                bool money_ok = (g.money >= gbd->price);
+                bool valid = empty && terrain_ok && conn_ok && money_ok;
+
+                int gbx = active_cx * TILE, gby = active_cy * TILE;
+                int bi = base_icon_index(gbd->id);
+                if (bi >= 0) {
+                    draw_tex(baseTex[bi], gbx, gby, TILE);
+                }
+                // Tint overlay: green if valid, red if invalid
+                Color tint = valid ? Color{40, 220, 60, 90} : Color{220, 40, 40, 110};
+                Color border_c = valid ? Color{60, 255, 80, 255} : Color{255, 60, 60, 255};
+                DrawRectangle(gbx, gby, TILE, TILE, tint);
+                DrawRectangleLines(gbx, gby, TILE, TILE, border_c);
+            }
+
+            // 5. Active cell animated selection frame (ALWAYS VISIBLE!)
+            if (!popup_open && active_cx >= 0 && active_cy >= 0 && active_cx < msz && active_cy < msz) {
+                int px = active_cx * TILE, py = active_cy * TILE;
                 int f = (int)(GetTime() * 12.0) % 12;
-                int8_t fl = g.earth.lot(cx, cy);
+                int8_t fl = g.earth.lot(active_cx, active_cy);
                 draw_tex(fl == LT_NONE ? selNoneTex[f] : selEarthTex[f], px, py, TILE);
             }
-            // area selection = every cell inside the rectangle gets an animated frame
+
+            // 6. Area selection frames
             if (selecting || has_sel) {
-                int x0 = std::min(sel_x0, sel_x1), x1 = std::max(sel_x0, sel_x1);
-                int y0 = std::min(sel_y0, sel_y1), y1 = std::max(sel_y0, sel_y1);
+                int sx0 = std::min(sel_x0, sel_x1), sx1 = std::max(sel_x0, sel_x1);
+                int sy0 = std::min(sel_y0, sel_y1), sy1 = std::max(sel_y0, sel_y1);
                 int f = (int)(GetTime() * 12.0) % 12;
-                for (int y = y0; y <= y1; y++)
-                    for (int x = x0; x <= x1; x++)
+                for (int y = sy0; y <= sy1; y++)
+                    for (int x = sx0; x <= sx1; x++)
                         draw_tex(selEarthTex[f], x*TILE, y*TILE, TILE);
             }
             EndMode2D();
@@ -1538,21 +1758,21 @@ int main(int argc, char* argv[]) {
             DrawRectangle(0, by, WIN_W, BOTTOM_H, C_BG);
             // status of current cell
             char st[256];
-            if (over_map && cx >= 0 && cy >= 0 && cx < g.map_size() && cy < g.map_size()) {
-                int8_t lot = g.earth.lot(cx, cy);
-                snprintf(st, sizeof(st), "Клетка (%d,%d): %s", cx, cy, LOT_NAMES[lot < 0 || lot > 8 ? 8 : lot]);
-                if (g.is_good(cx, cy)) { int l = (int)strlen(st); snprintf(st + l, sizeof(st) - l, ", улучшена"); }
-                const Base* b = g.base_in_box(cx, cy);
+            if (active_cx >= 0 && active_cy >= 0 && active_cx < g.map_size() && active_cy < g.map_size()) {
+                int8_t lot = g.earth.lot(active_cx, active_cy);
+                snprintf(st, sizeof(st), "Клетка (%d,%d): %s", active_cx, active_cy, LOT_NAMES[lot < 0 || lot > 8 ? 8 : lot]);
+                if (g.is_good(active_cx, active_cy)) { int l = (int)strlen(st); snprintf(st + l, sizeof(st) - l, ", улучшена"); }
+                const Base* b = g.base_in_box(active_cx, active_cy);
                 if (b) {
                     int l = (int)strlen(st);
                     snprintf(st + l, sizeof(st) - l, " | %s", b->data->caption.c_str());
-                    if (b->build_days) { l = (int)strlen(st); snprintf(st + l, sizeof(st) - l, ", строится"); }
+                    if (b->build_days) { l = (int)strlen(st); snprintf(st + l, sizeof(st) - l, ", строится (%lld дн)", (long long)b->build_days); }
                     if (b->preserved)  { l = (int)strlen(st); snprintf(st + l, sizeof(st) - l, ", блок"); }
                     if (b->need_sunduk){ l = (int)strlen(st); snprintf(st + l, sizeof(st) - l, ", нужны ресурсы"); }
                     if (b->need_workers){l = (int)strlen(st); snprintf(st + l, sizeof(st) - l, ", нужны рабочие"); }
                     if (b->is_alarm()) { l = (int)strlen(st); snprintf(st + l, sizeof(st) - l, ", ИЗНОШЕНА"); }
-                } else if (g.destroyed_lots[(size_t)cy * g.map_size() + cx]) {
-                    int l = (int)strlen(st); snprintf(st + l, sizeof(st) - l, ", сгоревший участок");
+                } else if (g.destroyed_lots[(size_t)active_cy * g.map_size() + active_cx]) {
+                    int l = (int)strlen(st); snprintf(st + l, sizeof(st) - l, ", сгоревший участок (%d дн)", (int)g.destroyed_lots[(size_t)active_cy * g.map_size() + active_cx]);
                 }
             } else {
                 snprintf(st, sizeof(st), "Ход: %s %d %s %d", month_ru(g.month), g.day, "года", g.year);
@@ -1580,7 +1800,7 @@ int main(int argc, char* argv[]) {
                 text(lname[i], lx + t + 4, ly + 2, 16, {40, 50, 30, 255});
                 lx += t + 6 + (int)strlen(lname[i]) * CW;
             }
-            text("ЛКМ — выделить область, ПКМ — меню зданий, колесо — зум, ср. кнопка — сдвиг", lx + 6, ly + 2, 14, {70, 70, 40, 255});
+            text("WASD — клетка, G — сетка, H — Город, ЛКМ — строить/выбор, ПКМ — меню, колесо — зум к курсору", lx + 6, ly + 2, 14, {70, 70, 40, 255});
         }
 
         // ─── MENU (dropdowns on top) ───
@@ -1596,7 +1816,7 @@ int main(int argc, char* argv[]) {
             for (int i = 0; i < nb; i++) {
                 int c = i % pcols, rw = i / pcols;
                 int ix = (int)r.x + c*pcell, iy = (int)r.y + rw*pcell;
-                if (sel_action == A_BUILD0 + i) DrawRectangleLines(ix, iy, pcell, pcell, C_ACCENT);
+                if (active_build_id == i || sel_action == A_BUILD0 + i) DrawRectangleLines(ix, iy, pcell, pcell, C_ACCENT);
                 draw_build_pixel(ix + 4, iy + 4, pcell - 8, env.build_data()[i]->id, false);
                 int hx = (int)mpos.x - ix, hy = (int)mpos.y - iy;
                 if (hx >= 0 && hy >= 0 && hx < pcell && hy < pcell)

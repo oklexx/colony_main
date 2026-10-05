@@ -509,12 +509,36 @@ std::optional<Game::GameOverInfo> Game::game_over() const {
     return std::nullopt;
 }
 
+bool Game::is_terrain_suitable(const BaseData* d, int8_t lot) const {
+    if (d == nullptr) return false;
+    if (d->id == ROAD_ID) {
+        return lot != LT_WATER && lot != LT_NONE;
+    }
+    if (d->need_earth == LT_WATER) {
+        return lot == LT_WATER;
+    }
+    if (d->need_earth != LT_EVERYWHERE) {
+        return lot == d->need_earth;
+    }
+    // General buildings (need_earth == LT_EVERYWHERE):
+    // cannot be built on water or on special mineral/resource deposits (only plain land LT_NORMAL)
+    return lot == LT_NORMAL;
+}
+
 // ---------------------------------------------------------------- действия
 std::pair<bool, std::string> Game::build(const std::string& data_id, int x, int y) {
     if (!earth.in_bounds(x, y)) return {false, "Вне карты."};
     if (base_in_box(x, y)) return {false, "Это место занято."};
     const BaseData* d = find_data(data_id);
     if (d == nullptr) throw std::runtime_error("unknown base id: " + data_id);
+    int8_t lot = earth.lot(x, y);
+    if (!is_terrain_suitable(d, lot)) {
+        if (d->id == ROAD_ID && lot == LT_WATER) return {false, "Нельзя строить дорогу на воде."};
+        if (d->need_earth == LT_WATER) return {false, "Это здание строится только на воде."};
+        if (d->need_earth != LT_EVERYWHERE) return {false, "Здесь неподходящий тип местности/ресурса."};
+        if (lot == LT_WATER) return {false, "Нельзя строить на воде."};
+        return {false, "Нельзя строить на месторождениях ресурсов (кроме спец. шахт и дорог)."};
+    }
     if (money < d->price) return {false, "Недостаточно денег."};
     if (!cell_connected(x, y))
         return {false, "Здание должно примыкать к другой постройке или быть связано с ней дорогой."};
@@ -723,7 +747,7 @@ std::pair<bool, std::string> Game::bank_give(int64_t value) {
 // ---------------------------------------------------------------- undo
 void Game::save_undo() {
     if (!enable_undo_) return;
-    if (!undo_) undo_ = std::make_unique<Game>(*this);
+    undo_ = std::make_unique<Game>(*this);
 }
 
 bool Game::undo() {
